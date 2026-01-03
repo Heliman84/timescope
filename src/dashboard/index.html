@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy"
+      content="
+        default-src 'none';
+        img-src ${cspSource} https:;
+        font-src ${cspSource};
+        script-src 'nonce-${nonce}' https:;
+        style-src ${cspSource} 'unsafe-inline';
+        style-src-elem ${cspSource};
+        connect-src https: ${cspSource};
+      ">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+<title>Time Tracker Summary</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js" nonce="${nonce}"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels" nonce="${nonce}"></script>
+
+<link rel="stylesheet" href="${cssUri}">
+<script nonce="${nonce}" src="${jsUri}"></script>
+
+</head>
+
+<body>
+<div id="sidebar">
+    <h3>Filters</h3>
+
+    <div class="section">
+        <label>Date Range</label>
+        <select id="preset_range">
+            <option value="today">Today</option>
+            <option value="this_week">This Week</option>
+            <option value="last_7">Last 7 Days</option>
+            <option value="this_month">This Month</option>
+            <option value="last_3_months">Last 3 Months</option>
+            <option value="custom">Custom Range…</option>
+        </select>
+    </div>
+
+    <div class="section">
+        <label>Jobs</label>
+        <div id="job_filter_container"></div>
+    </div>
+
+    <button id="clear_filters_btn" class="sidebar-button">Clear Filters</button>
+</div>
+
+<div id="main">
+    <h2>Summary Dashboard</h2>
+
+    <div class="chart-container">
+        <h3>Time per Job (Pie Chart)</h3>
+        <canvas id="pie_chart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <h3>Time per Job per Day (Stacked Bar)</h3>
+        <canvas id="stacked_bar_chart"></canvas>
+    </div>
+
+    <div class="chart-container">
+        <h3>Raw Sessions</h3>
+        <table id="session_table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Job</th>
+                    <th>Duration</th>
+                    <th>Task</th>
+                    <th>Start</th>
+                    <th>Stop</th>
+                </tr>
+            </thead>
+            <tbody id="session_table_body"></tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>

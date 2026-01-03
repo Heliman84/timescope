@@ -1,0 +1,84 @@
+{
+    "name": "timescope",
+    "displayName": "TimeScope",
+    "description": "A VS Code extension for tracking work sessions with analytics and a dashboard.",
+    "publisher": "davidclass",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "activationEvents": [
+        "onCommand:timescope.start",
+        "onCommand:timescope.pause",
+        "onCommand:timescope.resume",
+        "onCommand:timescope.stop",
+        "onCommand:timescope.dashboard"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "configuration": {
+            "properties": {
+                "webview.experimental.useExternalBrowserZoom": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Allow mousewheel zooming inside Webviews."
+                }
+            }
+        },
+        "commands": [
+            {
+                "command": "timescope.start",
+                "title": "TimeScope: Start",
+                "category": "TimeScope"
+            },
+            {
+                "command": "timescope.pause",
+                "title": "TimeScope: Pause",
+                "category": "TimeScope"
+            },
+            {
+                "command": "timescope.resume",
+                "title": "TimeScope: Resume",
+                "category": "TimeScope"
+            },
+            {
+                "command": "timescope.stop",
+                "title": "TimeScope: Stop",
+                "category": "TimeScope"
+            },
+            {
+                "command": "timescope.dashboard",
+                "title": "TimeScope: Show Summary Dashboard",
+                "category": "TimeScope"
+            },
+            {
+                "command": "timescope.rename_job",
+                "title": "TimeScope: Rename Job",
+                "category": "TimeScope"
+            }
+        ]
+    },
+    "scripts": {
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "vscode:prepublish": "npm run compile"
+    },
+    "devDependencies": {
+        "@types/node": "^20.0.0",
+        "@types/vscode": "^1.85.0",
+        "typescript": "^5.4.0",
+        "vscode": "^1.1.34"
+    },
+    "files": [
+        "out/",
+        "src/",
+        "media/",
+        "README.md",
+        "LICENSE.md",
+        "package.json"
+    ]
+
+}
