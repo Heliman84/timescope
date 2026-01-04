@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
     // Divider (highest priority so it appears first)
     ui.divider = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 101);
     ui.divider.text = "TimeScope:";
-    ui.divider.tooltip = "TimeScope Controls";
+    ui.divider.tooltip = "Idle: No active job";
     ui.divider.show();
 
     // Start

@@ -8,20 +8,21 @@ function format_duration_ms(ms: number): string {
 }
 
 export function update_timer_text() {
-    if (!state.is_running && !state.is_paused) {
-        ui.divider!.text = "TimeScope:";
-        return;
-    }
-
     let total_ms = state.elapsed_ms_before_pause;
+
     if (state.is_running && state.start_time) {
         total_ms += Date.now() - state.start_time.getTime();
     }
 
     const formatted = format_duration_ms(total_ms);
+
     ui.divider!.text = state.is_paused
-        ? `TimeScope (Paused at ${formatted})`
-        : `TimeScope (${formatted})`;
+        ? `TimeScope (Paused at ${formatted}):`
+        : `TimeScope (${formatted}):`;
+
+    ui.divider!.tooltip = state.current_job
+        ? `Active job: ${state.current_job}`
+        : "Idle: No active job";
 }
 
 export function start_timer_interval() {
@@ -47,9 +48,11 @@ export function update_status_bar() {
     if (!state.is_running && !state.is_paused) {
         ui.start_button!.show();
         ui.divider!.text = "TimeScope:";
+        ui.divider!.tooltip = "Idle: No active job";
         return;
     }
 
+    // Update divider text (running or paused)
     update_timer_text();
 
     if (state.is_running && !state.is_paused) {

@@ -8,3 +8,5 @@
 {"event":"stop"    , "job":"test 11 job", "timestamp":1767553679284, "task":"checking if timescope divider operates correctly with time included"}
 {"event":"start"   , "job":"test 11 job", "timestamp":1767553695152}
 {"event":"stop"    , "job":"test 11 job", "timestamp":1767553883498, "task":"it worked with start pause resume stop. now checking stop"}
+{"event":"start"   , "job":"test 11 job", "timestamp":1767554853130}
+{"event":"stop"    , "job":"test 11 job", "timestamp":1767554874683, "task":"checking the tooltip"}
