@@ -4,3 +4,7 @@
 {"event":"stop"    , "job":"davids secret job", "timestamp":1767547462897, "task":"does this record?"}
 {"event":"start"   , "job":"review new dashboard", "timestamp":1767547576573}
 {"event":"stop"    , "job":"review new dashboard", "timestamp":1767547583335, "task":""}
+{"event":"start"   , "job":"test job 14 - v0.0.1 review", "timestamp":1767555352041}
+{"event":"pause"   , "job":"test job 14 - v0.0.1 review", "timestamp":1767555385034}
+{"event":"resume"  , "job":"test job 14 - v0.0.1 review", "timestamp":1767555391461}
+{"event":"stop"    , "job":"test job 14 - v0.0.1 review", "timestamp":1767555776870, "task":"things seem ok so far"}
