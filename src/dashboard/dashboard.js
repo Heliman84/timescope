@@ -12,9 +12,9 @@ let pie_chart_instance = null;
 let stacked_chart_instance = null;
 let hasRenderedJobFilter = false;
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // MESSAGE HANDLER
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 window.addEventListener("message", (event) => {
     const msg = event.data;
@@ -34,9 +34,9 @@ window.addEventListener("message", (event) => {
     }
 });
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // NORMALIZATION: RAW EVENTS → CANONICAL EVENTS
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function normalize_events(rawEvents) {
     // 1) Normalize
@@ -78,9 +78,9 @@ function normalize_events(rawEvents) {
     return events;
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // SESSION RECONSTRUCTION: EVENTS → SESSIONS
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 //
 // We support:
 //   start → stop
@@ -193,9 +193,9 @@ function build_sessions_from_events(events) {
     return sessions.sort((a, b) => a.start - b.start);
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // FILTER LISTENERS
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function attach_filter_listeners() {
     const preset = document.getElementById("preset_range");
@@ -210,26 +210,54 @@ function attach_filter_listeners() {
         clearBtn.dataset.bound = "true";
     }
 
-    document.querySelectorAll("#job_filter_container input[type=checkbox]").forEach(box => {
-        if (!box.dataset.bound) {
-            box.addEventListener("change", apply_filters_and_render);
-            box.dataset.bound = "true";
-        }
-    });
+    // “All” checkbox
+    const allBox = document.getElementById("job_all_checkbox");
+    if (allBox && !allBox.dataset.bound) {
+        allBox.addEventListener("change", () => {
+            const checked = allBox.checked;
+            document
+                .querySelectorAll("#job_filter_container .job-box")
+                .forEach(box => {
+                    box.checked = checked;
+                });
+            apply_filters_and_render();
+        });
+        allBox.dataset.bound = "true";
+    }
+
+    // Individual job boxes
+    document
+        .querySelectorAll("#job_filter_container .job-box")
+        .forEach(box => {
+            if (!box.dataset.bound) {
+                box.addEventListener("change", () => {
+                    const allBox = document.getElementById("job_all_checkbox");
+                    const allJobs = [
+                        ...document.querySelectorAll("#job_filter_container .job-box")
+                    ];
+                    const allChecked = allJobs.every(b => b.checked);
+                    if (allBox) {
+                        allBox.checked = allChecked;
+                    }
+                    apply_filters_and_render();
+                });
+                box.dataset.bound = "true";
+            }
+        });
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // MAIN FILTER PIPELINE
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function apply_filters_and_render() {
     const filtered = filter_sessions(all_sessions);
     render_dashboard(filtered);
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // DATE + JOB FILTERING
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function filter_sessions(sessions) {
     const presetEl = document.getElementById("preset_range");
@@ -284,9 +312,10 @@ function filter_sessions(sessions) {
         });
     }
 
-    // JOB FILTERING
-    const selected_jobs = [...document.querySelectorAll("#job_filter_container input[type=checkbox]:checked")]
-        .map(b => b.value);
+    // JOB FILTERING — only job boxes, ignore "All"
+    const selected_jobs = [
+        ...document.querySelectorAll("#job_filter_container .job-box:checked")
+    ].map(b => b.value);
 
     if (selected_jobs.length === 0) {
         return [];
@@ -295,9 +324,9 @@ function filter_sessions(sessions) {
     return date_filtered.filter(s => selected_jobs.includes(s.job));
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // DASHBOARD RENDERER
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function render_dashboard(sessions) {
     render_job_filter(all_sessions);
@@ -307,16 +336,17 @@ function render_dashboard(sessions) {
     render_session_table(sessions);
 }
 
-// ────────────────────────────────────────────────────────────────
-// JOB FILTER CHECKBOXES
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
+// JOB FILTER CHECKBOXES (WITH “ALL”)
+// ---------------------------------------------------------------------
 
 function render_job_filter(allSessions) {
     const container = document.getElementById("job_filter_container");
     if (!container) return;
 
+    // Capture previous selections (job boxes only)
     const previouslyChecked = new Set(
-        [...document.querySelectorAll("#job_filter_container input[type=checkbox]")]
+        [...container.querySelectorAll("input.job-box")]
             .filter(b => b.checked)
             .map(b => b.value)
     );
@@ -325,23 +355,40 @@ function render_job_filter(allSessions) {
 
     const jobs = [...new Set(allSessions.map(s => s.job))];
 
+    // Determine if "All" should be checked:
+    // - first render → true
+    // - later renders → true if every job was checked previously
+    let allShouldBeChecked;
+    if (!hasRenderedJobFilter) {
+        allShouldBeChecked = true;
+    } else {
+        allShouldBeChecked =
+            jobs.length > 0 &&
+            jobs.every(job => previouslyChecked.has(job));
+    }
+
+    // "All" checkbox
+    const allDiv = document.createElement("div");
+    allDiv.innerHTML =
+        `<label><input type="checkbox" id="job_all_checkbox" ${allShouldBeChecked ? "checked" : ""}> All</label>`;
+    container.appendChild(allDiv);
+
+    // Job checkboxes
     jobs.forEach(job => {
         const div = document.createElement("div");
 
         let checked;
-
         if (!hasRenderedJobFilter) {
+            // First render → all checked
             checked = true;
+        } else if (previouslyChecked.size === 0) {
+            checked = allShouldBeChecked;
         } else {
             checked = previouslyChecked.has(job);
         }
 
         div.innerHTML =
-            '<label><input type="checkbox" ' +
-            (checked ? "checked" : "") +
-            ' value="' + job + '"> ' +
-            job +
-            "</label>";
+            `<label><input type="checkbox" class="job-box" value="${job}" ${checked ? "checked" : ""}> ${job}</label>`;
 
         container.appendChild(div);
     });
@@ -349,22 +396,34 @@ function render_job_filter(allSessions) {
     hasRenderedJobFilter = true;
 }
 
+// ---------------------------------------------------------------------
+// CLEAR FILTERS
+// ---------------------------------------------------------------------
+
 function clear_filters() {
     const preset = document.getElementById("preset_range");
     if (preset) {
         preset.value = "this_month";
     }
 
-    document.querySelectorAll("#job_filter_container input[type=checkbox]").forEach(box => {
-        box.checked = true;
-    });
+    // Re-check "All" and all jobs
+    const allBox = document.getElementById("job_all_checkbox");
+    if (allBox) {
+        allBox.checked = true;
+    }
+
+    document
+        .querySelectorAll("#job_filter_container .job-box")
+        .forEach(box => {
+            box.checked = true;
+        });
 
     apply_filters_and_render();
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // PIE CHART
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function render_pie_chart(sessions) {
     const ctx = document.getElementById("pie_chart");
@@ -402,9 +461,9 @@ function render_pie_chart(sessions) {
     });
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // STACKED BAR CHART
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function render_stacked_bar_chart(sessions) {
     const ctx = document.getElementById("stacked_bar_chart");
@@ -482,9 +541,9 @@ function render_stacked_bar_chart(sessions) {
     });
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // RAW SESSION TABLE
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function render_session_table(sessions) {
     const body = document.getElementById("session_table_body");
@@ -512,9 +571,9 @@ function render_session_table(sessions) {
     });
 }
 
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 // UTILITIES
-// ────────────────────────────────────────────────────────────────
+// ---------------------------------------------------------------------
 
 function generate_color_palette(n) {
     const base = [
