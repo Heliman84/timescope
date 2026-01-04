@@ -59,11 +59,6 @@ export function activate(context: vscode.ExtensionContext) {
     ui.stop_button.text = "$(primitive-square) Stop";
     ui.stop_button.command = "timescope.stop";
 
-    // Timer
-    ui.timer_item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
-    ui.timer_item.text = "Idle";
-    ui.timer_item.show();
-
     // Summary
     ui.summary_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
     ui.summary_button.text = "$(graph) Summary";
@@ -76,7 +71,6 @@ export function activate(context: vscode.ExtensionContext) {
         ui.pause_button,
         ui.resume_button,
         ui.stop_button,
-        ui.timer_item,
         ui.summary_button
     );
 

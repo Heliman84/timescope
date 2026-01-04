@@ -34,7 +34,6 @@ export const ui = {
     pause_button: undefined as vscode.StatusBarItem | undefined,
     resume_button: undefined as vscode.StatusBarItem | undefined,
     stop_button: undefined as vscode.StatusBarItem | undefined,
-    timer_item: undefined as vscode.StatusBarItem | undefined,
     summary_button: undefined as vscode.StatusBarItem | undefined
 };
 
