@@ -29,6 +29,7 @@ export const state: Timescope_state = {
 //
 
 export const ui = {
+    divider: undefined as vscode.StatusBarItem | undefined,
     start_button: undefined as vscode.StatusBarItem | undefined,
     pause_button: undefined as vscode.StatusBarItem | undefined,
     resume_button: undefined as vscode.StatusBarItem | undefined,

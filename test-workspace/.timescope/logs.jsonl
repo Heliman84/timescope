@@ -1,30 +1,4 @@
-{"event":"start",  "job":"house work","timestamp":1767463471497}
-{"event":"stop",   "job":"house work","timestamp":1767471080517,"task":"making upper window covers"}
-{"event":"start",  "job":"Test 3 job","timestamp":1767479586855}
-{"event":"stop",   "job":"Test 3 job","timestamp":1767479759445,"task":"still testing the new code factoring"}
-{"event":"start",  "job":"global_storage_job","timestamp":1767479974620}
-{"event":"stop",   "job":"global_storage_job","timestamp":1767480126598,"task":"did it create a global jobs file?"}
-{"event":"start",  "job":"test global_job 4","timestamp":1767480213715}
-{"event":"stop",   "job":"test global_job 4","timestamp":1767480222633,"task":"i think this is broken"}
-{"event":"start","job":"test 10 job","timestamp":1767485659978}
-{"event":"pause","job":"test 10 job","timestamp":1767485735417}
-{"event":"resume","job":"test 10 job","timestamp":1767485741067}
-{"event":"stop","job":"test 10 job","timestamp":1767485802013,"task":"hmmm does this have duration?"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767486831558}
-{"event":"pause"   , "job":"test 11 job", "timestamp":1767486927733}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767486945256, "task":"uggh lets see if it messes with the jobs file"}
-{"event":"start"   , "job":"test 12 job", "timestamp":1767486972244}
-{"event":"stop"    , "job":"test 12 job", "timestamp":1767487024196, "task":"about to remove the job copy funciton"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767487545229}
-{"event":"pause"   , "job":"test 11 job", "timestamp":1767487554468}
-{"event":"resume"  , "job":"test 11 job", "timestamp":1767487557720}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767487622763, "task":""}
-{"event":"start"   , "job":"test 12 job", "timestamp":1767487640428}
-{"event":"stop"    , "job":"test 12 job", "timestamp":1767487671494, "task":"about to check if adding new job copies over"}
-{"event":"start"   , "job":"test 13 job", "timestamp":1767487682910}
-{"event":"stop"    , "job":"test 13 job", "timestamp":1767487697793, "task":"ok it worked!"}
-
-{"event":"start"   , "job":"review new dashboard", "timestamp":1767499445271}
-{"event":"stop"    , "job":"review new dashboard", "timestamp":1767500405903, "task":"viewing summary now"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767500434671}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767500494686, "task":"not really viewing summary"}
+{"event":"start"   , "job":"review new dashboard", "timestamp":1767548679406}
+{"event":"stop"    , "job":"review new dashboard", "timestamp":1767548703076, "task":"changed html_uri"}
+{"event":"start"   , "job":"test 11 job", "timestamp":1767552746968}
+{"event":"stop"    , "job":"test 11 job", "timestamp":1767552944435, "task":"identified new way to set up status bar"}

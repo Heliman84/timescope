@@ -10,14 +10,10 @@
     "categories": [
         "Other"
     ],
-    "activationEvents": [
-        "onCommand:timescope.start",
-        "onCommand:timescope.pause",
-        "onCommand:timescope.resume",
-        "onCommand:timescope.stop",
-        "onCommand:timescope.dashboard"
-    ],
     "main": "./out/extension.js",
+    "activationEvents": [
+        "onStartupFinished"
+    ],
     "contributes": {
         "configuration": {
             "title": "TimeScope",
@@ -66,7 +62,8 @@
     "scripts": {
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "vscode:prepublish": "npm run compile"
+        "copy-dashboard": "mkdir out\\dashboard\\webview 2>nul & copy src\\dashboard\\webview\\* out\\dashboard\\webview\\",
+        "vscode:prepublish": "npm run compile && npm run copy-dashboard"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",
@@ -74,6 +71,7 @@
         "typescript": "^5.4.0",
         "vscode": "^1.1.34"
     },
+    "icon": "icon.png",
     "files": [
         "out/",
         "README.md",
@@ -84,7 +82,7 @@
     "repository": {
         "type": "git",
         "url": "https://github.com/Heliman84/timescope.git"
-        },
-    "icon": "icon.png"
+        }
+    
 
 }

@@ -9,7 +9,7 @@ import {
     stop_timer_interval,
     update_status_bar
 } from "./core/timer";
-import { handle_dashboard } from "./dashboard/dashboard";
+import { handle_dashboard } from "./dashboard/controller/dashboard";
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -31,33 +31,47 @@ export function activate(context: vscode.ExtensionContext) {
     // STATUS BAR SETUP
     // ────────────────────────────────────────────────────────────────
     //
+
+    // Divider (highest priority so it appears first)
+    ui.divider = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 101);
+    ui.divider.text = "TimeScope:";
+    ui.divider.tooltip = "TimeScope Controls";
+    ui.divider.show();
+
+    // Start
     ui.start_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     ui.start_button.text = "$(play) Start";
     ui.start_button.command = "timescope.start";
     ui.start_button.show();
 
+    // Pause
     ui.pause_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
     ui.pause_button.text = "$(debug-pause) Pause";
     ui.pause_button.command = "timescope.pause";
 
+    // Resume
     ui.resume_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
     ui.resume_button.text = "$(debug-continue) Resume";
     ui.resume_button.command = "timescope.resume";
 
+    // Stop
     ui.stop_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
     ui.stop_button.text = "$(primitive-square) Stop";
     ui.stop_button.command = "timescope.stop";
 
+    // Timer
     ui.timer_item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 96);
     ui.timer_item.text = "Idle";
     ui.timer_item.show();
 
+    // Summary
     ui.summary_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
     ui.summary_button.text = "$(graph) Summary";
     ui.summary_button.command = "timescope.dashboard";
     ui.summary_button.show();
 
     context.subscriptions.push(
+        ui.divider,
         ui.start_button,
         ui.pause_button,
         ui.resume_button,

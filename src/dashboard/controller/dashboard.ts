@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
-import { resolve_paths } from "../core/paths";
-import { load_all_logs } from "../core/logs";
+import { resolve_paths } from "../../core/paths";
+import { load_all_logs } from "../../core/logs";
 
 export async function handle_dashboard(context: vscode.ExtensionContext) {
     const panel = vscode.window.createWebviewPanel(
@@ -12,26 +12,23 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             enableScripts: true,
             retainContextWhenHidden: true,
             localResourceRoots: [
-                vscode.Uri.joinPath(context.extensionUri, "src", "dashboard")
+                vscode.Uri.joinPath(context.extensionUri, "out", "dashboard")
             ]
         }
     );
 
     const html_path = vscode.Uri.joinPath(
-        context.extensionUri,
-        "src",
-        "dashboard",
-        "index.html"
+        context.extensionUri, "out", "dashboard", "webview", "index.html"
     );
 
     let html = await fs.promises.readFile(html_path.fsPath, "utf8");
     const nonce = String(Date.now());
 
     const js_uri = panel.webview.asWebviewUri(
-        vscode.Uri.joinPath(context.extensionUri, "src", "dashboard", "dashboard.js")
+        vscode.Uri.joinPath(context.extensionUri, "out", "dashboard", "webview", "dashboard.js")
     );
     const css_uri = panel.webview.asWebviewUri(
-        vscode.Uri.joinPath(context.extensionUri, "src", "dashboard", "dashboard.css")
+        vscode.Uri.joinPath(context.extensionUri, "out", "dashboard", "webview", "dashboard.css")
     );
 
     html = html

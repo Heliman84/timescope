@@ -1,0 +1,6 @@
+{"event":"start"   , "job":"davids secret job", "timestamp":1767546884886}
+{"event":"stop"    , "job":"davids secret job", "timestamp":1767546903746, "task":"checking fully compiled version"}
+{"event":"start"   , "job":"davids secret job", "timestamp":1767547427526}
+{"event":"stop"    , "job":"davids secret job", "timestamp":1767547462897, "task":"does this record?"}
+{"event":"start"   , "job":"review new dashboard", "timestamp":1767547576573}
+{"event":"stop"    , "job":"review new dashboard", "timestamp":1767547583335, "task":""}
