@@ -76,11 +76,16 @@
     },
     "files": [
         "out/",
-        "src/",
         "media/",
         "README.md",
         "LICENSE.md",
-        "package.json"
-    ]
+        "package.json",
+        "icon.png"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Heliman84/timescope.git"
+        },
+    "icon": "icon.png"
 
 }

@@ -1,251 +1,200 @@
-# TimeScope for VS Code
+# 📘 TimeScope — VS Code Time Tracking & Analytics
 
-A clean, manual time‑tracking extension for VS Code with:
+TimeScope is a lightweight, developer-friendly time-tracking extension for Visual Studio Code.  
+It helps you track work sessions, analyze your productivity, and review your day with a clean, interactive dashboard.
 
-- Job selection (global + workspace jobs)
-- Pause / resume
-- Optional task descriptions
-- JSONL logging with unlimited history
-- A Summary Dashboard entry point for future charts and analytics
+Whether you're billing clients, tracking personal projects, or simply curious about where your time goes, TimeScope gives you clarity without getting in your way.
 
 ---
 
-## Features
+## 🚀 Features
 
-- **Manual control:**
-  - Start – begin tracking time for a selected job
-  - Pause – temporarily stop accumulating time
-  - Resume – continue from where you paused
-  - Stop – finalize the session with an optional task description
+### ⏱️ Simple Start / Pause / Resume / Stop Workflow
+Track time for any job with four intuitive commands:
 
-- **Jobs with persistence:**
-  - Choose from global jobs (shared across all workspaces)
-  - Choose from workspace jobs (specific to one project)
-  - Add new jobs with a simple “global vs workspace” choice
-  - Jobs are stored in JSON files you can edit manually
+- Start a job  
+- Pause when you step away  
+- Resume when you return  
+- Stop to finalize the session  
 
-- **JSONL logging:**
-  - Every event is written as a single JSON object per line
-  - Ideal for later parsing, analysis, and plotting
-
-- **Status bar UI:**
-  - Dedicated buttons for Start, Pause, Resume, Stop
-  - Live duration timer (Working / Paused)
-  - A Summary button for the upcoming dashboard
-
-- **Summary dashboard hook:**
-  - Command and button are already in place
-  - Will later open a rich Webview summary with charts and filters
+TimeScope automatically builds accurate sessions from your event history.
 
 ---
 
-## Status bar workflow
+### 📊 Interactive Summary Dashboard
+Explore your work visually with:
 
-The extension uses status bar items as “buttons”. Depending on the state, you will see:
+- Pie chart of time per job  
+- Stacked bar chart of time per day  
+- Raw session table with timestamps and tasks  
+- Date presets (Today, This Week, Last 7 Days, This Month, Last 3 Months)  
+- Job filters with a convenient “All” checkbox  
 
-### Idle
-
-[ Start ]     [ Summary ]
-
-### Running
-
-[ Pause ]   Working: Xh Ym   [ Stop ]     [ Summary ]
-
-### Paused
-
-[ Resume ]   Paused: Xh Ym   [ Stop ]     [ Summary ]
-
-You can also access all commands via the Command Palette:
-
-- TimeScope: Start
-- TimeScope: Pause
-- TimeScope: Resume
-- TimeScope: Stop
-- TimeScope: Show Summary Dashboard
+The dashboard is fast, responsive, and built for real-world workflows.
 
 ---
 
-## Jobs: global and workspace
+### 🗂️ Global + Workspace Storage
+TimeScope supports:
 
-When you start tracking, you select a job.
+- Global tracking (across all projects)  
+- Workspace tracking (per-project logs)  
 
-### Selecting a job
-
-On Start, you’ll see a Quick Pick with something like:
-
-Workspace jobs  
-• Router Upgrade  
-• Fusion 360 Add‑in  
-
-Global jobs  
-• ACME  
-• Internal R&D  
-
-──────────────  
-➕ Add New Job…
-
-### Adding a new job
-
-If you choose “➕ Add New Job…”:
-
-1. You’ll be asked for a job name.
-2. Then you’ll choose where to save it:
-   - Save as global job (default)
-   - Save as workspace job
-
-### Where jobs are stored
-
-Global jobs:
-```
-%APPDATA%/timescope/jobs.json
-```
-
-Workspace jobs:
-```
-<workspace>/.timescope/jobs.json
-```
-
-Each file looks like:
-```json
-{
-  "jobs": ["ACME", "Internal R&D", "Router Upgrade"]
-}
-```
+You can optionally choose a custom folder for global storage.
 
 ---
 
-## Time tracking behavior and states
+### 🧹 Automatic Session Reconstruction
+TimeScope intelligently rebuilds sessions from your event stream:
 
-### Start
-- Prompts you to select or add a job.
-- Begins a new session for that job.
-- Logs a `start` event.
+- start → stop  
+- start → pause → resume → stop  
+- Multiple pause/resume cycles  
+- Deduplication of mirrored global/workspace events  
+- Accurate duration calculation  
 
-### Pause
-- Freezes time accumulation.
-- Stores elapsed time up to the pause moment.
-- Logs a `pause` event.
-
-### Resume
-- Continues from the paused elapsed time.
-- Logs a `resume` event.
-
-### Stop (running)
-- Stop time = current time.
-- Prompts for optional task description.
-- Logs a `stop` event with duration.
-
-### Stop (paused)
-- Stop time = pause time (no extra time added).
-- Prompts for optional task description.
-- Logs a `stop` event with duration.
+No matter how you work, TimeScope keeps your data clean.
 
 ---
 
-## Logging format and location
+## 🛠️ Commands
 
-### Log file location
-
-Workspace:
-```
-<workspace>/logs/work_log.jsonl
-```
-
-Global fallback:
-```
-%APPDATA%/timescope/logs/work_log.jsonl
-```
-
-### JSONL format
-
-Start:
-```json
-{"type":"start","timestamp":"...","job":"ACME"}
-```
-
-Pause:
-```json
-{"type":"pause","timestamp":"...","job":"ACME"}
-```
-
-Resume:
-```json
-{"type":"resume","timestamp":"...","job":"ACME"}
-```
-
-Stop (running):
-```json
-{
-  "type": "stop",
-  "timestamp": "...",
-  "job": "ACME",
-  "task": "fixed login bug",
-  "duration_ms": 6300000
-}
-```
-
-Stop (paused):
-```json
-{
-  "type": "stop",
-  "timestamp": "...",
-  "job": "ACME",
-  "task": "meeting break",
-  "duration_ms": 2400000
-}
-```
+| Command | Description |
+|--------|-------------|
+| TimeScope: Start | Start tracking a job |
+| TimeScope: Pause | Pause the current session |
+| TimeScope: Resume | Resume a paused session |
+| TimeScope: Stop | Stop the current session |
+| TimeScope: Show Summary Dashboard | Open the analytics dashboard |
+| TimeScope: Rename Job | Rename an existing job |
 
 ---
 
-## How to build and run
+## ⚙️ Settings
 
-Install dependencies:
+### Global Storage Directory
 ```
-npm install
-```
-
-Compile:
-```
-npm run compile
+timescope.global_storage_dir
 ```
 
-Launch:
-- Press F5 in VS Code to open the Extension Development Host.
-- Open a workspace folder.
-- Use the status bar buttons or the Command Palette.
+Choose a folder where TimeScope stores:
+
+- jobs.json  
+- logs.jsonl  
+
+If unset, TimeScope uses VS Code’s built-in global storage directory.
 
 ---
 
-## Planned features (roadmap)
+## 📁 Data Format
 
-### Summary dashboard Webview
-Will include:
-- Time per job
-- Time per day
-- Time per job per day
-- Weekly and monthly totals
-- Interactive charts
-- Filters for job and date range
+TimeScope stores data in a simple, future-proof format.
 
-### Export and reporting
-- CSV export
-- JSON export
-- Weekly/monthly summaries
+### jobs.json
+Tracks known jobs and metadata.
 
-### Idle detection
-- Auto‑pause after inactivity
-- Resume prompts
+### logs.jsonl
+Each line is a canonical event:
 
-### Multi‑job analytics
-- Compare jobs
-- Job mix over time
-- Focus area analysis
+```
+{ "event": "start", "job": "Project A", "task": "feature-x", "timestamp": 1704320000000 }
+```
+
+The dashboard reconstructs sessions from these events.
 
 ---
 
-## Notes
+## 📊 Dashboard Overview
 
-- All storage is plain text (JSONL and JSON files).
-- You remain in full control of your data.
-- The current version focuses on clean, predictable tracking; analytics come next.
+The dashboard includes:
 
+### Pie Chart
+Visual breakdown of time per job.
+
+### Stacked Bar Chart
+Daily totals with job-level stacking.
+
+### Session Table
+Raw session data including:
+
+- Date  
+- Job  
+- Duration  
+- Task  
+- Start time  
+- Stop time  
+
+### Filters
+- Date presets  
+- Job checkboxes  
+- “All” checkbox for quick toggling  
+
+---
+
+## 🛣️ Roadmap
+
+### 1. Web-Based Reporting (Exportable HTML Dashboard)
+Generate a standalone HTML report that mirrors the in-editor dashboard, including:
+
+- Charts  
+- Filters  
+- Raw session table  
+- Optional embedded notes  
+
+Perfect for sharing with clients or archiving your work.
+
+---
+
+### 2. Daily Logbook Entries
+Optionally open a “logbook entry” file when starting a timer:
+
+- Take notes for the day  
+- Track context, tasks, or thoughts  
+- View notes later by clicking a session in the dashboard  
+- Include notes in exported reports  
+
+This turns TimeScope into a combined time tracker + work journal.
+
+---
+
+### 3. Enhanced Exporting
+- JSON export  
+- CSV export  
+- HTML export with charts  
+- Optional PDF export via browser print  
+
+---
+
+### 4. Additional Future Enhancements
+- Job grouping  
+- Weekly/monthly summaries  
+- Auto-pause on idle  
+- Minimal floating timer  
+- Keyboard shortcuts  
+
+---
+
+## 📦 Installation
+
+TimeScope will soon be available on the Visual Studio Code Marketplace.
+
+Until then, you can install it manually:
+
+1. Clone the repository  
+2. Run `npm install`  
+3. Run `npm run compile`  
+4. Press F5 to launch the extension in a new VS Code window  
+
+---
+
+## ❤️ Contributing
+
+Pull requests, feature ideas, and bug reports are welcome.  
+TimeScope is built to grow with your workflow.
+
+---
+
+## 📄 License
+
+MIT License.  
+See `LICENSE.md` for details.

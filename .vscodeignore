@@ -1,0 +1,36 @@
+# Exclude source TypeScript — only ship compiled JS
+src/**
+tsconfig.json
+tsconfig.*.json
+
+# Exclude build artifacts not needed in the extension
+*.map
+
+# Exclude development dependencies
+node_modules/**
+!node_modules/vscode/**
+
+# Exclude version control and editor settings
+.git/**
+.gitignore
+.vscode/**
+.vscode-test/**
+
+# Exclude test files
+test/**
+**/*.test.ts
+**/*.spec.ts
+
+# Exclude documentation drafts or design notes
+design/**
+docs/**
+README-drafts/**
+
+# Exclude media not needed in the packaged extension
+*.psd
+*.ai
+*.sketch
+
+# Exclude miscellaneous clutter
+npm-debug.log
+yarn-error.log
