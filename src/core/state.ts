@@ -1,0 +1,51 @@
+import * as vscode from "vscode";
+
+//
+// RUNTIME STATE
+//
+
+export interface Timescope_state {
+    is_running: boolean;
+    is_paused: boolean;
+    start_time: Date | null;
+    pause_time: Date | null;
+    elapsed_ms_before_pause: number;
+    current_job: string | null;
+    timer_interval: NodeJS.Timeout | null;
+}
+
+export const state: Timescope_state = {
+    is_running: false,
+    is_paused: false,
+    start_time: null,
+    pause_time: null,
+    elapsed_ms_before_pause: 0,
+    current_job: null,
+    timer_interval: null
+};
+
+//
+// UI ELEMENTS (mutable container)
+//
+
+export const ui = {
+    start_button: undefined as vscode.StatusBarItem | undefined,
+    pause_button: undefined as vscode.StatusBarItem | undefined,
+    resume_button: undefined as vscode.StatusBarItem | undefined,
+    stop_button: undefined as vscode.StatusBarItem | undefined,
+    timer_item: undefined as vscode.StatusBarItem | undefined,
+    summary_button: undefined as vscode.StatusBarItem | undefined
+};
+
+//
+// STATE RESET
+//
+
+export function reset_state_after_stop() {
+    state.is_running = false;
+    state.is_paused = false;
+    state.start_time = null;
+    state.pause_time = null;
+    state.elapsed_ms_before_pause = 0;
+    state.current_job = null;
+}

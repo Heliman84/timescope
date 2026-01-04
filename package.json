@@ -20,43 +20,52 @@
     "main": "./out/extension.js",
     "contributes": {
         "configuration": {
+            "title": "TimeScope",
             "properties": {
-                "webview.experimental.useExternalBrowserZoom": {
+                "timescope.global_jobs_path": {
+                    "type": "string",
+                    "description": "Absolute path to the global jobs file. If empty, TimeScope uses the default path in the user data directory."
+                },
+                "timescope.global_log_path": {
+                    "type": "string",
+                    "description": "Absolute path to the global log file. If empty, TimeScope uses the default path in the user data directory."
+                },
+                "timescope.use_global_log_only": {
                     "type": "boolean",
-                    "default": true,
-                    "description": "Allow mousewheel zooming inside Webviews."
+                    "default": false,
+                    "description": "If enabled, TimeScope stores all logs and jobs in the global paths only and ignores workspace-specific data."
                 }
             }
         },
         "commands": [
             {
                 "command": "timescope.start",
-                "title": "TimeScope: Start",
+                "title": "Start",
                 "category": "TimeScope"
             },
             {
                 "command": "timescope.pause",
-                "title": "TimeScope: Pause",
+                "title": "Pause",
                 "category": "TimeScope"
             },
             {
                 "command": "timescope.resume",
-                "title": "TimeScope: Resume",
+                "title": "Resume",
                 "category": "TimeScope"
             },
             {
                 "command": "timescope.stop",
-                "title": "TimeScope: Stop",
+                "title": "Stop",
                 "category": "TimeScope"
             },
             {
                 "command": "timescope.dashboard",
-                "title": "TimeScope: Show Summary Dashboard",
+                "title": "Show Summary Dashboard",
                 "category": "TimeScope"
             },
             {
                 "command": "timescope.rename_job",
-                "title": "TimeScope: Rename Job",
+                "title": "Rename Job",
                 "category": "TimeScope"
             }
         ]

@@ -1,31 +1,202 @@
+console.log("dashboard.js loaded");
 
 const vscode = acquireVsCodeApi();
-//
-// REQUEST INITIAL DATA
-//
-vscode.postMessage({ type: "request_data" });
+
+// Request data from extension
+vscode.postMessage({
+    type: "request_data"
+});
 
 let all_sessions = [];
 let pie_chart_instance = null;
 let stacked_chart_instance = null;
 let hasRenderedJobFilter = false;
 
-//
-// MESSAGE HANDLER — FIRST RENDER
-//
+// ────────────────────────────────────────────────────────────────
+// MESSAGE HANDLER
+// ────────────────────────────────────────────────────────────────
+
 window.addEventListener("message", (event) => {
     const msg = event.data;
 
     if (msg.type === "summary_data") {
-        all_sessions = msg.payload;
-        render_dashboard(all_sessions);   // FIRST render uses raw data
-        attach_filter_listeners();        // THEN attach listeners
+        const rawEvents = msg.payload || [];
+
+        // 1) Normalize raw events into a canonical shape
+        const events = normalize_events(rawEvents);
+
+        // 2) Build sessions from start/pause/resume/stop event stream
+        all_sessions = build_sessions_from_events(events);
+
+        // 3) Initial render + filter hookup
+        render_dashboard(all_sessions);
+        attach_filter_listeners();
     }
 });
 
+// ────────────────────────────────────────────────────────────────
+// NORMALIZATION: RAW EVENTS → CANONICAL EVENTS
+// ────────────────────────────────────────────────────────────────
+
+function normalize_events(rawEvents) {
+    // 1) Normalize
+    let events = rawEvents
+        .map(e => {
+            const evt = e.event || e.type;
+            const job = e.job || "";
+            const task = e.task || "";
+
+            const tsRaw = e.timestamp;
+            let ts;
+            if (typeof tsRaw === "number") ts = tsRaw;
+            else if (typeof tsRaw === "string") {
+                if (/^\d+$/.test(tsRaw.trim())) ts = Number(tsRaw);
+                else ts = Date.parse(tsRaw);
+            } else ts = NaN;
+
+            return { event: evt, job, task, timestamp: ts };
+        })
+        .filter(e =>
+            e.event &&
+            e.job &&
+            typeof e.timestamp === "number" &&
+            !Number.isNaN(e.timestamp)
+        );
+
+    // 2) DEDUPE (fixes global+workspace mirror duplication)
+    const seen = new Set();
+    events = events.filter(e => {
+        const key = `${e.event}|${e.job}|${e.timestamp}|${e.task || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+
+    // 3) Sort
+    events.sort((a, b) => a.timestamp - b.timestamp);
+
+    return events;
+}
+
+// ────────────────────────────────────────────────────────────────
+// SESSION RECONSTRUCTION: EVENTS → SESSIONS
+// ────────────────────────────────────────────────────────────────
 //
+// We support:
+//   start → stop
+//   start → pause → resume → stop
+//   start → pause → resume → pause → resume → stop
+//
+// Each job has its own state; we assume you’re not running the same job
+// concurrently in multiple overlapping sessions.
+
+function build_sessions_from_events(events) {
+    const sessions = [];
+
+    // Per-job state machine
+    const stateByJob = new Map();
+
+    function ensureState(job) {
+        if (!stateByJob.has(job)) {
+            stateByJob.set(job, {
+                currentSession: null,
+                lastActiveStart: null,
+                accumulatedMs: 0,
+                inPause: false
+            });
+        }
+        return stateByJob.get(job);
+    }
+
+    function finalizeSession(job, stopTs, stopTask) {
+        const state = stateByJob.get(job);
+        if (!state || !state.currentSession) return;
+
+        // If we're active when we hit stop, add final active segment
+        if (!state.inPause && state.lastActiveStart != null) {
+            state.accumulatedMs += stopTs - state.lastActiveStart;
+        }
+
+        const duration_ms = Math.max(0, state.accumulatedMs);
+
+        sessions.push({
+            job,
+            start: state.currentSession.start,
+            stop: stopTs,
+            duration_ms,
+            task: stopTask || state.currentSession.task || ""
+        });
+
+        // Reset state for this job
+        state.currentSession = null;
+        state.lastActiveStart = null;
+        state.accumulatedMs = 0;
+        state.inPause = false;
+    }
+
+    for (const e of events) {
+        const job = e.job;
+        const ts = e.timestamp;
+        const evt = (e.event || "").toLowerCase();
+
+        const state = ensureState(job);
+
+        switch (evt) {
+            case "start": {
+                // If there is a dangling session, finalize it at this new start
+                if (state.currentSession) {
+                    finalizeSession(job, ts, state.currentSession.task);
+                }
+                state.currentSession = {
+                    job,
+                    start: ts,
+                    task: e.task || ""
+                };
+                state.lastActiveStart = ts;
+                state.accumulatedMs = 0;
+                state.inPause = false;
+                break;
+            }
+
+            case "pause": {
+                if (state.currentSession && !state.inPause && state.lastActiveStart != null) {
+                    state.accumulatedMs += ts - state.lastActiveStart;
+                    state.lastActiveStart = null;
+                    state.inPause = true;
+                }
+                break;
+            }
+
+            case "resume": {
+                if (state.currentSession && state.inPause) {
+                    state.inPause = false;
+                    state.lastActiveStart = ts;
+                }
+                break;
+            }
+
+            case "stop": {
+                if (state.currentSession) {
+                    finalizeSession(job, ts, e.task);
+                }
+                break;
+            }
+
+            default:
+                // ignore unknown events
+                break;
+        }
+    }
+
+    // We intentionally ignore open sessions with no stop event
+
+    return sessions.sort((a, b) => a.start - b.start);
+}
+
+// ────────────────────────────────────────────────────────────────
 // FILTER LISTENERS
-//
+// ────────────────────────────────────────────────────────────────
+
 function attach_filter_listeners() {
     const preset = document.getElementById("preset_range");
     if (preset && !preset.dataset.bound) {
@@ -47,22 +218,25 @@ function attach_filter_listeners() {
     });
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // MAIN FILTER PIPELINE
-//
+// ────────────────────────────────────────────────────────────────
+
 function apply_filters_and_render() {
     const filtered = filter_sessions(all_sessions);
     render_dashboard(filtered);
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // DATE + JOB FILTERING
-//
+// ────────────────────────────────────────────────────────────────
+
 function filter_sessions(sessions) {
-    const preset = document.getElementById("preset_range").value;
+    const presetEl = document.getElementById("preset_range");
+    const preset = presetEl ? presetEl.value : "this_month";
 
     const now = new Date();
-    const today_local = get_local_day(now);
+    const today_local = get_local_day(now.getTime());
 
     let start_date = null;
     let end_date = null;
@@ -76,20 +250,20 @@ function filter_sessions(sessions) {
         const day = now.getDay();
         const monday = new Date(now);
         monday.setDate(now.getDate() - ((day + 6) % 7));
-        start_date = get_local_day(monday);
+        start_date = get_local_day(monday.getTime());
         end_date = today_local;
     }
 
     if (preset === "last_7") {
         const d = new Date(now);
         d.setDate(now.getDate() - 6);
-        start_date = get_local_day(d);
+        start_date = get_local_day(d.getTime());
         end_date = today_local;
     }
 
     if (preset === "this_month") {
         const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        start_date = get_local_day(first);
+        start_date = get_local_day(first.getTime());
         end_date = today_local;
     }
 
@@ -97,7 +271,7 @@ function filter_sessions(sessions) {
         const d = new Date(now);
         d.setMonth(now.getMonth() - 2);
         const first = new Date(d.getFullYear(), d.getMonth(), 1);
-        start_date = get_local_day(first);
+        start_date = get_local_day(first.getTime());
         end_date = today_local;
     }
 
@@ -114,12 +288,17 @@ function filter_sessions(sessions) {
     const selected_jobs = [...document.querySelectorAll("#job_filter_container input[type=checkbox]:checked")]
         .map(b => b.value);
 
+    if (selected_jobs.length === 0) {
+        return [];
+    }
+
     return date_filtered.filter(s => selected_jobs.includes(s.job));
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // DASHBOARD RENDERER
-//
+// ────────────────────────────────────────────────────────────────
+
 function render_dashboard(sessions) {
     render_job_filter(all_sessions);
     attach_filter_listeners();
@@ -128,13 +307,14 @@ function render_dashboard(sessions) {
     render_session_table(sessions);
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // JOB FILTER CHECKBOXES
-//
+// ────────────────────────────────────────────────────────────────
+
 function render_job_filter(allSessions) {
     const container = document.getElementById("job_filter_container");
+    if (!container) return;
 
-    // Capture previous selections (only meaningful after first render)
     const previouslyChecked = new Set(
         [...document.querySelectorAll("#job_filter_container input[type=checkbox]")]
             .filter(b => b.checked)
@@ -151,10 +331,8 @@ function render_job_filter(allSessions) {
         let checked;
 
         if (!hasRenderedJobFilter) {
-            // First render → all checked
             checked = true;
         } else {
-            // Subsequent renders → preserve user selections
             checked = previouslyChecked.has(job);
         }
 
@@ -163,36 +341,34 @@ function render_job_filter(allSessions) {
             (checked ? "checked" : "") +
             ' value="' + job + '"> ' +
             job +
-            '</label>';
+            "</label>";
 
         container.appendChild(div);
     });
 
-    // Mark that we've completed the first render
     hasRenderedJobFilter = true;
 }
 
 function clear_filters() {
-    // Reset date preset to default (you can change this)
     const preset = document.getElementById("preset_range");
     if (preset) {
-        preset.value = "this_month"; // or "all_time" or whatever your default is
+        preset.value = "this_month";
     }
 
-    // Re-check all jobs
     document.querySelectorAll("#job_filter_container input[type=checkbox]").forEach(box => {
         box.checked = true;
     });
 
-    // Re-render dashboard with full dataset
     apply_filters_and_render();
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // PIE CHART
-//
+// ────────────────────────────────────────────────────────────────
+
 function render_pie_chart(sessions) {
     const ctx = document.getElementById("pie_chart");
+    if (!ctx) return;
 
     const totals_by_job = {};
     sessions.forEach(s => {
@@ -226,11 +402,13 @@ function render_pie_chart(sessions) {
     });
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // STACKED BAR CHART
-//
+// ────────────────────────────────────────────────────────────────
+
 function render_stacked_bar_chart(sessions) {
     const ctx = document.getElementById("stacked_bar_chart");
+    if (!ctx) return;
 
     const map = {};
     sessions.forEach(s => {
@@ -242,10 +420,12 @@ function render_stacked_bar_chart(sessions) {
     const days = Object.keys(map).sort((a, b) => new Date(a) - new Date(b));
     const jobs = [...new Set(sessions.map(s => s.job))];
 
+    const palette = generate_color_palette(jobs.length);
+
     const datasets = jobs.map((job, idx) => ({
         label: job,
         data: days.map(d => (map[d][job] || 0) / 3600000),
-        backgroundColor: generate_color_palette(jobs.length)[idx]
+        backgroundColor: palette[idx]
     }));
 
     const totals_per_day = days.map(d =>
@@ -302,11 +482,14 @@ function render_stacked_bar_chart(sessions) {
     });
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // RAW SESSION TABLE
-//
+// ────────────────────────────────────────────────────────────────
+
 function render_session_table(sessions) {
     const body = document.getElementById("session_table_body");
+    if (!body) return;
+
     body.innerHTML = "";
 
     sessions.forEach(s => {
@@ -329,9 +512,10 @@ function render_session_table(sessions) {
     });
 }
 
-//
+// ────────────────────────────────────────────────────────────────
 // UTILITIES
-//
+// ────────────────────────────────────────────────────────────────
+
 function generate_color_palette(n) {
     const base = [
         "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
@@ -350,4 +534,3 @@ function get_local_day(timestamp) {
 
     return `${year}-${month}-${day}`;  // local ISO date
 }
-

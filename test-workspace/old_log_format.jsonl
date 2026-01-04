@@ -1,0 +1,35 @@
+{"type":"start","timestamp":"2026-01-02T23:20:43.149Z","job":"Lantern - Speaker"}
+{"type":"pause","timestamp":"2026-01-02T23:21:50.169Z","job":"Lantern - Speaker"}
+{"type":"resume","timestamp":"2026-01-02T23:21:56.073Z","job":"Lantern - Speaker"}
+{"type":"pause","timestamp":"2026-01-02T23:29:04.823Z","job":"Lantern - Speaker"}
+{"type":"resume","timestamp":"2026-01-02T23:37:36.794Z","job":"Lantern - Speaker"}
+{"type":"stop","timestamp":"2026-01-02T23:42:31.319Z","job":"Lantern - Speaker","task":"did some stuff","duration_ms":790295}
+{"type":"start","timestamp":"2026-01-02T23:42:54.675Z","job":"Lantern - Speaker"}
+{"type":"pause","timestamp":"2026-01-02T23:45:49.161Z","job":"Lantern - Speaker"}
+{"type":"stop","timestamp":"2026-01-02T23:45:49.161Z","job":"Lantern - Speaker","task":"other stuff done","duration_ms":174486}
+{"type":"start","timestamp":"2026-01-03T00:15:18.784Z","job":"renaming-job"}
+{"type":"stop","timestamp":"2026-01-03T00:21:35.998Z","job":"renaming-job","task":"testing new webchart functionality","duration_ms":377214}
+{"type":"start","timestamp":"2026-01-03T00:22:56.730Z","job":"Lantern - Speaker"}
+{"type":"stop","timestamp":"2026-01-03T00:45:08.409Z","job":"Lantern - Speaker","task":"fixed the date functions to work by local date","duration_ms":1331679}
+{"type":"start","timestamp":"2026-01-03T00:53:30.969Z","job":"renaming-job"}
+{"type":"stop","timestamp":"2026-01-03T01:15:09.514Z","job":"renaming-job","task":"trying to  add rename-job function","duration_ms":1298545}
+{"type":"start","timestamp":"2026-01-03T01:34:54.272Z","job":"renaming-job"}
+{"type":"stop","timestamp":"2026-01-03T01:35:06.022Z","job":"renaming-job","task":"testing updating the save_jobs","duration_ms":11750}
+{"type":"start","timestamp":"2026-01-03T01:35:51.141Z","job":"job 3"}
+{"type":"stop","timestamp":"2026-01-03T01:48:59.801Z","job":"job 3","task":"hopefully the label is at on the top bar and we have zoomability","duration_ms":788660}
+{"type":"start","timestamp":"2026-01-03T01:49:42.159Z","job":"job 3"}
+{"type":"pause","timestamp":"2026-01-03T01:50:59.957Z","job":"job 3"}
+{"type":"resume","timestamp":"2026-01-03T02:31:42.258Z","job":"job 3"}
+{"type":"stop","timestamp":"2026-01-03T02:34:40.249Z","job":"job 3","task":"pasted in new render code that uses vert position","duration_ms":255789}
+{"type":"start","timestamp":"2026-01-03T02:35:18.842Z","job":"job 3"}
+{"type":"stop","timestamp":"2026-01-03T02:47:20.154Z","job":"job 3","task":"uhhh?","duration_ms":721312}
+{"type":"start","timestamp":"2026-01-03T18:03:05.181Z","job":"renaming-job"}
+{"type":"stop","timestamp":"2026-01-03T18:04:05.536Z","job":"renaming-job","task":"checking refactored project/product name","duration_ms":60355}
+{"type":"start","timestamp":"2026-01-03T18:04:31.497Z","job":"house work"}
+{"type":"stop","timestamp":"2026-01-03T19:31:20.517Z","job":"house work","task":"making upper window covers","duration_ms":5209020}
+{"type":"start","timestamp":"2026-01-03T21:53:06.855Z","job":"Test 3 job"}
+{"type":"stop","timestamp":"2026-01-03T21:55:59.445Z","job":"Test 3 job","task":"still testing the new code factoring","duration_ms":172590}
+{"type":"start","timestamp":"2026-01-03T21:59:34.620Z","job":"global_storage_job"}
+{"type":"stop","timestamp":"2026-01-03T22:02:06.598Z","job":"global_storage_job","task":"did it create a global jobs file?","duration_ms":151978}
+{"type":"start","timestamp":"2026-01-03T22:03:33.715Z","job":"test global_job 4"}
+{"type":"stop","timestamp":"2026-01-03T22:03:42.633Z","job":"test global_job 4","task":"i think this is broken","duration_ms":8918}
