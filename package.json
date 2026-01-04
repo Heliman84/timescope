@@ -22,18 +22,11 @@
         "configuration": {
             "title": "TimeScope",
             "properties": {
-                "timescope.global_jobs_path": {
+                "timescope.global_storage_dir": {
                     "type": "string",
-                    "description": "Absolute path to the global jobs file. If empty, TimeScope uses the default path in the user data directory."
-                },
-                "timescope.global_log_path": {
-                    "type": "string",
-                    "description": "Absolute path to the global log file. If empty, TimeScope uses the default path in the user data directory."
-                },
-                "timescope.use_global_log_only": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "If enabled, TimeScope stores all logs and jobs in the global paths only and ignores workspace-specific data."
+                    "description": "Folder where TimeScope stores global jobs.json and logs.jsonl.",
+                    "format": "folder",
+                    "default": ""
                 }
             }
         },
