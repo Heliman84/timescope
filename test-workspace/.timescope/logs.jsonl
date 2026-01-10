@@ -1,5 +1,5 @@
-{"event":"start"   , "job":"review new dashboard", "timestamp":1767548679406}
-{"event":"stop"    , "job":"review new dashboard", "timestamp":1767548703076, "task":"changed html_uri"}
+{"event":"start"   , "job":"review new dashboard", "timestamp":1767546900000}
+{"event":"stop"    , "job":"review new dashboard", "timestamp":1767548700000, "task":"changed html_uri"}
 {"event":"start"   , "job":"test 11 job", "timestamp":1767552746968}
 {"event":"stop"    , "job":"test 11 job", "timestamp":1767552944435, "task":"identified new way to set up status bar"}
 {"event":"start"   , "job":"test 11 job", "timestamp":1767553521142}
@@ -10,3 +10,9 @@
 {"event":"stop"    , "job":"test 11 job", "timestamp":1767553883498, "task":"it worked with start pause resume stop. now checking stop"}
 {"event":"start"   , "job":"test 11 job", "timestamp":1767554853130}
 {"event":"stop"    , "job":"test 11 job", "timestamp":1767554874683, "task":"checking the tooltip"}
+{"event":"start"   , "job":"Test 20", "timestamp":1768011300000}
+{"event":"stop"    , "job":"Test 20", "timestamp":1768012860000, "task":"checking new webview with edit log record"}
+{"event":"start"   , "job":"Test 20", "timestamp":1768014180000}
+{"event":"pause"   , "job":"Test 20", "timestamp":1768014480000}
+{"event":"resume"  , "job":"Test 20", "timestamp":1768014600000}
+{"event":"stop"    , "job":"Test 20", "timestamp":1768015200000, "task":"checking new update to edit log"}

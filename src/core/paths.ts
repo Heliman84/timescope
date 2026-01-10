@@ -9,7 +9,7 @@ export interface TimeScopePaths {
     workspace_log_path?: string;
 }
 
-export function resolve_paths(context: vscode.ExtensionContext) {
+export function resolve_paths(context: vscode.ExtensionContext): TimeScopePaths {
     const config = vscode.workspace.getConfiguration("timescope");
 
     // New folder-based setting

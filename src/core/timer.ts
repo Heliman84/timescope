@@ -7,7 +7,10 @@ function format_duration_ms(ms: number): string {
     return `${hours}h ${minutes}m`;
 }
 
-export function update_timer_text() {
+/**
+ * Update the status bar text to reflect the current timer value and job.
+ */
+export function update_timer_text(): void {
     let total_ms = state.elapsed_ms_before_pause;
 
     if (state.is_running && state.start_time) {
@@ -25,19 +28,28 @@ export function update_timer_text() {
         : "Idle: No active job";
 }
 
-export function start_timer_interval() {
+/**
+ * Start or restart a periodic interval to update the timer text.
+ */
+export function start_timer_interval(): void {
     if (state.timer_interval) clearInterval(state.timer_interval);
     state.timer_interval = setInterval(update_timer_text, 1000);
 }
 
-export function stop_timer_interval() {
+/**
+ * Stop and clear the running interval used to update the timer.
+ */
+export function stop_timer_interval(): void {
     if (state.timer_interval) {
         clearInterval(state.timer_interval);
         state.timer_interval = null;
     }
 }
 
-export function update_status_bar() {
+/**
+ * Update which status bar controls are visible depending on runtime state.
+ */
+export function update_status_bar(): void {
     ui.start_button!.hide();
     ui.pause_button!.hide();
     ui.resume_button!.hide();

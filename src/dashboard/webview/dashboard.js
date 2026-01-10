@@ -8,9 +8,14 @@ vscode.postMessage({
 });
 
 let all_sessions = [];
+let all_events = []; // ascending events used to build sessions and compute pause/resume
+let eventOccurrencesMap = new Map(); // key -> occurrences array
 let pie_chart_instance = null;
 let stacked_chart_instance = null;
 let hasRenderedJobFilter = false;
+
+// Current highlighted job/day (for toggle behavior)
+let current_highlight = null;
 
 // ---------------------------------------------------------------------
 // MESSAGE HANDLER
@@ -20,17 +25,62 @@ window.addEventListener("message", (event) => {
     const msg = event.data;
 
     if (msg.type === "summary_data") {
-        const rawEvents = msg.payload || [];
+        const payload = msg.payload || [];
 
-        // 1) Normalize raw events into a canonical shape
-        const events = normalize_events(rawEvents);
+        // payload is an array of grouped events { event, job, timestamp, task, occurrences }
+
+        // Build canonical events array (ascending order) for session construction
+        const eventsAsc = payload
+            .map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp }))
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+        // keep all_events for pause/resume counts and session edit mapping
+        all_events = eventsAsc;
+
+        // Build occurrences map for quick lookup when editing
+        eventOccurrencesMap = new Map();
+        payload.forEach(e => {
+            const key = `${e.event}|${e.job}|${e.timestamp}|${e.task || ""}`;
+            eventOccurrencesMap.set(key, e.occurrences || []);
+        });
 
         // 2) Build sessions from start/pause/resume/stop event stream
-        all_sessions = build_sessions_from_events(events);
+        all_sessions = build_sessions_from_events(eventsAsc);
 
         // 3) Initial render + filter hookup
         render_dashboard(all_sessions);
         attach_filter_listeners();
+
+        // Event log removed; session-based editing is available via Edit buttons in the Sessions table.
+    }
+
+    if (msg.type === "edit_result") {
+        const result = msg.payload && msg.payload.summary ? msg.payload.summary : {};
+        const payload = msg.payload && msg.payload.payload ? msg.payload.payload : [];
+
+        // Re-enable Save button if present
+        const save = document.getElementById('session_edit_save');
+        if (save) { save.disabled = false; save.textContent = 'Save'; }
+
+        if (result && result.errors && result.errors.length > 0) {
+            // Show inline errors in the session modal
+            const errorBox = document.getElementById('session_error');
+            if (errorBox) {
+                errorBox.style.display = '';
+                errorBox.textContent = result.errors.join('\n');
+                errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else {
+                alert("Edit failed: " + result.errors.join("; "));
+            }
+            return;
+        }
+
+        // success — refresh UI with new payload
+        const eventsAsc = payload.map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp })).sort((a, b) => a.timestamp - b.timestamp);
+        all_sessions = build_sessions_from_events(eventsAsc);
+        render_dashboard(all_sessions);
+        // Close session edit modal if open
+        close_session_modal();
     }
 });
 
@@ -535,6 +585,24 @@ function render_stacked_bar_chart(sessions) {
                             ? "end"
                             : "center"
                 }
+            },
+            // Click handler: highlight session rows for clicked job/day
+            onClick: (evt, elements) => {
+                if (!elements || elements.length === 0) return;
+                const el = elements[0];
+                const datasetIndex = el.datasetIndex;
+                const index = el.index;
+                const job = stacked_chart_instance.data.datasets[datasetIndex].label;
+                const day = stacked_chart_instance.data.labels[index];
+
+                // Toggle: if same as current highlight -> clear, else highlight new
+                if (current_highlight && current_highlight.job === String(job).trim() && current_highlight.day === String(day).trim()) {
+                    clear_session_highlights();
+                    current_highlight = null;
+                } else {
+                    highlight_session_rows(job, day);
+                    current_highlight = { job: String(job).trim(), day: String(day).trim() };
+                }
             }
         },
         plugins: [ChartDataLabels]
@@ -545,13 +613,109 @@ function render_stacked_bar_chart(sessions) {
 // RAW SESSION TABLE
 // ---------------------------------------------------------------------
 
+
+// ----- Session edit modal -----
+function open_session_edit_modal(session) {
+    const container = document.getElementById('session_events_container');
+    const errorBox = document.getElementById('session_error');
+    if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+
+    container.innerHTML = '';
+
+    // Find events for this session (inclusive)
+    const events = all_events.filter(e => e.job === session.job && e.timestamp >= session.start && e.timestamp <= session.stop).sort((a,b)=>a.timestamp - b.timestamp);
+
+    events.forEach((e, idx) => {
+        const key = `${e.event}|${e.job}|${e.timestamp}|${e.task || ''}`;
+        const occurrences = eventOccurrencesMap.get(key) || [];
+
+        const row = document.createElement('div');
+        row.className = 'session-event-row';
+        row.innerHTML = `
+            <div class="e-label">${e.event}</div>
+            <div class="e-ts"><input type="datetime-local" data-idx="${idx}"></div>
+            <div class="e-task"><input type="text" data-idx="${idx}" value="${e.event === 'stop' ? (e.task || '') : ''}"></div>
+        `;
+
+        // store metadata on row for save
+        row._meta = { key, e, occurrences };
+
+        // set timestamp input value
+        const dtInput = row.querySelector('input[type="datetime-local"]');
+        const dt = new Date(e.timestamp);
+        dtInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
+
+        container.appendChild(row);
+    });
+
+    // attach handlers for cancel/save
+    const cancel = document.getElementById('session_edit_cancel');
+    const save = document.getElementById('session_edit_save');
+
+    if (cancel && !cancel.dataset.bound) {
+        cancel.addEventListener('click', () => {
+            close_session_modal();
+        });
+        cancel.dataset.bound = 'true';
+    }
+
+    if (save && !save.dataset.bound) {
+        save.addEventListener('click', () => {
+            const edits = [];
+            const rows = Array.from(container.querySelectorAll('.session-event-row'));
+            for (const r of rows) {
+                const meta = r._meta;
+                const tsInput = r.querySelector('input[type="datetime-local"]');
+                const taskInput = r.querySelector('.e-task input');
+                const newTs = new Date(tsInput.value).getTime();
+                const e = meta.e;
+                const newRec = { event: e.event, job: e.job, timestamp: newTs };
+                if (e.event === 'stop') newRec.task = taskInput.value || '';
+
+                // Only push if changed
+                if (newTs !== e.timestamp || (e.event === 'stop' && (newRec.task || '') !== (e.task || ''))) {
+                    edits.push({ occurrences: meta.occurrences, new_record: newRec });
+                }
+            }
+
+            if (edits.length === 0) { close_session_modal(); return; }
+
+            // UI: disable save and show progress
+            save.disabled = true;
+            const prevText = save.textContent;
+            save.textContent = 'Saving…';
+
+            // Clear previous errors
+            if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+
+            vscode.postMessage({ type: 'edit_log_entries', payload: { edits } });
+
+            // Leave re-enable to edit_result handler
+        });
+        save.dataset.bound = 'true';
+    }
+
+    document.getElementById('session_edit_modal').style.display = 'block';
+}
+
+function close_session_modal() {
+    document.getElementById('session_edit_modal').style.display = 'none';
+}
+
+
 function render_session_table(sessions) {
     const body = document.getElementById("session_table_body");
     if (!body) return;
 
     body.innerHTML = "";
 
-    sessions.forEach(s => {
+    // Show latest sessions first (reverse chronological)
+    const rev = sessions.slice().sort((a, b) => b.start - a.start);
+
+    // Clear any previous highlights
+    clear_session_highlights();
+
+    rev.forEach(s => {
         const tr = document.createElement("tr");
 
         const day = get_local_day(s.start);
@@ -559,15 +723,57 @@ function render_session_table(sessions) {
         const start_local = new Date(s.start).toLocaleString();
         const stop_local = new Date(s.stop).toLocaleString();
 
+        // Compute pause/resume pair count for this session
+        const eventsForSession = all_events.filter(e => e.job === s.job && e.timestamp >= s.start && e.timestamp <= s.stop);
+        const pauseCount = eventsForSession.filter(e => e.event === 'pause').length;
+        const resumeCount = eventsForSession.filter(e => e.event === 'resume').length;
+        const pairs = Math.min(pauseCount, resumeCount);
+
+        const editBtn = `<button class="session-edit-btn" data-job="${s.job}" data-start="${s.start}" data-stop="${s.stop}">Edit</button>`;
+
+        tr.dataset.job = s.job;
+        tr.dataset.day = day;
+
         tr.innerHTML =
             `<td>${day}</td>` +
             `<td>${s.job}</td>` +
             `<td>${(s.duration_ms / 3600000).toFixed(2)}h</td>` +
             `<td>${s.task || ""}</td>` +
             `<td>${start_local}</td>` +
-            `<td>${stop_local}</td>`;
+            `<td>${stop_local}</td>` +
+            `<td>${pairs}</td>` +
+            `<td>${editBtn}</td>`;
 
         body.appendChild(tr);
+    });
+
+    // Attach session edit handlers
+    document.querySelectorAll("button.session-edit-btn").forEach(btn => {
+        if (!btn.dataset.bound) {
+            btn.addEventListener('click', (ev) => {
+                const el = ev.currentTarget;
+                const job = el.getAttribute('data-job');
+                const start = Number(el.getAttribute('data-start'));
+                const stop = Number(el.getAttribute('data-stop'));
+                open_session_edit_modal({ job, start, stop });
+            });
+            btn.dataset.bound = 'true';
+        }
+    });
+
+
+    // Attach session edit handlers
+    document.querySelectorAll("button.session-edit-btn").forEach(btn => {
+        if (!btn.dataset.bound) {
+            btn.addEventListener('click', (ev) => {
+                const el = ev.currentTarget;
+                const job = el.getAttribute('data-job');
+                const start = Number(el.getAttribute('data-start'));
+                const stop = Number(el.getAttribute('data-stop'));
+                open_session_edit_modal({ job, start, stop });
+            });
+            btn.dataset.bound = 'true';
+        }
     });
 }
 
@@ -592,4 +798,25 @@ function get_local_day(timestamp) {
     const day = String(d.getDate()).padStart(2, "0");
 
     return `${year}-${month}-${day}`;  // local ISO date
+}
+
+// Highlight helpers (module-level so chart click handler can call them)
+function clear_session_highlights() {
+    const rows = document.querySelectorAll('#session_table_body tr.session-highlighted');
+    rows.forEach(r => r.classList.remove('session-highlighted'));
+    current_highlight = null;
+}
+
+function highlight_session_rows(job, day) {
+    if (!job || !day) return;
+    const jobTrim = String(job).trim();
+    const dayTrim = String(day).trim();
+
+    clear_session_highlights();
+    const rows = Array.from(document.querySelectorAll('#session_table_body tr'));
+    const matched = rows.filter(r => String(r.dataset.job || '').trim() === jobTrim && String(r.dataset.day || '').trim() === dayTrim);
+    matched.forEach(r => r.classList.add('session-highlighted'));
+    if (matched.length > 0) {
+        matched[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }

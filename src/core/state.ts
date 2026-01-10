@@ -4,7 +4,7 @@ import * as vscode from "vscode";
 // RUNTIME STATE
 //
 
-export interface Timescope_state {
+export interface TimeScopeState {
     is_running: boolean;
     is_paused: boolean;
     start_time: Date | null;
@@ -14,7 +14,7 @@ export interface Timescope_state {
     timer_interval: NodeJS.Timeout | null;
 }
 
-export const state: Timescope_state = {
+export const state: TimeScopeState = {
     is_running: false,
     is_paused: false,
     start_time: null,
@@ -41,7 +41,10 @@ export const ui = {
 // STATE RESET
 //
 
-export function reset_state_after_stop() {
+/**
+ * Reset runtime state after stopping a session.
+ */
+export function reset_state_after_stop(): void {
     state.is_running = false;
     state.is_paused = false;
     state.start_time = null;

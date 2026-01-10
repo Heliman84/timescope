@@ -2,3 +2,19 @@ node_modules/
 out/
 .vscode/
 *.vsix
+
+# Local test artifacts
+/test-output/
+
+# Node / build artifacts
+dist/
+build/
+
+# Logs and env
+*.log
+npm-debug.log*
+.env
+
+# OS / editor files
+.DS_Store
+.vscode/*.local

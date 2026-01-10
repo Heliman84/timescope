@@ -30,13 +30,19 @@ function save_jobs_to_file(file_path: string, jobs: string[]) {
 // PUBLIC API
 //
 
+/**
+ * Load the global jobs file and return the list of job names (sorted).
+ */
 export function load_all_jobs(paths: TimeScopePaths): string[] {
     // GLOBAL ONLY
     const global_jobs = load_jobs_from_file(paths.global_jobs_path);
     return global_jobs.sort((a, b) => a.localeCompare(b));
 }
 
-export function add_job(paths: TimeScopePaths, job_name: string) {
+/**
+ * Add a job to the global jobs list if it does not already exist.
+ */
+export function add_job(paths: TimeScopePaths, job_name: string): void {
     // GLOBAL ONLY
     const jobs = load_jobs_from_file(paths.global_jobs_path);
 
@@ -47,7 +53,11 @@ export function add_job(paths: TimeScopePaths, job_name: string) {
     }
 }
 
-export function rename_job(paths: TimeScopePaths, old_name: string, new_name: string) {
+/**
+ * Rename a job in the global jobs file and update all logs where the job
+ * is referenced (both global canonical and workspace mirror).
+ */
+export function rename_job(paths: TimeScopePaths, old_name: string, new_name: string): void {
     // GLOBAL JOBS ONLY
     const jobs = load_jobs_from_file(paths.global_jobs_path);
 
@@ -63,7 +73,10 @@ export function rename_job(paths: TimeScopePaths, old_name: string, new_name: st
     rename_job_in_log_file(paths, old_name, new_name);
 }
 
-export function delete_job(paths: TimeScopePaths, job_name: string) {
+/**
+ * Remove a job from the global jobs list.
+ */
+export function delete_job(paths: TimeScopePaths, job_name: string): void {
     // GLOBAL ONLY
     const jobs = load_jobs_from_file(paths.global_jobs_path);
 

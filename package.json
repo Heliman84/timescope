@@ -63,7 +63,8 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "copy-dashboard": "mkdir out\\dashboard\\webview 2>nul & copy src\\dashboard\\webview\\* out\\dashboard\\webview\\",
-        "vscode:prepublish": "npm run compile && npm run copy-dashboard"
+        "vscode:prepublish": "npm run compile && npm run copy-dashboard",
+        "test": "npm run compile && node ./out/test/run_tests.js"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",

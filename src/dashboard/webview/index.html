@@ -71,10 +71,30 @@
                     <th>Task</th>
                     <th>Start</th>
                     <th>Stop</th>
+                    <th>Pause/Resume</th>
+                    <th>Edit</th>
                 </tr>
-            </thead>
             <tbody id="session_table_body"></tbody>
         </table>
+    </div>
+
+
+
+    <!-- Session Edit Modal -->
+    <div id="session_edit_modal" class="modal" style="display:none;">
+        <div class="modal-content">
+            <h3>Edit Session Events</h3>
+            <div id="session_events_container">
+                <!-- rows for each event will be inserted here -->
+            </div>
+
+            <div id="session_error" class="error" style="display:none;color:#a94442;background:#f2dede;padding:8px;margin:8px 0;border-radius:4px;"></div>
+
+            <div class="modal-actions">
+                <button id="session_edit_cancel">Cancel</button>
+                <button id="session_edit_save">Save</button>
+            </div>
+        </div>
     </div>
 </div>
 

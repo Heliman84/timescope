@@ -159,7 +159,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             append_log_record(paths, {
                 event: "pause",
-                job: state.current_job,
+                job: state.current_job!,
                 timestamp: Date.now()
             });
 
@@ -190,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             append_log_record(paths, {
                 event: "resume",
-                job: state.current_job,
+                job: state.current_job!,
                 timestamp: Date.now()
             });
 
@@ -216,7 +216,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             append_log_record(paths, {
                 event: "stop",
-                job: state.current_job,
+                job: state.current_job!,
                 timestamp: Date.now(),
                 task: task_note || ""
             });

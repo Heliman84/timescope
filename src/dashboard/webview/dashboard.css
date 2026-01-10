@@ -62,3 +62,16 @@ body {
     border: 1px solid #444;
     padding: 6px 8px;
 }
+
+/* Highlighted session row when filtering by chart click */
+.session-highlighted td {
+    background: #fff3bf; /* light yellow */
+    color: #000; /* dark text for contrast */
+    font-weight: 600;
+    transition: background 0.2s ease-in-out;
+}
+
+/* Slightly darker border to improve readability on highlight */
+.session-highlighted td {
+    border-color: #e0c263;
+}
