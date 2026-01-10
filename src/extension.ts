@@ -32,35 +32,40 @@ export function activate(context: vscode.ExtensionContext) {
     // ────────────────────────────────────────────────────────────────
     //
 
+    // NOTE: Status bar priorities control item ordering. We intentionally use a high base
+    // priority (300) so TimeScope's status items appear to the left of workspace task buttons
+    // (popular task-button extensions typically start at priority ~100 and count down). If you
+    // need to change ordering, adjust the numeric priorities for the items below (divider: 300;
+    // start: 299; pause: 298; ...).
     // Divider (highest priority so it appears first)
-    ui.divider = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 101);
+    ui.divider = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 300);
     ui.divider.text = "TimeScope:";
     ui.divider.tooltip = "Idle: No active job";
     ui.divider.show();
 
     // Start
-    ui.start_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
+    ui.start_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 299);
     ui.start_button.text = "$(play) Start";
     ui.start_button.command = "timescope.start";
     ui.start_button.show();
 
     // Pause
-    ui.pause_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 99);
+    ui.pause_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 298);
     ui.pause_button.text = "$(debug-pause) Pause";
     ui.pause_button.command = "timescope.pause";
 
     // Resume
-    ui.resume_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 98);
+    ui.resume_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 297);
     ui.resume_button.text = "$(debug-continue) Resume";
     ui.resume_button.command = "timescope.resume";
 
     // Stop
-    ui.stop_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 97);
+    ui.stop_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 296);
     ui.stop_button.text = "$(primitive-square) Stop";
     ui.stop_button.command = "timescope.stop";
 
     // Summary
-    ui.summary_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 95);
+    ui.summary_button = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 295);
     ui.summary_button.text = "$(graph) Summary";
     ui.summary_button.command = "timescope.dashboard";
     ui.summary_button.show();

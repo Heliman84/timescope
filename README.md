@@ -194,6 +194,12 @@ TimeScope is built to grow with your workflow.
 
 ---
 
+## 🧑‍💻 Developer docs
+
+Developer instructions (build, tests, release flow, secrets) are in `DEVELOPMENT.md` — see that file for details on the release workflow and required repository secrets.
+
+---
+
 ## 📄 License
 
 MIT License.  

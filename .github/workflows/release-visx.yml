@@ -1,0 +1,136 @@
+name: "Release VSIX"
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to release from (defaults to the branch you dispatch from)'
+        required: false
+        default: ''
+      bump:
+        description: 'Semver bump: major, minor, or patch'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Release (tests → build → merge → bump → package → release)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Determine branch and bump
+        id: vars
+        run: |
+          branch="${{ github.event.inputs.branch }}"
+          if [ -z "$branch" ]; then
+            branch="${GITHUB_REF_NAME}"
+          fi
+          echo "branch=$branch" >> $GITHUB_OUTPUT
+          echo "bump=${{ github.event.inputs.bump }}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.vars.outputs.branch }}
+
+      - name: Require branch
+        if: ${{ steps.vars.outputs.branch == '' }}
+        run: |
+          echo "No branch provided and unable to determine branch. Provide the branch input when running this workflow." 
+          exit 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build dashboard & extension
+        run: npm run vscode:prepublish
+
+      - name: Ensure branch exists on origin and is up to date
+        run: |
+          set -e
+          BRANCH=${{ steps.vars.outputs.branch }}
+          git fetch origin $BRANCH
+          LOCAL=$(git rev-parse HEAD)
+          REMOTE=$(git rev-parse origin/$BRANCH)
+          echo "local=$LOCAL remote=$REMOTE"
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            echo "The checked-out commit does not match origin/${BRANCH}. Ensure the branch was pushed before dispatching the workflow."
+            exit 1
+          fi
+
+      - name: Check README updated vs main
+        run: |
+          git fetch origin main
+          CHANGED=$(git diff --name-only origin/main...HEAD || true)
+          echo "Changed files:\n$CHANGED"
+          if ! echo "$CHANGED" | grep -q -E '^README.md$'; then
+            echo "README.md was not changed compared to main — this check is required."
+            echo "::error::README.md must be updated with changes / roadmap entries."
+            exit 1
+          fi
+
+      - name: Merge branch into main
+        env:
+          GH_AUTH: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          BRANCH=${{ steps.vars.outputs.branch }}
+          echo "Merging $BRANCH into main..."
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          # ensure the branch exists locally
+          git fetch origin $BRANCH:$BRANCH || true
+          git checkout main
+          git pull origin main
+          git merge --no-ff "$BRANCH" -m "Merge branch '$BRANCH' for release"
+          git push origin main
+
+      - name: Bump version, tag, and push
+        id: bump
+        run: |
+          set -e
+          BUMP=${{ steps.vars.outputs.bump }}
+          echo "Bumping version ($BUMP) on main..."
+          npm version $BUMP --no-git-tag-version
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          git add package.json
+          git commit -m "chore(release): v$NEW_VERSION"
+          git tag "v$NEW_VERSION"
+          git push origin main
+          git push origin "refs/tags/v$NEW_VERSION"
+
+      - name: Package VSIX
+        run: |
+          npm install -g vsce || true
+          NEWVERSION=${{ steps.bump.outputs.new_version }}
+          npx vsce package -o "timescope-v${NEWVERSION}.vsix"
+
+      - name: Create draft GitHub Release and upload VSIX
+        uses: ncipollo/release-action@v1
+        with:
+          tag: v${{ steps.bump.outputs.new_version }}
+          name: "v${{ steps.bump.outputs.new_version }}"
+          files: "timescope-v${{ steps.bump.outputs.new_version }}.vsix"
+          draft: true
+
+      - name: Done
+        run: |
+          echo "Draft release v${{ steps.bump.outputs.new_version }} created with VSIX attached."
+          echo "Install the .vsix locally via 'code --install-extension ./timescope-v${{ steps.bump.outputs.new_version }}.vsix' or download from the GitHub release."
