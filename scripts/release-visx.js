@@ -99,12 +99,27 @@ async function main() {
   // --- Step 6: Prompt user for branch name (default: current branch) ---
   const inputBranch = await prompt('Branch to release from', branch || '')
 
-  // --- Step 7: Check for GitHub token (GITHUB_TOKEN or GH_TOKEN env var) ---
-  const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  // --- Step 7: Check for GitHub token (GITHUB_TOKEN, GH_TOKEN env var, or gh CLI) ---
+  let token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  if (!token) {
+    // Try to retrieve token from authenticated gh CLI
+    try {
+      token = run('gh auth token')
+      if (token) {
+        console.log('Using token from gh CLI auth.')
+      }
+    } catch (e) {
+      // gh command failed or not installed
+    }
+  }
   if (!token) {
     console.error('\nA GitHub token is required to trigger the workflow.');
-    console.error('Set the environment variable GITHUB_TOKEN (or GH_TOKEN) and try again.');
-    console.error("Example (mac/linux): export GITHUB_TOKEN=xxxx\nExample (windows pwsh): $env:GITHUB_TOKEN='xxxx'")
+    console.error('Option 1: Set environment variable GITHUB_TOKEN (or GH_TOKEN):');
+    console.error("  mac/linux: export GITHUB_TOKEN=xxxx");
+    console.error("  windows pwsh: $env:GITHUB_TOKEN='xxxx'");
+    console.error('Option 2: Ensure gh CLI is installed and authenticated:');
+    console.error('  winget install --id GitHub.cli');
+    console.error('  gh auth login');
     process.exit(1)
   }
 
