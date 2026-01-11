@@ -9,7 +9,6 @@ Whether you're billing clients, tracking personal projects, or simply curious ab
 
 ## 🚀 Features
 
-### ⏱️ Simple Start / Pause / Resume / Stop Workflow
 Track time for any job with four intuitive commands:
 
 - Start a job  
@@ -22,6 +21,7 @@ TimeScope automatically builds accurate sessions from your event history.
 ---
 
 ### 📊 Interactive Summary Dashboard
+
 Explore your work visually with:
 
 - Pie chart of time per job  
@@ -35,6 +35,7 @@ The dashboard is fast, responsive, and built for real-world workflows.
 ---
 
 ### 🗂️ Global + Workspace Storage
+
 TimeScope supports:
 
 - Global tracking (across all projects)  
@@ -45,6 +46,7 @@ You can optionally choose a custom folder for global storage.
 ---
 
 ### 🧹 Automatic Session Reconstruction
+
 TimeScope intelligently rebuilds sessions from your event stream:
 
 - start → stop  
@@ -60,7 +62,7 @@ No matter how you work, TimeScope keeps your data clean.
 ## 🛠️ Commands
 
 | Command | Description |
-|--------|-------------|
+| :-------- | :------------- |
 | TimeScope: Start | Start tracking a job |
 | TimeScope: Pause | Pause the current session |
 | TimeScope: Resume | Resume a paused session |
@@ -73,7 +75,8 @@ No matter how you work, TimeScope keeps your data clean.
 ## ⚙️ Settings
 
 ### Global Storage Directory
-```
+
+```text
 timescope.global_storage_dir
 ```
 
@@ -91,12 +94,14 @@ If unset, TimeScope uses VS Code’s built-in global storage directory.
 TimeScope stores data in a simple, future-proof format.
 
 ### jobs.json
+
 Tracks known jobs and metadata.
 
 ### logs.jsonl
+
 Each line is a canonical event:
 
-```
+```JSON
 { "event": "start", "job": "Project A", "task": "feature-x", "timestamp": 1704320000000 }
 ```
 
@@ -109,12 +114,15 @@ The dashboard reconstructs sessions from these events.
 The dashboard includes:
 
 ### Pie Chart
+
 Visual breakdown of time per job.
 
 ### Stacked Bar Chart
+
 Daily totals with job-level stacking.
 
 ### Session Table
+
 Raw session data including:
 
 - Date  
@@ -125,6 +133,7 @@ Raw session data including:
 - Stop time  
 
 ### Filters
+
 - Date presets  
 - Job checkboxes  
 - “All” checkbox for quick toggling  
@@ -134,6 +143,7 @@ Raw session data including:
 ## 🛣️ Roadmap
 
 ### 1. Web-Based Reporting (Exportable HTML Dashboard)
+
 Generate a standalone HTML report that mirrors the in-editor dashboard, including:
 
 - Charts  
@@ -146,6 +156,7 @@ Perfect for sharing with clients or archiving your work.
 ---
 
 ### 2. Daily Logbook Entries
+
 Optionally open a “logbook entry” file when starting a timer:
 
 - Take notes for the day  
@@ -158,6 +169,7 @@ This turns TimeScope into a combined time tracker + work journal.
 ---
 
 ### 3. Enhanced Exporting
+
 - JSON export  
 - CSV export  
 - HTML export with charts  
@@ -166,6 +178,7 @@ This turns TimeScope into a combined time tracker + work journal.
 ---
 
 ### 4. Additional Future Enhancements
+
 - Job grouping  
 - Weekly/monthly summaries  
 - Auto-pause on idle  

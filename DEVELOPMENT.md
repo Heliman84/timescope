@@ -27,6 +27,7 @@ What `release:visx` enforces locally before dispatching the workflow:
 - Your branch must have an upstream and be up-to-date (push any local commits first).
 
 The workflow will:
+
 1. Run the test suite (`npm test`).
 2. Build the extension (`npm run vscode:prepublish`).
 3. Verify `README.md` was updated to reflect the feature/roadmap changes.
@@ -49,12 +50,14 @@ When dispatching the workflow you will be asked to pick one of: `major`, `minor`
 You will need to create a Personal Access Token (PAT) with `repo` scope to allow the workflow to push and tag the repository when branch protection is enabled. We recommend storing the PAT as a repository secret called `GH_PAT`.
 
 How to add a secret in GitHub:
+
 1. Open your repository on GitHub.
 2. Click `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
 3. Name the secret `GH_PAT` and paste the token value.
 
 Security notes:
-- Secrets are encrypted and stored by GitHub; their _values are not visible_ to people viewing the repository. Only users with repo admin permissions can add or remove secrets; even they cannot read the secret value after it is saved.
+
+- Secrets are encrypted and stored by GitHub; their *values are not visible* to people viewing the repository. Only users with repo admin permissions can add or remove secrets; even they cannot read the secret value after it is saved.
 - In Actions logs, secrets are masked and will not be printed. Avoid echoing secrets in workflow steps.
 - Locally, the release script uses `GITHUB_TOKEN` or `GH_TOKEN` environment variables when calling the Actions dispatch API. When running workflows in Actions, the `GH_PAT` repo secret will be preferred by the workflow for operations that require elevated permissions.
 
@@ -62,7 +65,7 @@ Security notes:
 
 - If your repo enforces branch protection rules (e.g., required reviews), automated merges may fail; in that case use a manual PR flow or add a PAT with the required permission and make sure branch protection allows the automation to merge.
 - If the workflow fails during the README check, update `README.md` on the branch to include the user-facing changes and re-run the workflow.
-- Status bar ordering: task-button extensions may add buttons at priority ~100. To keep TimeScope buttons to the left, edit the numeric priorities in `src/extension.ts` (they start at 300 and decrement). 
+- Status bar ordering: task-button extensions may add buttons at priority ~100. To keep TimeScope buttons to the left, edit the numeric priorities in `src/extension.ts` (they start at 300 and decrement).
 
 ## Workspace button (quick-access)
 
@@ -79,10 +82,3 @@ Notes & troubleshooting:
 - The task label must match the label in `.vscode/tasks.json` exactly.
 - If the button does not appear, reload the window (Developer: Reload Window) or open the Task Buttons UI and re-add the task.
 - If you prefer, you can also add a workspace keybinding as a fallback.
-
----
-
-If you'd like, I can add a small workspace configuration that suggests Task Buttons and optionally add a workspace keybinding as a fallback. Let me know and I’ll apply those changes.
----
-
-If you'd like, I can also add a workspace keybinding as a fallback and a short reminder in the README so the button isn't forgotten. Let me know which extras you'd like.
