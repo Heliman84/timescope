@@ -55,6 +55,14 @@ How to add a secret in GitHub:
 2. Click `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
 3. Name the secret `GH_PAT` and paste the token value.
 
+OR
+
+Use the GitHub CLI to login. Then run
+
+```bash
+$env:GITHUB_TOKEN = (gh auth token)
+```
+
 Security notes:
 
 - Secrets are encrypted and stored by GitHub; their *values are not visible* to people viewing the repository. Only users with repo admin permissions can add or remove secrets; even they cannot read the secret value after it is saved.
