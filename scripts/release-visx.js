@@ -5,6 +5,10 @@ const { execSync } = require('child_process')
 const readline = require('readline')
 const fs = require('fs')
 
+/**
+ * Extracts GitHub owner and repo name from package.json repository.url
+ * Returns { owner, repo } or null if not found or invalid format.
+ */
 function getRepoInfo() {
   const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'))
   const repoUrl = pkg.repository && pkg.repository.url
@@ -14,6 +18,10 @@ function getRepoInfo() {
   return { owner: m[1], repo: m[2] }
 }
 
+/**
+ * Prompts user for input with optional default value.
+ * Returns a Promise that resolves to the user's answer or the default.
+ */
 function prompt(question, defaultValue) {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
   return new Promise(resolve => {
@@ -24,12 +32,18 @@ function prompt(question, defaultValue) {
   })
 }
 
+/**
+ * Executes a shell command synchronously and returns trimmed output.
+ */
 function run(cmd) {
   return execSync(cmd, { stdio: 'pipe' }).toString().trim()
 }
 
+/**
+ * Main entry point: validates git state, prompts for inputs, and dispatches the workflow.
+ */
 async function main() {
-  // ensure git is clean and branch is pushed
+  // --- Step 1: Check for uncommitted changes ---
   try {
     const status = run('git status --porcelain')
     if (status) {
@@ -42,13 +56,15 @@ async function main() {
     process.exit(1)
   }
 
+  // --- Step 2: Get current branch name ---
   let branch = ''
   try { branch = run('git rev-parse --abbrev-ref HEAD') } catch(e) {}
 
+  // --- Step 3: Verify branch is pushed and up-to-date with origin ---
   try {
-    // check that branch has an upstream
+    // Check that the branch exists on origin
     run(`git rev-parse --verify origin/${branch}`)
-    // check for unpushed commits (local ahead) or missing remote commits (local behind)
+    // Compare local vs remote commit counts (left = remote, right = local)
     const counts = run(`git rev-list --left-right --count origin/${branch}...${branch}`)
     const parts = counts.split('\t')
     const behind = parseInt(parts[0] || '0', 10)
@@ -66,19 +82,24 @@ async function main() {
     process.exit(1)
   }
 
+  // --- Step 4: Extract repo owner/repo from package.json ---
   const repo = getRepoInfo()
   if (!repo) {
     console.error('Unable to determine repository owner/repo from package.json. Aborting.')
     process.exit(1)
   }
 
+  // --- Step 5: Prompt user for release type (major/minor/patch) ---
   const bump = await prompt('Release type — choose one: major, minor, patch', 'patch')
   if (!['major','minor','patch'].includes(bump)) {
     console.error('Invalid bump type. Must be one of: major, minor, patch')
     process.exit(1)
   }
+
+  // --- Step 6: Prompt user for branch name (default: current branch) ---
   const inputBranch = await prompt('Branch to release from', branch || '')
 
+  // --- Step 7: Check for GitHub token (GITHUB_TOKEN or GH_TOKEN env var) ---
   const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN
   if (!token) {
     console.error('\nA GitHub token is required to trigger the workflow.');
@@ -87,6 +108,7 @@ async function main() {
     process.exit(1)
   }
 
+  // --- Step 8: Build and send API request to dispatch the workflow ---
   const body = JSON.stringify({ ref: inputBranch, inputs: { branch: inputBranch, bump } })
   const options = {
     method: 'POST',
@@ -101,12 +123,15 @@ async function main() {
     }
   }
 
+  // --- Step 9: Handle response ---
   const req = https.request(options, res => {
     if (res.statusCode >= 200 && res.statusCode < 300) {
+      // Success: workflow dispatch accepted
       console.log(`Workflow dispatched for branch '${inputBranch}' with bump '${bump}'.`)
       console.log('Check Actions in GitHub to follow progress.')
       process.exit(0)
     } else {
+      // Error: log response details
       let data = ''
       res.on('data', chunk => data += chunk)
       res.on('end', () => {
@@ -116,6 +141,7 @@ async function main() {
     }
   })
 
+  // Handle network errors
   req.on('error', err => { console.error('Request error', err); process.exit(1) })
   req.write(body)
   req.end()
