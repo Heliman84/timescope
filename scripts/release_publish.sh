@@ -37,8 +37,20 @@ echo "✓ Tag pushed: $TAG"
 echo "Opening GitHub Releases page..."
 echo ""
 
-# Replace with your repo URL
-REPO_URL="https://github.com/YOUR_USERNAME/TimeScope"
+# Derive repository URL from the git origin remote
+REPO_URL="$(git config --get remote.origin.url)"
+
+# Normalize common GitHub URL formats to https://github.com/owner/repo
+if [[ "$REPO_URL" =~ ^git@github.com:(.*)\.git$ ]]; then
+    REPO_PATH="${BASH_REMATCH[1]}"
+    REPO_URL="https://github.com/$REPO_PATH"
+elif [[ "$REPO_URL" =~ ^https://github.com/(.*)\.git$ ]]; then
+    REPO_PATH="${BASH_REMATCH[1]}"
+    REPO_URL="https://github.com/$REPO_PATH"
+fi
+
+# Ensure no trailing slash before appending /releases
+REPO_URL="${REPO_URL%/}"
 open "$REPO_URL/releases/new?tag=$TAG"
 
 echo ""
