@@ -69,13 +69,13 @@ if [ -z "$CURRENT_VALUE" ]; then
     exit 1
 fi
 
-if echo "$CURRENT_VALUE" | grep -qi '\\test$'; then
-    # Remove \test
-    NEW_VALUE="${CURRENT_VALUE%\\test}"
+if echo "$CURRENT_VALUE" | grep -Eqi '[/\\]test$'; then
+    # Remove trailing /test or \test (case-insensitive), normalizing to base path
+    NEW_VALUE=$(printf '%s\n' "$CURRENT_VALUE" | sed -E 's{[/\\]test$}{}I')
     echo "Switching TimeScope global storage to: $NEW_VALUE"
 else
-    # Add \test
-    NEW_VALUE="${CURRENT_VALUE}\\test"
+    # Add /test using a forward slash for cross-platform compatibility
+    NEW_VALUE="${CURRENT_VALUE%/}/test"
     echo "Switching TimeScope global storage to: $NEW_VALUE"
 fi
 
