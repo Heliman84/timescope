@@ -154,7 +154,36 @@ code --install-extension timescope-x.y.z.vsix
 vsce publish
 ```
 
-## 8. Cleanup
+## 8. Publish Release
+
+Once the release PR is merged into `main`, the final step is publishing the versioned release.
+
+This is done using:
+
+```bash
+npm run release:publish
+```
+
+This script:
+
+* Ensures you are on the `main` branch  
+* Ensures the working tree is clean  
+* Reads the version from `package.json`  
+* Creates a Git tag (`vX.Y.Z`)  
+* Pushes the tag to GitHub  
+* Opens the GitHub Releases page for that tag  
+
+### Developer Action Required
+
+After the script opens the Releases page:
+
+1. Upload the generated `.vsix` file as a release asset  
+2. Publish the release  
+
+This is the official distribution mechanism for TimeScope builds.  
+The `.vsix` file is intentionally **not** committed to the repository and is only attached to GitHub Releases.
+
+## 9. Cleanup
 
 * Delete the feature branch on GitHub (safe and reversible) by scrolling to bottom of PR page.
 * Optionally delete the local branch:

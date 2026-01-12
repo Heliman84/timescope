@@ -1,92 +1,230 @@
 # Developer Guide — TimeScope
 
-This document contains developer-facing instructions: building, testing, release automation, and how to configure repository secrets.
+This document describes how to develop, test, and release TimeScope.  
+It includes the complete feature workflow, release workflow, and a reference for all development scripts.
+
+---
+
+## TimeScope Feature + Release Workflow (Command‑Inclusive Diagram)
+
+                 ┌──────────────────────────────────────┐
+                 │  1. Start on develop                 │
+                 │   • Pull latest                      │
+                 │   • Discuss with AI to understand    │   
+                 │     new feature                      │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 2. Definition Phase                  │
+                 │  Run: `npm run feature:start`        │
+                 │   • create feature/<slug> branch     │
+                 │   • create spec file in /pr          │
+                 │   • switch global dir → \test        │
+                 │  Fill out feature spec (with AI)     │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 3. Consultation Phase                │
+                 │  Copilot Agent: Planning mode        │
+                 │   • Review spec                      │
+                 │   • Identify gaps/risks              │
+                 │   • No code changes                  │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 4. Implementation Planning           │
+                 │  Copilot Agent: Planning mode        │
+                 │   • Produce deterministic plan       │
+                 │   • List exact files/tests           │
+                 │   • No code changes                  │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 5. Execution Phase                   │
+                 │  Copilot Agent: Agent mode           │
+                 │   •  Apply plan exactly              │
+                 │   •  Show diffs for approval         │
+                 │  Developer tests locally             │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 6. PR → develop                      │
+                 │  Copilot Agent: Planning mode        │
+                 │   • generate PR description          │
+                 │  Run: `npm run feature:finish`       │
+                 │   • run PR checks                    │
+                 │   • open PR feature → develop        │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                         Merge PR: feature → develop
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 7. Release (develop → main)          │
+                 │  * Update version in package.json    │
+                 │  Run: `npm run release:start`        │
+                 │   • build .vsix                      │
+                 │   • open PR develop → main           │
+                 │   • prompt to remove \test from      │
+                 │     global storage directory         │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                         Merge PR: develop → main
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 8. Publish Release                   │
+                 │  Run: `npm run release:publish`      │
+                 │   • verify clean state               │
+                 │   • tag vX.Y.Z                       │
+                 │   • push tag                         │
+                 │   • open GitHub Release page         │
+                 │  Developer uploads .vsix             │
+                 └───────────────────┬──────────────────┘
+                                     │
+                                     ▼
+                 ┌──────────────────────────────────────┐
+                 │ 9. Cleanup                           │
+                 │   • Delete feature branch on GitHub  │
+                 │   • Optionally delete local branch   │
+                 │     `git branch -d feature/<FEATURE>`│
+                 └──────────────────────────────────────┘
+
+---
+
+## Script Reference (from package.json)
+
+### **Core Development Scripts**
+
+#### `compile`
+* Compiles TypeScript into `out/`.
+
+#### `watch`
+* Watches and recompiles on file changes.
+
+#### `copy-dashboard`
+* Copies dashboard webview assets into the compiled output folder.
+
+#### `vscode:prepublish`
+* Runs `compile` and `copy-dashboard`.  
+* Used before packaging or publishing.
+
+#### `test`
+* Compiles and runs the extension test suite.
+
+---
+
+### **Feature Workflow Scripts**
+
+#### `feature:start`
+* Prompts for feature name  
+* Creates `feature/<slug>` branch  
+* Creates spec file in `/pr`  
+* Switches global storage directory → `\test`
+
+#### `feature:finish`
+* Runs PR readiness checks  
+* Opens PR from feature branch → `develop`
+
+---
+
+### **Release Workflow Scripts**
+
+#### `release:start`
+* Ensures version updated in `package.json`  
+* Builds `.vsix`  
+* Opens PR from `develop` → `main`  
+* Prompts developer to remove `\test` from global storage directory
+
+#### `release:publish`
+* Ensures working tree is clean  
+* Reads version from `package.json`  
+* Creates tag `vX.Y.Z`  
+* Pushes tag  
+* Opens GitHub Release page for uploading `.vsix`
+
+---
 
 ## Building & Testing
 
-- Install dependencies: `npm install`
-- Compile: `npm run compile`
-- Run tests: `npm test`
-- Run extension in dev: Press F5 in VS Code (launches an Extension Development Host)
+* Install dependencies:  
+  `npm install`
 
-## File structure
+* Compile:  
+  `npm run compile`
 
-- `src/` — TypeScript source
-- `src/dashboard/webview` — dashboard UI files included in the extension package
-- `out/` — compiled JS output (packaged into the VSIX)
+* Run tests:  
+  `npm test`
 
-## Release flow (local + GitHub Actions)
+* Run extension in development mode:  
+  Press **F5** in VS Code (launches an Extension Development Host)
 
-We provide a one-command local helper to dispatch the release workflow and create a draft GitHub Release with an attached `.vsix` file.
+---
 
-- Local trigger: `npm run release:visx` (runs `scripts/release-visx.js`)
+## File Structure
 
-What `release:visx` enforces locally before dispatching the workflow:
+* `src/` — TypeScript source  
+* `src/dashboard/webview/` — dashboard UI files included in the extension package  
+* `out/` — compiled JS output (packaged into the VSIX)  
+* `pr/` — feature specifications  
+* `scripts/` — workflow automation scripts  
 
-- Your working tree must be clean (no uncommitted changes). The script will fail if `git status --porcelain` returns any output.
-- Your branch must have an upstream and be up-to-date (push any local commits first).
+---
 
-The workflow will:
+## 🧭 Development‑Mode Roadmap (Internal Only)
 
-1. Run the test suite (`npm test`).
-2. Build the extension (`npm run vscode:prepublish`).
-3. Verify `README.md` was updated to reflect the feature/roadmap changes.
-4. Merge the specified branch into `main`.
-5. Bump the `package.json` version using `npm version` and create a `vX.Y.Z` tag.
-6. Package a `.vsix` with `vsce` and create a draft GitHub Release with the VSIX attached.
+This section outlines planned developer‑only features that improve safety, ergonomics, and workflow consistency when working on TimeScope itself.
 
-> The release is created as a *draft* so you can install it locally and test across machines before publishing to the Marketplace.
+### 1. Handle global storage directory in dev mode
 
-### Semver bump selection
+This feature will add detection of when we are in dev mode to automatically handle some safe changes of state like the global storage directory (to start).
 
-When dispatching the workflow you will be asked to pick one of: `major`, `minor`, or `patch`. This determines how `npm version` increments `package.json`.
+#### 1.1 Development Mode Detection (`in_dev.json`)
 
-### Single source of truth for version
+We plan to introduce a lightweight mechanism for TimeScope to detect when the extension is being used in **development mode**.
 
-`package.json` is the authoritative version for the extension and is the only file we update during releases. Avoid hard-coding version strings elsewhere in the repo so the workflow only needs to update one place.
+* A file named `in_dev.json` will be placed inside the user’s `.timescope/` directory.
+* The presence of this file signals that the user is actively developing TimeScope.
+* When present, TimeScope will perform additional checks and show developer‑only notifications.
 
-## Repository secrets & tokens
+#### 1.2 Global Storage Directory Safety Checks
 
-You will need to create a Personal Access Token (PAT) with `repo` scope to allow the workflow to push and tag the repository when branch protection is enabled. We recommend storing the PAT as a repository secret called `GH_PAT`.
+When `in_dev.json` exists:
 
-How to add a secret in GitHub:
+* TimeScope will verify that the configured `timescope.global_storage_dir` **ends with `\test`**.
+* If it does **not**, TimeScope will show a small notification reminding the developer that they are **not using the test global directory**, prompting them to switch.
 
-1. Open your repository on GitHub.
-2. Click `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
-3. Name the secret `GH_PAT` and paste the token value.
+When `in_dev.json` does **not** exist:
 
-OR
+* TimeScope will verify that the global storage directory **does not** end with `\test`.
+* If it *does*, TimeScope will notify the user that they are accidentally using the **test** directory in normal operation.
 
-Use the GitHub CLI to login. Then run
+This ensures developers never accidentally write real jobs/logs into the test directory, and non‑developers never accidentally use the test directory.
 
-```bash
-$env:GITHUB_TOKEN = (gh auth token)
-```
+#### 1.3 Developer Identity Setting
 
-Security notes:
+We will add a developer‑only setting (likely stored in the global jobs folder) that:
 
-- Secrets are encrypted and stored by GitHub; their *values are not visible* to people viewing the repository. Only users with repo admin permissions can add or remove secrets; even they cannot read the secret value after it is saved.
-- In Actions logs, secrets are masked and will not be printed. Avoid echoing secrets in workflow steps.
-- Locally, the release script uses `GITHUB_TOKEN` or `GH_TOKEN` environment variables when calling the Actions dispatch API. When running workflows in Actions, the `GH_PAT` repo secret will be preferred by the workflow for operations that require elevated permissions.
+* Indicates the user is a TimeScope developer  
+* Enables the dev‑mode checks described above  
+* Allows us to gate future developer‑only features (debug panels, verbose logging, etc.)
 
-## Notes & troubleshooting
+This setting will not be exposed to normal users.
 
-- If your repo enforces branch protection rules (e.g., required reviews), automated merges may fail; in that case use a manual PR flow or add a PAT with the required permission and make sure branch protection allows the automation to merge.
-- If the workflow fails during the README check, update `README.md` on the branch to include the user-facing changes and re-run the workflow.
-- Status bar ordering: task-button extensions may add buttons at priority ~100. To keep TimeScope buttons to the left, edit the numeric priorities in `src/extension.ts` (they start at 300 and decrement).
+#### 1.4 Future Enhancements (Planned)
 
-## Workspace button (quick-access)
-
-To add a persistent, visible **Release** button in the status bar for this workspace only, use the **Task Buttons** extension (`spencerwmiles.vscode-task-buttons`). This approach is workspace-local when you enable the extension for this repository.
-
-Steps:
-
-1. Install **Task Buttons** (`spencerwmiles.vscode-task-buttons`) and **Enable (Workspace)** from the Extensions view so the button only appears for this repo.
-2. Open the Task Buttons view (or its extension UI) and locate the task named exactly `Release VSIX (Save All + Dispatch)`.
-3. Use the Task Buttons UI to **add/pin** the `Release VSIX (Save All + Dispatch)` task as a status-bar button.
-
-Notes & troubleshooting:
-
-- The task label must match the label in `.vscode/tasks.json` exactly.
-- If the button does not appear, reload the window (Developer: Reload Window) or open the Task Buttons UI and re-add the task.
-- If you prefer, you can also add a workspace keybinding as a fallback.
+* Automatic creation of `in_dev.json` when running `feature_start.sh`
+* Automatic removal of `in_dev.json` when running `release_start.sh`
+* Optional VS Code status bar indicator showing whether TimeScope is in dev mode
+* Optional command palette actions:
+  * “Enable Development Mode”
+  * “Disable Development Mode”
+  * “Switch Global Storage Directory to Test”
+  * “Switch Global Storage Directory to Production”
