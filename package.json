@@ -64,8 +64,12 @@
         "watch": "tsc -watch -p ./",
         "copy-dashboard": "mkdir out\\dashboard\\webview 2>nul & copy src\\dashboard\\webview\\* out\\dashboard\\webview\\",
         "vscode:prepublish": "npm run compile && npm run copy-dashboard",
-        "release:visx": "node ./scripts/release-visx.js",
-        "test": "npm run compile && node ./out/test/run_tests.js"
+        "test": "npm run compile && node ./out/test/run_tests.js",
+        "check:pr": "bash scripts/check_pr_ready.sh",
+        "check:release": "bash scripts/check_release_ready.sh",
+        "release:start": "bash scripts/release_start.sh",
+        "feature:finish": "bash scripts/feature_finish.sh",
+        "feature:start": "bash scripts/feature_start.sh"
     },
     "devDependencies": {
         "@types/node": "^20.0.0",
