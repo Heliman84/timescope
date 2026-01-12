@@ -15,6 +15,12 @@ if [ -n "$(git status --porcelain)" ]; then
     exit 1
 fi
 
+# Ensure jq is installed
+if ! command -v jq >/dev/null 2>&1; then
+    echo "FAIL: 'jq' is required but not installed or not found in PATH."
+    echo "Please install jq (https://stedolan.github.io/jq/) and try again."
+    exit 1
+fi
 # Extract version from package.json
 VERSION=$(jq -r '.version' package.json)
 TAG="v$VERSION"
