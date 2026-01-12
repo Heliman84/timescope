@@ -38,7 +38,22 @@ code "$PLAN_FILE"
 # Toggle TimeScope global storage directory
 ###############################################
 
-SETTINGS_PATH="$HOME/AppData/Roaming/Code/User/settings.json"
+case "$(uname -s)" in
+    Darwin)
+        SETTINGS_PATH="$HOME/Library/Application Support/Code/User/settings.json"
+        ;;
+    Linux)
+        SETTINGS_PATH="$HOME/.config/Code/User/settings.json"
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        # On Windows, VS Code settings are typically under %APPDATA%\Code\User
+        SETTINGS_PATH="${APPDATA:-$HOME/AppData/Roaming}/Code/User/settings.json"
+        ;;
+    *)
+        echo "FAIL: Unsupported OS '$(uname -s)' for locating VS Code settings.json"
+        exit 1
+        ;;
+esac
 
 if [ ! -f "$SETTINGS_PATH" ]; then
     echo "FAIL: VS Code settings.json not found at:"
