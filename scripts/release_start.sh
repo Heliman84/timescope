@@ -53,7 +53,11 @@ if echo "$CURRENT_VALUE" | grep -qi '\\test$'; then
 
     if [ "$ANSWER" = "y" ]; then
         ESCAPED_VALUE=$(printf '%s\n' "$BASE_VALUE" | sed 's/\\/\\\\/g')
-        sed -i '' "s|\"timescope.global_storage_dir\": *\"[^\"]*\"|\"timescope.global_storage_dir\": \"$ESCAPED_VALUE\"|" "$SETTINGS_PATH"
+        if sed --version >/dev/null 2>&1; then
+            sed -i "s|\"timescope.global_storage_dir\": *\"[^\"]*\"|\"timescope.global_storage_dir\": \"$ESCAPED_VALUE\"|" "$SETTINGS_PATH"
+        else
+            sed -i '' "s|\"timescope.global_storage_dir\": *\"[^\"]*\"|\"timescope.global_storage_dir\": \"$ESCAPED_VALUE\"|" "$SETTINGS_PATH"
+        fi
         echo "✓ Switched to: $BASE_VALUE"
     else
         echo "Skipped switching global storage directory."
