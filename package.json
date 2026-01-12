@@ -66,10 +66,12 @@
         "vscode:prepublish": "npm run compile && npm run copy-dashboard",
         "test": "npm run compile && node ./out/test/run_tests.js",
         "check:pr": "bash scripts/check_pr_ready.sh",
+        "feature:finish": "bash scripts/feature_finish.sh",
+        "feature:start": "bash scripts/feature_start.sh",
         "check:release": "bash scripts/check_release_ready.sh",
         "release:start": "bash scripts/release_start.sh",
-        "feature:finish": "bash scripts/feature_finish.sh",
-        "feature:start": "bash scripts/feature_start.sh"
+        "release:publish": "bash ./scripts/release_publish.sh"
+
     },
     "devDependencies": {
         "@types/node": "^20.0.0",
