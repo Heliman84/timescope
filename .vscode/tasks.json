@@ -1,0 +1,22 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-timescope",
+      "type": "shell",
+      "command": "npm run vscode:prepublish",
+      "problemMatcher": "$tsc"
+    },
+    {
+      "label": "saveAll",
+      "command": "${command:workbench.action.files.saveAll}",
+      "type": "shell"
+    },
+    {
+      "label": "echo-test",
+      "type": "shell",
+      "command": "echo 'Task Buttons are working!'"
+    }
+
+  ]
+}

@@ -1,6 +1,5 @@
 node_modules/
 out/
-.vscode/
 *.vsix
 
 # Local test artifacts
@@ -18,3 +17,12 @@ npm-debug.log*
 # OS / editor files
 .DS_Store
 .vscode/*.local
+
+# Ignore everything in .vscode
+.vscode/*
+
+# But DO track these specific files
+!.vscode/
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
