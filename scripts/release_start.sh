@@ -26,7 +26,20 @@ echo "Review the diff carefully, then submit the PR."
 # Remove /test from TimeScope global storage dir
 ###############################################
 
-SETTINGS_PATH="$HOME/AppData/Roaming/Code/User/settings.json"
+case "$(uname)" in
+    Darwin)
+        SETTINGS_PATH="$HOME/Library/Application Support/Code/User/settings.json"
+        ;;
+    Linux)
+        SETTINGS_PATH="$HOME/.config/Code/User/settings.json"
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        SETTINGS_PATH="$HOME/AppData/Roaming/Code/User/settings.json"
+        ;;
+    *)
+        SETTINGS_PATH="$HOME/AppData/Roaming/Code/User/settings.json"
+        ;;
+esac
 
 if [ ! -f "$SETTINGS_PATH" ]; then
     echo "FAIL: VS Code settings.json not found at:"
