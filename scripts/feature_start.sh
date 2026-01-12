@@ -34,6 +34,49 @@ sed -i '' "s/<FEATURE-NAME>/$SLUG/g" "$PLAN_FILE"
 echo "Opening plan file..."
 code "$PLAN_FILE"
 
+###############################################
+# Toggle TimeScope global storage directory
+###############################################
+
+SETTINGS_PATH="$HOME/AppData/Roaming/Code/User/settings.json"
+
+if [ ! -f "$SETTINGS_PATH" ]; then
+    echo "FAIL: VS Code settings.json not found at:"
+    echo "  $SETTINGS_PATH"
+    exit 1
+fi
+
+CURRENT_VALUE=$(grep -o '"timescope.global_storage_dir": *"[^"]*"' "$SETTINGS_PATH" \
+    | sed -E 's/.*"timescope.global_storage_dir": *"([^"]*)".*/\1/')
+
+if [ -z "$CURRENT_VALUE" ]; then
+    echo "FAIL: timescope.global_storage_dir is not set in settings.json"
+    exit 1
+fi
+
+if echo "$CURRENT_VALUE" | grep -qi '\\test$'; then
+    # Remove \test
+    NEW_VALUE="${CURRENT_VALUE%\\test}"
+    echo "Switching TimeScope global storage to: $NEW_VALUE"
+else
+    # Add \test
+    NEW_VALUE="${CURRENT_VALUE}\\test"
+    echo "Switching TimeScope global storage to: $NEW_VALUE"
+fi
+
+# Escape backslashes for JSON
+ESCAPED_VALUE=$(printf '%s\n' "$NEW_VALUE" | sed 's/\\/\\\\/g')
+
+# Update settings.json
+# (replace the entire line containing the setting)
+sed -i '' "s|\"timescope.global_storage_dir\": *\"[^\"]*\"|\"timescope.global_storage_dir\": \"$ESCAPED_VALUE\"|" "$SETTINGS_PATH"
+
+echo "✓ TimeScope global storage directory setting updated"
+echo ""
+
+###############################################
+
+
 echo ""
 echo "✓ Feature branch created"
 echo "✓ Plan file created"

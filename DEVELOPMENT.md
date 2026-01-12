@@ -71,22 +71,60 @@ Security notes:
 
 ## Notes & troubleshooting
 
+** this section needs updating - a release workflow has been added **
+
 - If your repo enforces branch protection rules (e.g., required reviews), automated merges may fail; in that case use a manual PR flow or add a PAT with the required permission and make sure branch protection allows the automation to merge.
 - If the workflow fails during the README check, update `README.md` on the branch to include the user-facing changes and re-run the workflow.
 - Status bar ordering: task-button extensions may add buttons at priority ~100. To keep TimeScope buttons to the left, edit the numeric priorities in `src/extension.ts` (they start at 300 and decrement).
 
-## Workspace button (quick-access)
 
-To add a persistent, visible **Release** button in the status bar for this workspace only, use the **Task Buttons** extension (`spencerwmiles.vscode-task-buttons`). This approach is workspace-local when you enable the extension for this repository.
+## 🧭 Development‑Mode Roadmap (Internal Only)
 
-Steps:
+This section outlines planned developer‑only features that improve safety, ergonomics, and workflow consistency when working on TimeScope itself.
 
-1. Install **Task Buttons** (`spencerwmiles.vscode-task-buttons`) and **Enable (Workspace)** from the Extensions view so the button only appears for this repo.
-2. Open the Task Buttons view (or its extension UI) and locate the task named exactly `Release VSIX (Save All + Dispatch)`.
-3. Use the Task Buttons UI to **add/pin** the `Release VSIX (Save All + Dispatch)` task as a status-bar button.
+### 1. Handle global storage directory in dev mode
 
-Notes & troubleshooting:
+This feature will add detection of when we are in dev mode to automatically handle some safe changes of state like the global storage directory (to start).
 
-- The task label must match the label in `.vscode/tasks.json` exactly.
-- If the button does not appear, reload the window (Developer: Reload Window) or open the Task Buttons UI and re-add the task.
-- If you prefer, you can also add a workspace keybinding as a fallback.
+#### 1.1 Development Mode Detection (`in_dev.json`)
+
+We plan to introduce a lightweight mechanism for TimeScope to detect when the extension is being used in **development mode**.
+
+- A file named `in_dev.json` will be placed inside the user’s `.timescope/` directory.
+- The presence of this file signals that the user is actively developing TimeScope.
+- When present, TimeScope will perform additional checks and show developer‑only notifications.
+
+#### 1.2 Global Storage Directory Safety Checks
+
+When `in_dev.json` exists:
+
+- TimeScope will verify that the configured `timescope.global_storage_dir` **ends with `\test`**.
+- If it does **not**, TimeScope will show a small notification reminding the developer that they are **not using the test global directory**, prompting them to switch.
+
+When `in_dev.json` does **not** exist:
+
+- TimeScope will verify that the global storage directory **does not** end with `\test`.
+- If it *does*, TimeScope will notify the user that they are accidentally using the **test** directory in normal operation.
+
+This ensures developers never accidentally write real jobs/logs into the test directory, and non‑developers never accidentally use the test directory.
+
+#### 1.3 Developer Identity Setting
+
+We will add a developer‑only setting (likely stored in the global jobs folder) that:
+
+- Indicates the user is a TimeScope developer  
+- Enables the dev‑mode checks described above  
+- Allows us to gate future developer‑only features (debug panels, verbose logging, etc.)
+
+This setting will not be exposed to normal users.
+
+#### 1.4 Future Enhancements (Planned)
+
+- Automatic creation of `in_dev.json` when running `feature_start.sh`
+- Automatic removal of `in_dev.json` when running `release_start.sh`
+- Optional VS Code status bar indicator showing whether TimeScope is in dev mode
+- Optional command palette actions:
+  - “Enable Development Mode”
+  - “Disable Development Mode”
+  - “Switch Global Storage Directory to Test”
+  - “Switch Global Storage Directory to Production”
