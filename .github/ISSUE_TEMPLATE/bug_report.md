@@ -25,8 +25,8 @@ If applicable, add screenshots to help explain your problem.
 
 **Environment (please complete the following information):**
  - OS: [e.g. Windows, macOS, Linux]
- - Browser: [e.g. chrome, safari]
- - Version: [e.g. 22]
+ - VS Code Version: [e.g. 1.85.0]
+ - Extension Version: [e.g. 1.0.0]
 
 **Additional context**
 Add any other context about the problem here.
