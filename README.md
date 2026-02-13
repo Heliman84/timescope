@@ -7,6 +7,7 @@ Whether you're billing clients, tracking personal projects, or simply curious ab
 
 ---
 
+
 ## 🚀 Features
 
 Track time for any job with four intuitive commands:
@@ -59,6 +60,7 @@ No matter how you work, TimeScope keeps your data clean.
 
 ---
 
+
 ## 🛠️ Commands
 
 | Command | Description |
@@ -71,6 +73,7 @@ No matter how you work, TimeScope keeps your data clean.
 | TimeScope: Rename Job | Rename an existing job |
 
 ---
+
 
 ## ⚙️ Settings
 
@@ -88,6 +91,7 @@ Choose a folder where TimeScope stores:
 If unset, TimeScope uses VS Code’s built-in global storage directory.
 
 ---
+
 
 ## 📁 Data Format
 
@@ -108,6 +112,7 @@ Each line is a canonical event:
 The dashboard reconstructs sessions from these events.
 
 ---
+
 
 ## 📊 Dashboard Overview
 
@@ -139,6 +144,7 @@ Raw session data including:
 - “All” checkbox for quick toggling  
 
 ---
+
 
 ## 🛣️ Roadmap
 
@@ -187,6 +193,7 @@ This turns TimeScope into a combined time tracker + work journal.
 
 ---
 
+
 ## 📦 Installation
 
 TimeScope will soon be available on the Visual Studio Code Marketplace.
@@ -200,6 +207,7 @@ Until then, you can install it manually:
 
 ---
 
+
 ## ❤️ Contributing
 
 Pull requests, feature ideas, and bug reports are welcome.  
@@ -207,13 +215,15 @@ TimeScope is built to grow with your workflow.
 
 ---
 
+
 ## 🧑‍💻 Developer docs
 
-Developer instructions (build, tests, release flow, secrets) are in `DEVELOPMENT.md` — see that file for details on the release workflow and required repository secrets.
+Developer instructions (build, tests, release flow, secrets) are in [`DEVELOPMENT.md`](DEVELOPMENT.md) — see that file for details on the release workflow and required repository secrets.
 
 ---
+
 
 ## 📄 License
 
 MIT License.  
-See `LICENSE.md` for details.
+See [`LICENSE.md`](LICENSE.md) for details.

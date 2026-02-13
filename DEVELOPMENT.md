@@ -17,10 +17,19 @@ It includes the complete feature workflow, release workflow, and a reference for
                                      ▼
                  ┌──────────────────────────────────────┐
                  │ 2. Definition Phase                  │
-                 │  Run: `npm run feature:start`        │
-                 │   • create feature/<slug> branch     │
-                 │   • create spec file in /pr          │
-                 │   • switch global dir → \test        │
+                 │  GH PR extension flow:               │
+                 │   • click Start working on issue     │
+                 │   • creates feature/<issue>-<title>  │
+                 │   • run: npm run feature:start-gh    │
+                 │     - create spec file in /pr        │
+                 │     - inject Issue link              │
+                 │     - switch global dir → \test      │
+                 │     - prompts if branch differs      │
+                 │  Or (CLI flow):                      │
+                 │   • run: npm run feature:start       │
+                 │     - create feature/<slug> branch   │
+                 │     - create spec file in /pr        │
+                 │     - switch global dir → \test      │
                  │  Fill out feature spec (with AI)     │
                  └───────────────────┬──────────────────┘
                                      │
@@ -56,7 +65,9 @@ It includes the complete feature workflow, release workflow, and a reference for
                  │ 6. PR → develop                      │
                  │  Copilot Agent: Planning mode        │
                  │   • generate PR description          │
-                 │  Run: `npm run feature:finish`       │
+                 │  Run: `npm run check:pr`             │
+                 │  Create PR in GH PR extension     │
+                 │  OR: `npm run feature:finish`        │
                  │   • run PR checks                    │
                  │   • open PR feature → develop        │
                  └───────────────────┬──────────────────┘
@@ -99,6 +110,7 @@ It includes the complete feature workflow, release workflow, and a reference for
 
 ---
 
+
 ## Script Reference (from package.json)
 
 ### **Core Development Scripts**
@@ -122,6 +134,12 @@ It includes the complete feature workflow, release workflow, and a reference for
 ---
 
 ### **Feature Workflow Scripts**
+
+#### `feature:start-gh`
+* Prompts for feature/issue name  
+* Creates spec file in `/pr`  
+* Switches global storage directory → `\test`  
+* Does not create or switch branches
 
 #### `feature:start`
 * Prompts for feature name  
@@ -152,6 +170,7 @@ It includes the complete feature workflow, release workflow, and a reference for
 
 ---
 
+
 ## Building & Testing
 
 * Install dependencies:  
@@ -168,6 +187,7 @@ It includes the complete feature workflow, release workflow, and a reference for
 
 ---
 
+
 ## File Structure
 
 * `src/` — TypeScript source  
@@ -178,16 +198,15 @@ It includes the complete feature workflow, release workflow, and a reference for
 
 ---
 
+
 ## 🧭 Development‑Mode Roadmap (Internal Only)
 
 This section outlines planned developer‑only features that improve safety, ergonomics, and workflow consistency when working on TimeScope itself.
 
 ### 1. Handle global storage directory in dev mode
-
 This feature will add detection of when we are in dev mode to automatically handle some safe changes of state like the global storage directory (to start).
 
 #### 1.1 Development Mode Detection (`in_dev.json`)
-
 We plan to introduce a lightweight mechanism for TimeScope to detect when the extension is being used in **development mode**.
 
 * A file named `in_dev.json` will be placed inside the user’s `.timescope/` directory.
@@ -195,7 +214,6 @@ We plan to introduce a lightweight mechanism for TimeScope to detect when the ex
 * When present, TimeScope will perform additional checks and show developer‑only notifications.
 
 #### 1.2 Global Storage Directory Safety Checks
-
 When `in_dev.json` exists:
 
 * TimeScope will verify that the configured `timescope.global_storage_dir` **ends with `\test`**.
@@ -209,7 +227,6 @@ When `in_dev.json` does **not** exist:
 This ensures developers never accidentally write real jobs/logs into the test directory, and non‑developers never accidentally use the test directory.
 
 #### 1.3 Developer Identity Setting
-
 We will add a developer‑only setting (likely stored in the global jobs folder) that:
 
 * Indicates the user is a TimeScope developer  
@@ -219,7 +236,6 @@ We will add a developer‑only setting (likely stored in the global jobs folder)
 This setting will not be exposed to normal users.
 
 #### 1.4 Future Enhancements (Planned)
-
 * Automatic creation of `in_dev.json` when running `feature_start.sh`
 * Automatic removal of `in_dev.json` when running `release_start.sh`
 * Optional VS Code status bar indicator showing whether TimeScope is in dev mode
