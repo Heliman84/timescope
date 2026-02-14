@@ -2,6 +2,8 @@ import { run_logs_tests } from "./test_logs";
 import { run_jobs_tests } from "./test_jobs";
 import { run_update_log_tests } from "./test_update_log";
 import { run_update_session_tests } from "./test_update_session";
+import { run_event_collection_tests } from "./test_event_collection";
+import { run_rename_roundtrip_test } from "./test_rename_roundtrip";
 
 function main() {
     try {
@@ -9,6 +11,8 @@ function main() {
         run_jobs_tests();
         run_update_log_tests();
         run_update_session_tests();
+        run_event_collection_tests();
+        run_rename_roundtrip_test();
         console.log("All tests passed.");
         process.exit(0);
     } catch (err) {

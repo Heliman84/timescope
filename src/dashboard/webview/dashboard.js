@@ -67,10 +67,12 @@ window.addEventListener("message", (event) => {
             const errorBox = document.getElementById('session_error');
             if (errorBox) {
                 errorBox.style.display = '';
-                errorBox.textContent = result.errors.join('\n');
+                const msgs = result.errors.map(e => (typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
+                errorBox.textContent = msgs.join('\n');
                 errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
-                alert("Edit failed: " + result.errors.join("; "));
+                const msgs = result.errors.map(e => (typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
+                alert("Edit failed: " + msgs.join("; "));
             }
             return;
         }

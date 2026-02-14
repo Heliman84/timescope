@@ -1,0 +1,46 @@
+import * as fs from "fs";
+import * as path from "path";
+import * as assert from "assert";
+import { append_log_record, rename_job_in_log_file } from "../core/logs";
+import { TimeScopePaths } from "../core/paths";
+import { LogRecord } from "../core/types";
+import { EventCollection } from "../core/event";
+
+export function run_rename_roundtrip_test(): void {
+    const testRoot = path.join(__dirname, "..", "..", "test-output", `rename-${Date.now()}`);
+    fs.mkdirSync(testRoot, { recursive: true });
+
+    const globalPath = path.join(testRoot, "logs-global.jsonl");
+
+    const paths: TimeScopePaths = {
+        global_jobs_path: path.join(testRoot, "jobs.json"),
+        global_log_path: globalPath
+    };
+
+    const recs: LogRecord[] = [
+        { event: "start", job: "alpha", timestamp: 100 },
+        { event: "pause", job: "alpha", timestamp: 200 },
+        { event: "stop", job: "alpha", timestamp: 300, task: "done" },
+        { event: "start", job: "beta", timestamp: 400 },
+        { event: "stop", job: "beta", timestamp: 500 }
+    ];
+
+    for (const r of recs) append_log_record(paths, r);
+
+    // Rename alpha -> gamma
+    rename_job_in_log_file(paths, "alpha", "gamma");
+
+    const raw = fs.readFileSync(globalPath, "utf8");
+    const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+
+    // Expected: same records but alpha -> gamma
+    const expectedRecs = recs.map(r => ({ ...r, job: r.job === "alpha" ? "gamma" : r.job } as LogRecord));
+    const expectedLines = EventCollection.fromRecords(expectedRecs).toLines();
+
+    assert.strictEqual(lines.length, expectedLines.length, "line count should match expected");
+    for (let i = 0; i < lines.length; i++) {
+        assert.strictEqual(lines[i], expectedLines[i], `line ${i} should match expected`);
+    }
+
+    console.log("✅ rename roundtrip test passed");
+}

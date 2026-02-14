@@ -1,18 +1,24 @@
-{"event":"start"   , "job":"review new dashboard", "timestamp":1767546900000}
-{"event":"stop"    , "job":"review new dashboard", "timestamp":1767548700000, "task":"changed html_uri"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767552746968}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767552944435, "task":"identified new way to set up status bar"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767553521142}
-{"event":"pause"   , "job":"test 11 job", "timestamp":1767553529474}
-{"event":"resume"  , "job":"test 11 job", "timestamp":1767553532767}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767553679284, "task":"checking if timescope divider operates correctly with time included"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767553695152}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767553883498, "task":"it worked with start pause resume stop. now checking stop"}
-{"event":"start"   , "job":"test 11 job", "timestamp":1767554853130}
-{"event":"stop"    , "job":"test 11 job", "timestamp":1767554874683, "task":"checking the tooltip"}
-{"event":"start"   , "job":"Test 20", "timestamp":1768011300000}
-{"event":"stop"    , "job":"Test 20", "timestamp":1768012860000, "task":"checking new webview with edit log record"}
-{"event":"start"   , "job":"Test 20", "timestamp":1768014180000}
-{"event":"pause"   , "job":"Test 20", "timestamp":1768014480000}
-{"event":"resume"  , "job":"Test 20", "timestamp":1768014600000}
-{"event":"stop"    , "job":"Test 20", "timestamp":1768015200000, "task":"checking new update to edit log"}
+{"event":"start"   , "job":"good_job1", "timestamp":1767882370514}
+{"event":"stop"    , "job":"good_job1", "timestamp":1767895198080, "task":"simple start_stop"}
+{"event":"start"   , "job":"bad_job1", "timestamp":1767898178692}
+{"event":"pause"   , "job":"bad_job1", "timestamp":1767901855245}
+{"event":"resume"  , "job":"bad_job1", "timestamp":1767906292338}
+{"event":"start"   , "job":"good_job2", "timestamp":1767906292338}
+{"event":"pause"   , "job":"good_job2", "timestamp":1767909284567}
+{"event":"resume"  , "job":"good_job2", "timestamp":1767912636238}
+{"event":"stop"    , "job":"good_job2", "timestamp":1767912967977, "task":"_should be a good job_ BUT this had a stop injected before pause"}
+{"event":"stop"    , "job":"bad_job3", "timestamp":1769998732862, "task":"missing start"}
+{"event":"start"   , "job":"bad_job4", "timestamp":1770040988301}
+{"event":"start"   , "job":"good_job3", "timestamp":1770041303663}
+{"event":"stop"    , "job":"good_job3", "timestamp":1770041324337, "task":"scrubber inserted stop before this"}
+{"event":"start"   , "job":"good_job4", "timestamp":1770041328196}
+{"event":"stop"    , "job":"good_job4", "timestamp":1770042346618, "task":"simple start_stop"}
+{"event":"start"   , "job":"bad_job5", "timestamp":1770059437814}
+{"event":"pause"   , "job":"bad_job5", "timestamp":1770062558121}
+{"event":"resume"  , "job":"bad_job5", "timestamp":1770062568306}
+{"event":"pause"   , "job":"bad_job5", "timestamp":1770071904578}
+{"event":"resume"  , "job":"bad_job5", "timestamp":1770075761282}
+{"event":"start"   , "job":"bad_job6", "timestamp":1770075761282}
+{"event":"start"   , "job":"good_job5", "timestamp":1770236820000}
+{"event":"stop"    , "job":"good_job5", "timestamp":1770246000000, "task":"simple start_stop"}
+{"event":"start"   , "job":"good_job6", "timestamp":1770255677014}

@@ -139,3 +139,18 @@ Currently, if VSCode is shut down while a job is running, the job is not termina
 8. Add dashboard UI action to trigger the command and show a summary.
 9. Add tests for stop/pause prompt flow, paused resume, and idempotency.
 10. Verify no changes to log format and no new dependencies.
+
+
+## Execute notes
+
+### Refactor updates - move to object oriented event and event collection model to handle records
+Since the original design notes above, the following internal refactors have been completed to make recovery implementation safer and easier:
+
+* **Centralized event parsing & validation:** Introduced `src/core/event.ts` exporting `parseLogLine()` and `EventCollection`. All parsing, validation, and event-sequence logic now lives in this module to provide a single source of truth for event semantics.
+* **Canonical serialization:** `EventCollection.formatRecord()` serializes records with a stable property order and a `formatVersion: 1` field to enable future format migrations.
+* **Replaced ad-hoc formatting/parsing:** The codebase was audited and remaining direct `JSON.parse` / manual JSON formatting of log records were replaced to use `parseLogLine()` and `EventCollection.formatRecord()` so formatting changes are contained in one place.
+* **Append dedup check:** `append_log_record()` now compares the last persisted record with the candidate using `EventCollection.recordsEqual()` and skips append if identical, reducing duplicate records caused by retries or shutdown races.
+* **Validation returns structured errors:** Validation now returns `ValidationError` objects (index, code, message, optional record) to make programmatic fixes and UI presentation reliable.
+* **Tests updated / added:** Unit tests were added and extended to cover `EventCollection` validation rules, serializer round-trips, and rename/replace roundtrip scenarios. The test suite passes.
+
+These changes are internal and backward-compatible: existing logs without `formatVersion` are still parsed by `parseLogLine()`, and the recovery plan above remains applicable.

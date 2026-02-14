@@ -88,7 +88,7 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                 const res = update_log_entry(paths, occ.raw, new_record);
                 summary.globalReplaced = summary.globalReplaced || res.globalReplaced;
                 summary.workspaceReplaced = summary.workspaceReplaced || res.workspaceReplaced;
-                if (res.errors) summary.errors.push(...res.errors);
+                if (res.errors) summary.errors.push(...res.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
             }
 
             // After attempting edits, send back result and updated payload
@@ -133,7 +133,7 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                     const res = update_log_entry(paths, occ.raw, new_record);
                     summary.globalReplaced = summary.globalReplaced || res.globalReplaced;
                     summary.workspaceReplaced = summary.workspaceReplaced || res.workspaceReplaced;
-                    if (res.errors) summary.errors.push(...res.errors);
+                    if (res.errors) summary.errors.push(...res.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
                 }
             }
 

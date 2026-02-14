@@ -37,7 +37,8 @@ export function run_update_log_tests(): void {
     const res = update_log_entry(paths, old_raw, newRecord);
     assert.ok(res.globalReplaced || res.workspaceReplaced, "expected at least one replacement");
     if (res.errors) {
-        throw new Error("Validation errors: " + res.errors.join(", "));
+        const msgs = res.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
+        throw new Error("Validation errors: " + msgs.join(", "));
     }
 
     // Verify both files now have the new timestamp
