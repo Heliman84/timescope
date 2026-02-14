@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { TimeScopePaths } from "./paths";
 import { LogRecord, Event } from "./types";
+import { validate_event_sequence } from "./event";
 
 /**
  * Formatting constants and helpers for JSONL log records.
@@ -246,7 +247,7 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
             const p = try_parse_line(l);
             if (p && p.job === new_record.job) parsed.push(p);
         }
-        const validationErrors = validate_job_sequence(parsed);
+        const validationErrors = validate_event_sequence(parsed);
         if (validationErrors.length > 0) {
             result.errors = validationErrors;
         }
@@ -257,27 +258,4 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
     return result;
 }
 
-function validate_job_sequence(records: LogRecord[]): string[] {
-    // Simple validation: ensure that for a given job, starts/stops alternate and no stop occurs before a start.
-    const errors: string[] = [];
-    const sorted = records.slice().sort((a, b) => a.timestamp - b.timestamp);
-
-    let expecting: "start" | "stop" = "start";
-
-    for (const r of sorted) {
-        if (r.event === "start") {
-            if (expecting !== "start") {
-                errors.push(`Unexpected start at ${r.timestamp} for job ${r.job}`);
-            }
-            expecting = "stop";
-        } else if (r.event === "stop") {
-            if (expecting !== "stop") {
-                errors.push(`Unexpected stop at ${r.timestamp} for job ${r.job}`);
-            }
-            expecting = "start";
-        }
-        // pause/resume are allowed anytime; they don't flip expecting.
-    }
-
-    return errors;
-}
+// validation moved to src/core/event.ts
