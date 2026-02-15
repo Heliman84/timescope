@@ -172,6 +172,33 @@ export class EventCollection {
         return this.sorted().map(r => EventCollection.formatRecord(r));
     }
 
+    /**
+     * Validate the collection's event sequence.
+     *
+     * Performs both syntactic and semantic checks on a timestamp-sorted copy
+     * of the collection and returns an array of `ValidationError` objects for
+     * each rule violation. The method does not mutate the collection.
+     *
+     * Checks performed:
+     * - Empty collections return an empty error array.
+     * - Timestamps are strictly increasing (`timestamp_non_increasing`).
+     * - No consecutive duplicate event types (`consecutive_duplicate`).
+     * - Sequence must begin with `start` (`must_start`).
+     * - State-machine rules for transitions:
+     *   - `start` allowed only from `idle` (`unexpected_start`).
+     *   - `pause` allowed only from `running` (`unexpected_pause`).
+     *   - `resume` allowed only from `paused` (`unexpected_resume`).
+     *   - `stop` allowed only from non-`idle` (`unexpected_stop`).
+     * - Unknown event types are reported (`unknown_event`).
+     *
+     * Return value:
+     * - An array of `ValidationError` objects: `{ index, code, message, record? }`.
+     * - `index` refers to the position in the timestamp-sorted sequence.
+     *
+     * Options:
+     * @param opts.startFromLatest If true, sort errors newest-first to
+     * assist interactive recovery workflows (default: oldest-first).
+     */
     validate(opts?: { startFromLatest?: boolean }): ValidationError[] {
         const errors: ValidationError[] = [];
         const sorted = this.records.slice().sort((a, b) => a.timestamp - b.timestamp);
