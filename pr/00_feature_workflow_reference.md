@@ -1,17 +1,26 @@
 # TimeScope Feature Workflow (Reference)
 
+
 ## 1. Start on `develop`
 
 * Pull latest.
 * Create a new spec file based on [`/pr/01_pr_feature_template.md`](./01_pr_feature_template.md).
 
+
 ## 2. Definition Phase - Write the PR spec
 
 * Talk to MS Copliot 365 conversationally to help draft the spec (using template).
-* Run command in terminal: `npm run feature:start`
+* VS Code + GitHub PR extension flow:
+  * First, click **Start working on issue** in the GitHub Pull Request extension.
+  * This creates or switches to a `feature/<issue>-<title>` branch.
+  * Then run: `npm run feature:start-gh`
+  * The script creates the spec file in `/pr/` and injects a clickable Issue link.
+  * If the branch is not `feature/<issue>-<title>`, it will prompt for issue number and title.
+* OR (general CLI flow): `npm run feature:start`
   * This will prompt for the feature name and create a new branch off `develop`.
   * It will also create a slugified markdown file in `/pr/` for the feature spec.
 * Fill out [`/pr/01_pr_feature_template.md`](./01_pr_feature_template.md) for the new feature.
+
 
 ## 3. Consultation Phase - Copilot Agent: Planning mode
 
@@ -46,6 +55,7 @@ Only analyze and improve the specification.
 
 * Update the file if needed.
 
+
 ## 4. Plan Implementation Phase - Copilot Agent: Planning mode
 
 ```text
@@ -56,7 +66,8 @@ Only analyze and improve the specification.
 
 Use <FEATURE.md> as the complete specification for this feature.
 
-Create a new branch named feature/<FEATURE> off develop.
+Ensure a branch named feature/<FEATURE> exists off develop.
+If using the GitHub PR extension flow, create it from the Issue in VS Code.
 Do NOT modify any code yet.
 
 Your task is to produce a detailed, step-by-step implementation plan that fully
@@ -82,6 +93,7 @@ Only produce the implementation plan.
 ```
 
 * Approve or refine.
+
 
 ## 5. Execution Phase - Copilot Agent: Agent mode
 
@@ -110,6 +122,7 @@ Do not guess or improvise beyond the approved plan.
 * Review diffs carefully.
 * Test the code locally.
 
+
 ## 6. PR → develop Phase - Copilot Agent: Planning mode
 
 ```text
@@ -132,9 +145,13 @@ Include:
 Format it in concise Markdown suitable for GitHub.
 ```
 
-* once you have your PR description run command in terminal: `npm run feature:finish`
+* once you have your PR description run command in terminal (VS Code + GitHub PR extension flow):
+  * Run `npm run check:pr` for PR checks.
+  * Use the GitHub Pull Request extension to create the PR.
+* OR (general CLI flow): `npm run feature:finish`
   * This will run PR checks and open a PR from your feature branch → develop.
 * Merge after review.
+
 
 ## 7. Release (develop → main)
 
@@ -153,6 +170,7 @@ vsce package
 code --install-extension timescope-x.y.z.vsix
 vsce publish
 ```
+
 
 ## 8. Publish Release
 
@@ -174,7 +192,6 @@ This script:
 * Opens the GitHub Releases page for that tag  
 
 ### Developer Action Required
-
 After the script opens the Releases page:
 
 1. Upload the generated `.vsix` file as a release asset  
@@ -182,6 +199,7 @@ After the script opens the Releases page:
 
 This is the official distribution mechanism for TimeScope builds.  
 The `.vsix` file is intentionally **not** committed to the repository and is only attached to GitHub Releases.
+
 
 ## 9. Cleanup
 

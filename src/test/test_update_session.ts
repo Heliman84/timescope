@@ -5,6 +5,12 @@ import { append_log_record, load_all_log_entries, update_log_entry } from "../co
 import { TimeScopePaths } from "../core/paths";
 import { LogRecord } from "../core/types";
 
+/**
+ * test_update_session_flow
+ * Target: `src/core/logs.ts` + session mutation helpers
+ * Purpose: Verify editing session boundaries (start/pause/resume/stop) updates
+ * timestamps correctly and that validation errors are not produced for valid edits.
+ */
 export function run_update_session_tests(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `updatesession-${Date.now()}`);
     fs.mkdirSync(testRoot, { recursive: true });
@@ -29,8 +35,14 @@ export function run_update_session_tests(): void {
     const res1 = update_log_entry(paths, startEnt.raw, { event: 'start', job: 'sess', timestamp: 800 });
     const res2 = update_log_entry(paths, stopEnt.raw, { event: 'stop', job: 'sess', timestamp: 2500, task: 'work' });
 
-    if (res1.errors && res1.errors.length) throw new Error('res1 errors: ' + res1.errors.join(','));
-    if (res2.errors && res2.errors.length) throw new Error('res2 errors: ' + res2.errors.join(','));
+    if (res1.errors && res1.errors.length) {
+        const msgs = res1.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
+        throw new Error('res1 errors: ' + msgs.join(','));
+    }
+    if (res2.errors && res2.errors.length) {
+        const msgs = res2.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
+        throw new Error('res2 errors: ' + msgs.join(','));
+    }
 
     const updated = load_all_log_entries(paths).filter(e => e.record.job === 'sess');
     const startUpdated = updated.find(e => e.record.event === 'start' && e.record.timestamp === 800);

@@ -2,40 +2,20 @@ import * as fs from "fs";
 import * as path from "path";
 import { TimeScopePaths } from "./paths";
 import { LogRecord, Event } from "./types";
+import { EventCollection, ValidationError, parseLogLine } from "./event";
+
+const HEADER_KEY = "_format_version";
+const HEADER_LINE = JSON.stringify({ _format_version: 1 });
 
 /**
- * Formatting constants and helpers for JSONL log records.
+ * Helpers
  */
-const EVENT_PAD = 8; 
-
-//
-// HELPERS
-//
-
 function ensure_dir_exists(file_path: string) {
     const dir = path.dirname(file_path);
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
 }
-
-function format_event(event: Event): string {
-    const raw = `"event":"${event}"`;
-    return raw.padEnd(raw.length + (EVENT_PAD - event.length), " ");
-}
-
-function format_log_line(record: LogRecord): string {
-    const event_part = format_event(record.event);
-    const job_part = `"job":"${record.job}"`;
-    const timestamp_part = `"timestamp":${record.timestamp}`;
-
-    if (record.event === "stop") {
-        const task_part = `"task":"${record.task || ""}"`;
-        return `{${event_part}, ${job_part}, ${timestamp_part}, ${task_part}}`;
-    }
-
-    return `{${event_part}, ${job_part}, ${timestamp_part}}`;
-} 
 
 function safe_read_lines(file_path: string): string[] {
     if (!fs.existsSync(file_path)) return [];
@@ -55,7 +35,7 @@ function safe_read_lines(file_path: string): string[] {
  * workspace mirror if one is present.
  */
 export function append_log_record(paths: TimeScopePaths, record: LogRecord): void {
-    const line = format_log_line(record) + "\n";
+    const line = EventCollection.formatRecord(record) + "\n";
 
     // Ensure directories exist
     ensure_dir_exists(paths.global_log_path);
@@ -63,12 +43,36 @@ export function append_log_record(paths: TimeScopePaths, record: LogRecord): voi
         ensure_dir_exists(paths.workspace_log_path);
     }
 
-    // Write to global (canonical)
-    fs.appendFileSync(paths.global_log_path, line, "utf8");
+    // Dedup check: avoid appending the same record twice (e.g., on retry)
+    try {
+        const existing = safe_read_lines(paths.global_log_path);
+        // Find last parsed record (skip header or malformed trailing lines)
+        for (let i = existing.length - 1; i >= 0; i--) {
+            const parsed = parseLogLine(existing[i]);
+            if (!parsed) continue;
+            if (EventCollection.recordsEqual(parsed, record)) return; // duplicate
+            break;
+        }
+    } catch {
+        // ignore and proceed to append
+    }
+
+    // Write to global (canonical). If the file doesn't exist, create it with a header.
+    if (!fs.existsSync(paths.global_log_path)) {
+        ensure_dir_exists(paths.global_log_path);
+        fs.writeFileSync(paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
+    } else {
+        fs.appendFileSync(paths.global_log_path, line, "utf8");
+    }
 
     // Write to workspace mirror (if present)
     if (paths.workspace_log_path) {
-        fs.appendFileSync(paths.workspace_log_path, line, "utf8");
+        if (!fs.existsSync(paths.workspace_log_path)) {
+            ensure_dir_exists(paths.workspace_log_path);
+            fs.writeFileSync(paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
+        } else {
+            fs.appendFileSync(paths.workspace_log_path, line, "utf8");
+        }
     }
 }
 
@@ -81,6 +85,22 @@ export function load_all_logs(paths: TimeScopePaths): LogRecord[] {
 }
 
 /**
+ * Load only the parsed `LogRecord`s for a specific job from the global canonical log.
+ */
+// Deprecated: use `load_event_collection_for_job(paths, job).toRecords()` instead
+// kept for compatibility historically but not exported as primary API
+
+/**
+ * Load an `EventCollection` for a specific job from the global canonical log.
+ */
+export function load_event_collection_for_job(paths: TimeScopePaths, job?: string) {
+    const lines = safe_read_lines(paths.global_log_path);
+    const col = EventCollection.fromLines(lines);
+    if (job) return col.filterByJob(job);
+    return col;
+}
+
+/**
  * Load log entries including raw line text, source file, and line index. This
  * is useful for precise updates from the UI.
  */
@@ -90,7 +110,15 @@ export function load_all_log_entries(paths: TimeScopePaths): Array<import("./typ
     const global_lines = safe_read_lines(paths.global_log_path);
     for (let i = 0; i < global_lines.length; i++) {
         const line = global_lines[i];
-        const parsed = try_parse_line(line);
+        // Skip file-level header lines
+        try {
+            const obj = JSON.parse(line);
+            if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
+        } catch {
+            // fall through to parse attempt
+        }
+
+        const parsed = parseLogLine(line);
         if (parsed) {
             entries.push({ record: parsed, raw: line, source: "global", lineIndex: i });
         } else {
@@ -103,7 +131,12 @@ export function load_all_log_entries(paths: TimeScopePaths): Array<import("./typ
         const ws_lines = safe_read_lines(paths.workspace_log_path);
         for (let i = 0; i < ws_lines.length; i++) {
             const line = ws_lines[i];
-            const parsed = try_parse_line(line);
+            try {
+                const obj = JSON.parse(line);
+                if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
+            } catch {}
+
+            const parsed = parseLogLine(line);
             if (parsed) {
                 entries.push({ record: parsed, raw: line, source: "workspace", lineIndex: i });
             } else {
@@ -115,22 +148,7 @@ export function load_all_log_entries(paths: TimeScopePaths): Array<import("./typ
     return entries;
 }
 
-function try_parse_line(line: string): LogRecord | null {
-    try {
-        const obj = JSON.parse(line);
-        if (!obj || typeof obj.event !== "string" || typeof obj.job !== "string" || typeof obj.timestamp !== "number") return null;
-        if (obj.event === "stop") {
-            if (obj.task !== undefined && typeof obj.task !== "string") return null;
-            return { event: "stop", job: obj.job, timestamp: obj.timestamp, task: obj.task };
-        }
-        if (obj.event === "start" || obj.event === "pause" || obj.event === "resume") {
-            return { event: obj.event, job: obj.job, timestamp: obj.timestamp } as LogRecord;
-        }
-        return null;
-    } catch {
-        return null;
-    }
-} 
+// Parsing of lines is provided by `parseLogLine` in event.ts
 
 export function rename_job_in_log_file(paths: TimeScopePaths, old_name: string, new_name: string) {
     function rewrite_file(file_path: string | null) {
@@ -140,36 +158,37 @@ export function rename_job_in_log_file(paths: TimeScopePaths, old_name: string, 
         const rewritten: string[] = [];
 
         for (const line of lines) {
-            let obj: any;
-            try {
-                obj = JSON.parse(line);
-            } catch {
-                // Keep malformed line unchanged
-                rewritten.push(line);
-                continue;
-            }
-
-            if (!obj || typeof obj.event !== "string" || typeof obj.job !== "string" || typeof obj.timestamp !== "number") {
-                // Keep malformed or unexpected lines unchanged
+            const parsed = parseLogLine(line);
+            if (!parsed) {
+                // keep malformed lines unchanged
                 rewritten.push(line);
                 continue;
             }
 
             // Only modify matching job names
-            if (obj.job === old_name) {
-                obj.job = new_name;
+            let record: LogRecord = parsed;
+            if (record.job === old_name) {
+                record = { ...parsed, job: new_name } as LogRecord;
             }
 
-            // Re-format using typed record
-            let record: LogRecord;
-            if (obj.event === "stop") {
-                record = { event: "stop", job: obj.job, timestamp: obj.timestamp, task: typeof obj.task === "string" ? obj.task : "" };
-            } else {
-                record = { event: obj.event as Event, job: obj.job, timestamp: obj.timestamp };
-            }
-
-            const new_line = format_log_line(record);
+            const new_line = EventCollection.formatRecord(record);
             rewritten.push(new_line);
+        }
+
+        // Ensure the resulting file has a header on the first line. If the
+        // original file already contained a header we preserved it above as an
+        // unchanged line; otherwise inject the canonical header.
+        if (rewritten.length === 0) {
+            rewritten.unshift(HEADER_LINE);
+        } else {
+            try {
+                const firstObj = JSON.parse(rewritten[0]);
+                if (!firstObj || (firstObj as any)[HEADER_KEY] === undefined) {
+                    rewritten.unshift(HEADER_LINE);
+                }
+            } catch {
+                rewritten.unshift(HEADER_LINE);
+            }
         }
 
         ensure_dir_exists(file_path);
@@ -192,8 +211,8 @@ export function rename_job_in_log_file(paths: TimeScopePaths, old_name: string, 
  * After replacement, the job's event sequence is validated to avoid creating
  * invalid start/stop ordering.
  */
-export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, new_record: LogRecord): { globalReplaced: boolean; workspaceReplaced: boolean; errors?: string[] } {
-    const result = { globalReplaced: false, workspaceReplaced: false, errors: undefined as string[] | undefined };
+export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, new_record: LogRecord): { globalReplaced: boolean; workspaceReplaced: boolean; errors?: ValidationError[] } {
+    const result = { globalReplaced: false, workspaceReplaced: false, errors: undefined as ValidationError[] | undefined };
 
     function replace_in_file(file_path: string | undefined | null): boolean {
         if (!file_path || !fs.existsSync(file_path)) return false;
@@ -205,7 +224,7 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
         for (const line of lines) {
             if (!replaced && line === old_raw_line) {
                 // Exact replacement
-                rewritten.push(format_log_line(new_record));
+                rewritten.push(EventCollection.formatRecord(new_record));
                 replaced = true;
                 continue;
             }
@@ -215,11 +234,11 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
         if (!replaced) {
             // Try field-based replacement: find lines that parse and match event+job+timestamp of old line
             for (let i = 0; i < rewritten.length; i++) {
-                const parsed = try_parse_line(rewritten[i]);
+                const parsed = parseLogLine(rewritten[i]);
                 if (!parsed) continue;
                 if (parsed.event === new_record.event && parsed.job === new_record.job && parsed.timestamp === new_record.timestamp) {
                     // same timestamp -> replace
-                    rewritten[i] = format_log_line(new_record);
+                    rewritten[i] = EventCollection.formatRecord(new_record);
                     replaced = true;
                     break;
                 }
@@ -228,6 +247,20 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
 
         if (replaced) {
             ensure_dir_exists(file_path);
+            // Ensure header exists on write
+            if (rewritten.length === 0) {
+                rewritten.unshift(HEADER_LINE);
+            } else {
+                try {
+                    const firstObj = JSON.parse(rewritten[0]);
+                    if (!firstObj || (firstObj as any)[HEADER_KEY] === undefined) {
+                        rewritten.unshift(HEADER_LINE);
+                    }
+                } catch {
+                    rewritten.unshift(HEADER_LINE);
+                }
+            }
+
             fs.writeFileSync(file_path, rewritten.join("\n") + "\n", "utf8");
         }
 
@@ -240,44 +273,15 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
 
     // Validate job sequence for the affected job using the global (canonical) log only
     try {
-        const global_lines = safe_read_lines(paths.global_log_path);
-        const parsed: LogRecord[] = [];
-        for (const l of global_lines) {
-            const p = try_parse_line(l);
-            if (p && p.job === new_record.job) parsed.push(p);
-        }
-        const validationErrors = validate_job_sequence(parsed);
+        const validationErrors = load_event_collection_for_job(paths, new_record.job).validate({ startFromLatest: true });
         if (validationErrors.length > 0) {
             result.errors = validationErrors;
         }
     } catch (ex) {
-        result.errors = [String(ex)];
+        result.errors = [{ index: -1, code: "exception", message: String(ex) }];
     }
 
     return result;
 }
 
-function validate_job_sequence(records: LogRecord[]): string[] {
-    // Simple validation: ensure that for a given job, starts/stops alternate and no stop occurs before a start.
-    const errors: string[] = [];
-    const sorted = records.slice().sort((a, b) => a.timestamp - b.timestamp);
-
-    let expecting: "start" | "stop" = "start";
-
-    for (const r of sorted) {
-        if (r.event === "start") {
-            if (expecting !== "start") {
-                errors.push(`Unexpected start at ${r.timestamp} for job ${r.job}`);
-            }
-            expecting = "stop";
-        } else if (r.event === "stop") {
-            if (expecting !== "stop") {
-                errors.push(`Unexpected stop at ${r.timestamp} for job ${r.job}`);
-            }
-            expecting = "start";
-        }
-        // pause/resume are allowed anytime; they don't flip expecting.
-    }
-
-    return errors;
-}
+// validation moved to src/core/event.ts

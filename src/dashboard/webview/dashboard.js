@@ -67,10 +67,12 @@ window.addEventListener("message", (event) => {
             const errorBox = document.getElementById('session_error');
             if (errorBox) {
                 errorBox.style.display = '';
-                errorBox.textContent = result.errors.join('\n');
+                const msgs = result.errors.map(e => (typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
+                errorBox.textContent = msgs.join('\n');
                 errorBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else {
-                alert("Edit failed: " + result.errors.join("; "));
+                const msgs = result.errors.map(e => (typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
+                alert("Edit failed: " + msgs.join("; "));
             }
             return;
         }
@@ -643,7 +645,8 @@ function open_session_edit_modal(session) {
         // set timestamp input value
         const dtInput = row.querySelector('input[type="datetime-local"]');
         const dt = new Date(e.timestamp);
-        dtInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0,16);
+        // include seconds in the datetime-local input so edits can preserve seconds
+        dtInput.value = new Date(dt.getTime() - (dt.getTimezoneOffset() * 60000)).toISOString().slice(0,19);
 
         container.appendChild(row);
     });
@@ -672,8 +675,12 @@ function open_session_edit_modal(session) {
                 const newRec = { event: e.event, job: e.job, timestamp: newTs };
                 if (e.event === 'stop') newRec.task = taskInput.value || '';
 
-                // Only push if changed
-                if (newTs !== e.timestamp || (e.event === 'stop' && (newRec.task || '') !== (e.task || ''))) {
+                // Compare down to the second to avoid accidental minute-rounding edits
+                const newTsSec = Math.floor(newTs / 1000);
+                const oldTsSec = Math.floor(e.timestamp / 1000);
+
+                // Only push if changed (seconds differ) or stop-task changed
+                if (newTsSec !== oldTsSec || (e.event === 'stop' && (newRec.task || '') !== (e.task || ''))) {
                     edits.push({ occurrences: meta.occurrences, new_record: newRec });
                 }
             }
