@@ -7,6 +7,12 @@ function r(e: "start"|"pause"|"resume"|"stop", t: number, job = "job1", task?: s
     return { event: e, job, timestamp: t } as any;
 }
 
+/**
+ * test_event_collection_validation
+ * Target: `src/core/event.ts::EventCollection`
+ * Purpose: Validate common and edge-case event sequences (start/pause/resume/stop),
+ * ensuring the validator emits appropriate structured errors for invalid sequences.
+ */
 export function run_event_collection_tests(): void {
     // Valid: start -> pause -> resume -> stop
     const seq1 = new EventCollection([r("start", 100), r("pause", 200), r("resume", 300), r("stop", 400)]);

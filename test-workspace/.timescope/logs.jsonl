@@ -1,3 +1,4 @@
+{"_format_version":1}
 {"event":"start"   , "job":"good_job1", "timestamp":1767882370514}
 {"event":"stop"    , "job":"good_job1", "timestamp":1767895198080, "task":"simple start_stop"}
 {"event":"start"   , "job":"bad_job1", "timestamp":1767898178692}
@@ -20,5 +21,12 @@
 {"event":"resume"  , "job":"bad_job5", "timestamp":1770075761282}
 {"event":"start"   , "job":"bad_job6", "timestamp":1770075761282}
 {"event":"start"   , "job":"good_job5", "timestamp":1770236820000}
-{"event":"stop"    , "job":"good_job5", "timestamp":1770246000000, "task":"simple start_stop"}
-{"event":"start"   , "job":"good_job6", "timestamp":1770255677014}
+{"event":"stop"    , "job":"good_job5"                , "timestamp":1770246000000, "task":"simple start_stop_test"}
+{"event":"start"   , "job":"test-issue9"              , "timestamp":1771119060000}
+{"event":"pause"   , "job":"test-issue9"              , "timestamp":1771119060000}
+{"event":"resume"  , "job":"test-issue9"              , "timestamp":1771119060000}
+{"event":"stop"    , "job":"test-issue9"              , "timestamp":1771119060000, "task":"bug test - identical timestamps?"}
+{"event":"start"   , "job":"test-issue9"              , "timestamp":1771119496661}
+{"event":"pause"   , "job":"test-issue9"              , "timestamp":1771119500996}
+{"event":"resume"  , "job":"test-issue9"              , "timestamp":1771119503471}
+{"event":"stop"    , "job":"test-issue9"              , "timestamp":1771119513000, "task":"will this overwrite? test check this"}

@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import { resolve_paths, TimeScopePaths } from "./core/paths";
 import { load_all_jobs, add_job, rename_job, delete_job } from "./core/jobs";
-import { append_log_record, load_all_logs } from "./core/logs";
+import { append_log_record, load_all_logs, load_event_collection_for_job } from "./core/logs";
 import { state, ui, reset_state_after_stop } from "./core/state";
 import { 
     start_timer_interval,
@@ -10,6 +10,7 @@ import {
     update_status_bar
 } from "./core/timer";
 import { handle_dashboard } from "./dashboard/controller/dashboard";
+import { checkAndRecover } from "./core/recovery";
 
 
 export function activate(context: vscode.ExtensionContext) {
@@ -78,6 +79,9 @@ export function activate(context: vscode.ExtensionContext) {
         ui.stop_button,
         ui.summary_button
     );
+
+    // Check for orphaned session from previous VSCode shutdown and offer recovery
+    checkAndRecover(paths);
 
     //
     // ────────────────────────────────────────────────────────────────

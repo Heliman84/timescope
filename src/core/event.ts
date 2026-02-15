@@ -7,9 +7,10 @@ import { LogRecord } from "./types";
 export function parseLogLine(line: string): LogRecord | null {
     try {
         const obj = JSON.parse(line);
-        if (!obj || typeof obj.event !== "string" || typeof obj.job !== "string" || typeof obj.timestamp !== "number") return null;
-        // Optional formatVersion support: accept either absent (legacy) or 1 (current)
-        if (obj.formatVersion !== undefined && obj.formatVersion !== 1) return null;
+        if (!obj) return null;
+        // File-level header: skip lines that are the header metadata
+        if ((obj as any)._format_version !== undefined) return null;
+        if (typeof obj.event !== "string" || typeof obj.job !== "string" || typeof obj.timestamp !== "number") return null;
         if (obj.event === "stop") {
             if (obj.task !== undefined && typeof obj.task !== "string") return null;
             return { event: "stop", job: obj.job, timestamp: obj.timestamp, task: obj.task } as LogRecord;
@@ -102,6 +103,39 @@ export class EventCollection {
         return new EventCollection(parsed);
     }
 
+    /**
+     * Serialize a single LogRecord to a nicely aligned JSONL line. This keeps
+     * records readable and stable for diffs while avoiding per-record version
+     * fields. Padding sizes below control column alignment.
+     */
+    static formatRecord(record: LogRecord): string {
+        const EVENT_PAD = 8; // pad event value to this width
+        const JOB_PAD = 25;  // pad job value to this width
+
+        function format_event(ev: string): string {
+            const raw = `"event":"${ev}"`;
+            const padCount = Math.max(0, EVENT_PAD - ev.length);
+            return raw + " ".repeat(padCount);
+        }
+
+        function format_job(job: string): string {
+            const raw = `"job":"${job}"`;
+            const padCount = Math.max(0, JOB_PAD - job.length);
+            return raw + " ".repeat(padCount);
+        }
+
+        const event_part = format_event(record.event);
+        const job_part = format_job(record.job);
+        const timestamp_part = `"timestamp":${record.timestamp}`;
+
+        if (record.event === "stop") {
+            const task_part = `"task":"${record.task || ""}"`;
+            return `{${event_part}, ${job_part}, ${timestamp_part}, ${task_part}}`;
+        }
+
+        return `{${event_part}, ${job_part}, ${timestamp_part}}`;
+    }
+
     /** Return a new EventCollection filtered to records for `job`. */
     filterByJob(job: string): EventCollection {
         return new EventCollection(this.records.filter(r => r.job === job));
@@ -119,17 +153,7 @@ export class EventCollection {
         return this.records.slice();
     }
 
-    /**
-     * Serialize a single LogRecord to a compact JSON line. Keeps property order predictable.
-     */
-    static formatRecord(record: LogRecord): string {
-        // Include a formatVersion field to allow future format migrations.
-        // Keep property order stable by constructing the object in the desired sequence.
-        if (record.event === "stop") {
-            return JSON.stringify({ formatVersion: 1, event: record.event, job: record.job, timestamp: record.timestamp, task: record.task || "" });
-        }
-        return JSON.stringify({ formatVersion: 1, event: record.event, job: record.job, timestamp: record.timestamp });
-    }
+    
 
     /** Compare two records for equality (used to avoid duplicate appends). */
     static recordsEqual(a: LogRecord, b: LogRecord): boolean {

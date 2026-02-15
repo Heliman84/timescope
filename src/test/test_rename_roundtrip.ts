@@ -6,6 +6,12 @@ import { TimeScopePaths } from "../core/paths";
 import { LogRecord } from "../core/types";
 import { EventCollection } from "../core/event";
 
+/**
+ * test_rename_roundtrip
+ * Target: `src/core/logs.ts` + `src/core/event.ts`
+ * Purpose: Verify that `rename_job_in_log_file` rewrites log files correctly and
+ * that the round-tripped file matches the expected serialized output (including header).
+ */
 export function run_rename_roundtrip_test(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `rename-${Date.now()}`);
     fs.mkdirSync(testRoot, { recursive: true });
@@ -36,6 +42,9 @@ export function run_rename_roundtrip_test(): void {
     // Expected: same records but alpha -> gamma
     const expectedRecs = recs.map(r => ({ ...r, job: r.job === "alpha" ? "gamma" : r.job } as LogRecord));
     const expectedLines = EventCollection.fromRecords(expectedRecs).toLines();
+    // files now include a file-level header as the first line
+    const headerLine = JSON.stringify({ _format_version: 1 });
+    expectedLines.unshift(headerLine);
 
     assert.strictEqual(lines.length, expectedLines.length, "line count should match expected");
     for (let i = 0; i < lines.length; i++) {

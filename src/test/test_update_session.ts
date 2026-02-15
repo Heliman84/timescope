@@ -5,6 +5,12 @@ import { append_log_record, load_all_log_entries, update_log_entry } from "../co
 import { TimeScopePaths } from "../core/paths";
 import { LogRecord } from "../core/types";
 
+/**
+ * test_update_session_flow
+ * Target: `src/core/logs.ts` + session mutation helpers
+ * Purpose: Verify editing session boundaries (start/pause/resume/stop) updates
+ * timestamps correctly and that validation errors are not produced for valid edits.
+ */
 export function run_update_session_tests(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `updatesession-${Date.now()}`);
     fs.mkdirSync(testRoot, { recursive: true });

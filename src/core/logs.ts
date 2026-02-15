@@ -4,6 +4,9 @@ import { TimeScopePaths } from "./paths";
 import { LogRecord, Event } from "./types";
 import { EventCollection, ValidationError, parseLogLine } from "./event";
 
+const HEADER_KEY = "_format_version";
+const HEADER_LINE = JSON.stringify({ _format_version: 1 });
+
 /**
  * Helpers
  */
@@ -43,24 +46,33 @@ export function append_log_record(paths: TimeScopePaths, record: LogRecord): voi
     // Dedup check: avoid appending the same record twice (e.g., on retry)
     try {
         const existing = safe_read_lines(paths.global_log_path);
-        if (existing.length > 0) {
-            const last = existing[existing.length - 1];
-            const parsed = parseLogLine(last);
-            if (parsed && EventCollection.recordsEqual(parsed, record)) {
-                // Already present as last record — skip append
-                return;
-            }
+        // Find last parsed record (skip header or malformed trailing lines)
+        for (let i = existing.length - 1; i >= 0; i--) {
+            const parsed = parseLogLine(existing[i]);
+            if (!parsed) continue;
+            if (EventCollection.recordsEqual(parsed, record)) return; // duplicate
+            break;
         }
     } catch {
         // ignore and proceed to append
     }
 
-    // Write to global (canonical)
-    fs.appendFileSync(paths.global_log_path, line, "utf8");
+    // Write to global (canonical). If the file doesn't exist, create it with a header.
+    if (!fs.existsSync(paths.global_log_path)) {
+        ensure_dir_exists(paths.global_log_path);
+        fs.writeFileSync(paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
+    } else {
+        fs.appendFileSync(paths.global_log_path, line, "utf8");
+    }
 
     // Write to workspace mirror (if present)
     if (paths.workspace_log_path) {
-        fs.appendFileSync(paths.workspace_log_path, line, "utf8");
+        if (!fs.existsSync(paths.workspace_log_path)) {
+            ensure_dir_exists(paths.workspace_log_path);
+            fs.writeFileSync(paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
+        } else {
+            fs.appendFileSync(paths.workspace_log_path, line, "utf8");
+        }
     }
 }
 
@@ -98,6 +110,14 @@ export function load_all_log_entries(paths: TimeScopePaths): Array<import("./typ
     const global_lines = safe_read_lines(paths.global_log_path);
     for (let i = 0; i < global_lines.length; i++) {
         const line = global_lines[i];
+        // Skip file-level header lines
+        try {
+            const obj = JSON.parse(line);
+            if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
+        } catch {
+            // fall through to parse attempt
+        }
+
         const parsed = parseLogLine(line);
         if (parsed) {
             entries.push({ record: parsed, raw: line, source: "global", lineIndex: i });
@@ -111,6 +131,11 @@ export function load_all_log_entries(paths: TimeScopePaths): Array<import("./typ
         const ws_lines = safe_read_lines(paths.workspace_log_path);
         for (let i = 0; i < ws_lines.length; i++) {
             const line = ws_lines[i];
+            try {
+                const obj = JSON.parse(line);
+                if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
+            } catch {}
+
             const parsed = parseLogLine(line);
             if (parsed) {
                 entries.push({ record: parsed, raw: line, source: "workspace", lineIndex: i });
@@ -148,6 +173,22 @@ export function rename_job_in_log_file(paths: TimeScopePaths, old_name: string, 
 
             const new_line = EventCollection.formatRecord(record);
             rewritten.push(new_line);
+        }
+
+        // Ensure the resulting file has a header on the first line. If the
+        // original file already contained a header we preserved it above as an
+        // unchanged line; otherwise inject the canonical header.
+        if (rewritten.length === 0) {
+            rewritten.unshift(HEADER_LINE);
+        } else {
+            try {
+                const firstObj = JSON.parse(rewritten[0]);
+                if (!firstObj || (firstObj as any)[HEADER_KEY] === undefined) {
+                    rewritten.unshift(HEADER_LINE);
+                }
+            } catch {
+                rewritten.unshift(HEADER_LINE);
+            }
         }
 
         ensure_dir_exists(file_path);
@@ -206,6 +247,20 @@ export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, ne
 
         if (replaced) {
             ensure_dir_exists(file_path);
+            // Ensure header exists on write
+            if (rewritten.length === 0) {
+                rewritten.unshift(HEADER_LINE);
+            } else {
+                try {
+                    const firstObj = JSON.parse(rewritten[0]);
+                    if (!firstObj || (firstObj as any)[HEADER_KEY] === undefined) {
+                        rewritten.unshift(HEADER_LINE);
+                    }
+                } catch {
+                    rewritten.unshift(HEADER_LINE);
+                }
+            }
+
             fs.writeFileSync(file_path, rewritten.join("\n") + "\n", "utf8");
         }
 

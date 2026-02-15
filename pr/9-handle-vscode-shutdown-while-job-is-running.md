@@ -154,3 +154,26 @@ Since the original design notes above, the following internal refactors have bee
 * **Tests updated / added:** Unit tests were added and extended to cover `EventCollection` validation rules, serializer round-trips, and rename/replace roundtrip scenarios. The test suite passes.
 
 These changes are internal and backward-compatible: existing logs without `formatVersion` are still parsed by `parseLogLine()`, and the recovery plan above remains applicable.
+
+### Implemented VS Code shutdown session recovery and log validation
+
+Picking up after the refactor notes above, here are the concrete follow-on changes and the exact files touched in this staged work:
+
+* Recovery implementation and UX
+  * Added: `src/core/recovery.ts`
+  * Activation: `src/extension.ts` now invokes `checkAndRecover()` to run recovery at startup.
+  * Behavior: prompts cover stop/pause/resume choices, timestamp-at-shutdown vs now, and resume/no-break vs break semantics.
+
+* Log _format_version and serialization
+  * Updated: `src/core/event.ts` — added `EventCollection.formatRecord()` and strengthened `parseLogLine()` to ignore file headers.
+  * Updated: `src/core/logs.ts` — introduced file-level header (`_format_version`), header-aware reads/writes, and dedup-on-append/idempotency checks.
+
+* Controller and webview fixes
+  * Updated: `src/dashboard/controller/dashboard.ts` — scope validation errors to edited occurrences so unrelated validation issues aren't shown as errors for a successful edit.
+  * Updated: `src/dashboard/webview/dashboard.js` — session edit modal includes seconds in `datetime-local` and compares timestamps to the second to avoid accidental edits.
+
+* Exact files modified/added in this staged change set:
+  * Modified: `src/core/event.ts`, `src/core/logs.ts`, `src/dashboard/controller/dashboard.ts`, `src/dashboard/webview/dashboard.js`, `src/extension.ts`, `src/test/run_tests.ts`, `src/test/test_event_collection.ts`, `src/test/test_jobs.ts`, `src/test/test_logs.ts`, `src/test/test_rename_roundtrip.ts`, `src/test/test_update_log.ts`, `src/test/test_update_session.ts`.
+  * Added: `src/core/recovery.ts`.
+  * Workspace test fixture updated: `test-workspace/.timescope/logs.jsonl` (header + sample adjustments).
+

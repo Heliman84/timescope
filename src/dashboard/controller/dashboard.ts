@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import { resolve_paths } from "../../core/paths";
 import { load_all_log_entries, update_log_entry } from "../../core/logs";
+import { parseLogLine } from "../../core/event";
 
 export async function handle_dashboard(context: vscode.ExtensionContext) {
     const panel = vscode.window.createWebviewPanel(
@@ -88,7 +89,20 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                 const res = update_log_entry(paths, occ.raw, new_record);
                 summary.globalReplaced = summary.globalReplaced || res.globalReplaced;
                 summary.workspaceReplaced = summary.workspaceReplaced || res.workspaceReplaced;
-                if (res.errors) summary.errors.push(...res.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
+                if (res.errors) {
+                    // Filter errors to only those that reference the edited occurrences
+                    const occRecords = occurrences.map((o: any) => parseLogLine(o.raw)).filter((r: any) => !!r) as any[];
+                    for (const er of res.errors) {
+                        if (typeof er === 'string') {
+                            summary.errors.push(er);
+                            continue;
+                        }
+                        const rec = (er as any).record;
+                        if (!rec) continue;
+                        const matched = occRecords.some(r => r.event === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
+                        if (matched) summary.errors.push(er.message || JSON.stringify(er));
+                    }
+                }
             }
 
             // After attempting edits, send back result and updated payload
@@ -133,7 +147,19 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                     const res = update_log_entry(paths, occ.raw, new_record);
                     summary.globalReplaced = summary.globalReplaced || res.globalReplaced;
                     summary.workspaceReplaced = summary.workspaceReplaced || res.workspaceReplaced;
-                    if (res.errors) summary.errors.push(...res.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e))));
+                    if (res.errors) {
+                        const occRecords = occurrences.map((o: any) => parseLogLine(o.raw)).filter((r: any) => !!r) as any[];
+                        for (const er of res.errors) {
+                            if (typeof er === 'string') {
+                                summary.errors.push(er);
+                                continue;
+                            }
+                            const rec = (er as any).record;
+                            if (!rec) continue;
+                            const matched = occRecords.some(r => r.event === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
+                            if (matched) summary.errors.push(er.message || JSON.stringify(er));
+                        }
+                    }
                 }
             }
 
