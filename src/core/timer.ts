@@ -1,4 +1,8 @@
-import { state, ui } from "./state";
+import { ui } from "./state";
+import { Session } from "./session";
+
+let timerInterval: NodeJS.Timeout | null = null;
+let sessionProvider: (() => Session | null) | null = null;
 
 function format_duration_ms(ms: number): string {
     const total_seconds = Math.floor(ms / 1000);
@@ -11,38 +15,37 @@ function format_duration_ms(ms: number): string {
  * Update the status bar text to reflect the current timer value and job.
  */
 export function update_timer_text(): void {
-    let total_ms = state.elapsed_ms_before_pause;
-
-    if (state.is_running && state.start_time) {
-        total_ms += Date.now() - state.start_time.getTime();
+    const session = sessionProvider ? sessionProvider() : null;
+    if (!session) {
+        ui.divider!.text = "TimeScope:";
+        ui.divider!.tooltip = "Idle: No active job";
+        return;
     }
 
-    const formatted = format_duration_ms(total_ms);
+    const formatted = format_duration_ms(session.elapsed());
 
-    ui.divider!.text = state.is_paused
+    ui.divider!.text = session.isPaused
         ? `TimeScope (Paused at ${formatted}):`
         : `TimeScope (${formatted}):`;
 
-    ui.divider!.tooltip = state.current_job
-        ? `Active job: ${state.current_job}`
-        : "Idle: No active job";
+    ui.divider!.tooltip = `Active job: ${session.currentJob}`;
 }
 
 /**
  * Start or restart a periodic interval to update the timer text.
  */
 export function start_timer_interval(): void {
-    if (state.timer_interval) clearInterval(state.timer_interval);
-    state.timer_interval = setInterval(update_timer_text, 1000);
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(update_timer_text, 1000);
 }
 
 /**
  * Stop and clear the running interval used to update the timer.
  */
 export function stop_timer_interval(): void {
-    if (state.timer_interval) {
-        clearInterval(state.timer_interval);
-        state.timer_interval = null;
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
     }
 }
 
@@ -50,6 +53,7 @@ export function stop_timer_interval(): void {
  * Update which status bar controls are visible depending on runtime state.
  */
 export function update_status_bar(): void {
+    const session = sessionProvider ? sessionProvider() : null;
     ui.start_button!.hide();
     ui.pause_button!.hide();
     ui.resume_button!.hide();
@@ -57,7 +61,7 @@ export function update_status_bar(): void {
     ui.divider!.show();
     ui.summary_button!.show();
 
-    if (!state.is_running && !state.is_paused) {
+    if (!session || session.isIdle) {
         ui.start_button!.show();
         ui.divider!.text = "TimeScope:";
         ui.divider!.tooltip = "Idle: No active job";
@@ -67,14 +71,18 @@ export function update_status_bar(): void {
     // Update divider text (running or paused)
     update_timer_text();
 
-    if (state.is_running && !state.is_paused) {
+    if (session.isRunning) {
         ui.pause_button!.show();
         ui.stop_button!.show();
         return;
     }
 
-    if (state.is_paused) {
+    if (session.isPaused) {
         ui.resume_button!.show();
         ui.stop_button!.show();
     }
+}
+
+export function set_session_provider(provider: () => Session | null): void {
+    sessionProvider = provider;
 }

@@ -222,6 +222,37 @@ export class EventCollection {
         this.events.push(ev);
     }
 
+    firstEvent(): Event | null {
+        return this.events.length > 0 ? this.events[0] : null;
+    }
+
+    lastEvent(): Event | null {
+        return this.events.length > 0 ? this.events[this.events.length - 1] : null;
+    }
+
+    get(index: number): Event {
+        if (!Number.isInteger(index) || index < 0 || index >= this.events.length) {
+            throw new Error(`Event index out of bounds: ${index}`);
+        }
+        return this.events[index];
+    }
+
+    find(predicate: (e: Event) => boolean): Event | undefined {
+        return this.events.find(predicate);
+    }
+
+    appendValidated(ev: Event): void {
+        const last = this.lastEvent();
+        if (!last) {
+            if (!ev.isStart()) throw new Error("First event must be start");
+            this.events.push(ev);
+            return;
+        }
+        const err = last.validateTransition(ev);
+        if (err) throw new Error(err.message);
+        this.events.push(ev);
+    }
+
     toEvents(): Event[] { return this.events.slice(); }
 
     // Compare two events for equality

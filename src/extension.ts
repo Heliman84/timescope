@@ -2,25 +2,37 @@ import * as vscode from "vscode";
 
 import { resolve_paths, TimeScopePaths } from "./core/paths";
 import { load_all_jobs, add_job, rename_job, delete_job } from "./core/jobs";
-import { append_log_record, load_all_logs, load_event_collection_for_job } from "./core/logs";
-import { Event } from "./core/event";
-import { state, ui, reset_state_after_stop } from "./core/state";
+import { ui } from "./core/state";
 import { 
     start_timer_interval,
     stop_timer_interval,
-    update_status_bar
+    update_status_bar,
+    set_session_provider
 } from "./core/timer";
 import { handle_dashboard } from "./dashboard/controller/dashboard";
 import { checkAndRecover } from "./core/recovery";
+import { LogRepository } from "./core/logRepository";
+import { Session } from "./core/session";
 
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     const config = vscode.workspace.getConfiguration("timescope");
 
     //
     // Resolve paths (global canonical + workspace mirror)
     //
     const paths: TimeScopePaths = resolve_paths(context);
+    const repo = new LogRepository(paths);
+    let activeSession: Session | null = null;
+
+    const setActiveSession = (session: Session | null) => {
+        activeSession = session;
+        update_status_bar();
+        if (activeSession && !activeSession.isIdle) start_timer_interval();
+        else stop_timer_interval();
+    };
+
+    set_session_provider(() => activeSession);
 
     //
     // Update settings UI to show resolved global paths
@@ -82,7 +94,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Check for orphaned session from previous VSCode shutdown and offer recovery
-    checkAndRecover(paths);
+    const recoveredSession = await checkAndRecover(repo);
+    setActiveSession(recoveredSession);
 
     //
     // ────────────────────────────────────────────────────────────────
@@ -91,11 +104,6 @@ export function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.start", async () => {
-            if (state.is_running) {
-                vscode.window.showWarningMessage("A session is already running.");
-                return;
-            }
-
             let jobs = load_all_jobs(paths);
 
             const items: vscode.QuickPickItem[] = [
@@ -134,19 +142,23 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    function ensureAfter(lastTimestamp: number, requested: number): number {
+        return requested <= lastTimestamp ? lastTimestamp + 1 : requested;
+    }
+
     function start_job(job: string) {
-        state.is_running = true;
-        state.is_paused = false;
-        state.current_job = job;
-        state.start_time = new Date();
-        state.pause_time = null;
-        state.elapsed_ms_before_pause = 0;
+        const session = repo.loadSession(job);
+        if (!session.isIdle) {
+            vscode.window.showWarningMessage(`Session already active for job '${job}'.`);
+            return;
+        }
 
-        // Use domain Event object (immutable)
-        append_log_record(paths, Event.create({ event: "start", job, timestamp: Date.now() }));
+        const last = session.lastEvent;
+        const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
+        const event = session.start(ts);
+        repo.appendValidated(event);
 
-        start_timer_interval();
-        update_status_bar();
+        setActiveSession(repo.loadActiveSession());
     }
 
     //
@@ -155,25 +167,29 @@ export function activate(context: vscode.ExtensionContext) {
     // ────────────────────────────────────────────────────────────────
     //
     context.subscriptions.push(
-        vscode.commands.registerCommand("timescope.pause", () => {
-            if (!state.is_running || state.is_paused) {
-                vscode.window.showWarningMessage("Cannot pause — no active session.");
+        vscode.commands.registerCommand("timescope.pause", async () => {
+            const sessions = Array.from(repo.loadSessionsByJob().values()).filter(s => s.isRunning);
+            if (sessions.length === 0) {
+                vscode.window.showWarningMessage("Cannot pause — no running sessions.");
                 return;
             }
 
-            state.is_paused = true;
-            state.pause_time = new Date();
+            let target: Session | null = sessions[0];
+            if (sessions.length > 1) {
+                const picked = await vscode.window.showQuickPick(
+                    sessions.map(s => ({ label: s.currentJob })),
+                    { placeHolder: "Select a job to pause" }
+                );
+                if (!picked) return;
+                target = sessions.find(s => s.currentJob === picked.label) || null;
+            }
 
-            append_log_record(paths, {
-                event: "pause",
-                job: state.current_job!,
-                timestamp: Date.now()
-            });
-
-            // Use domain Event object
-            append_log_record(paths, Event.create({ event: "pause", job: state.current_job!, timestamp: Date.now() }));
-
-            update_status_bar();
+            if (!target) return;
+            const last = target.lastEvent;
+            const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
+            const event = target.pause(ts);
+            repo.appendValidated(event);
+            setActiveSession(repo.loadActiveSession());
         })
     );
 
@@ -183,31 +199,29 @@ export function activate(context: vscode.ExtensionContext) {
     // ────────────────────────────────────────────────────────────────
     //
     context.subscriptions.push(
-        vscode.commands.registerCommand("timescope.resume", () => {
-            if (!state.is_paused) {
-                vscode.window.showWarningMessage("Cannot resume — session is not paused.");
+        vscode.commands.registerCommand("timescope.resume", async () => {
+            const sessions = Array.from(repo.loadSessionsByJob().values()).filter(s => s.isPaused);
+            if (sessions.length === 0) {
+                vscode.window.showWarningMessage("Cannot resume — no paused sessions.");
                 return;
             }
 
-            if (state.pause_time) {
-                const paused_ms = Date.now() - state.pause_time.getTime();
-                state.elapsed_ms_before_pause += paused_ms;
+            let target: Session | null = sessions[0];
+            if (sessions.length > 1) {
+                const picked = await vscode.window.showQuickPick(
+                    sessions.map(s => ({ label: s.currentJob })),
+                    { placeHolder: "Select a job to resume" }
+                );
+                if (!picked) return;
+                target = sessions.find(s => s.currentJob === picked.label) || null;
             }
 
-            state.is_paused = false;
-            state.pause_time = null;
-            state.start_time = new Date();
-
-            append_log_record(paths, {
-                event: "resume",
-                job: state.current_job!,
-                timestamp: Date.now()
-            });
-
-            // Use domain Event object
-            append_log_record(paths, Event.create({ event: "resume", job: state.current_job!, timestamp: Date.now() }));
-
-            update_status_bar();
+            if (!target) return;
+            const last = target.lastEvent;
+            const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
+            const event = target.resume(ts);
+            repo.appendValidated(event);
+            setActiveSession(repo.loadActiveSession());
         })
     );
 
@@ -218,28 +232,33 @@ export function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.stop", async () => {
-            if (!state.is_running && !state.is_paused) {
+            const sessions = Array.from(repo.loadSessionsByJob().values()).filter(s => !s.isIdle);
+            if (sessions.length === 0) {
                 vscode.window.showWarningMessage("No active session to stop.");
                 return;
             }
+
+            let target: Session | null = sessions[0];
+            if (sessions.length > 1) {
+                const picked = await vscode.window.showQuickPick(
+                    sessions.map(s => ({ label: s.currentJob })),
+                    { placeHolder: "Select a job to stop" }
+                );
+                if (!picked) return;
+                target = sessions.find(s => s.currentJob === picked.label) || null;
+            }
+
+            if (!target) return;
 
             const task_note = await vscode.window.showInputBox({
                 prompt: "Task description (optional)"
             });
 
-            append_log_record(paths, {
-                event: "stop",
-                job: state.current_job!,
-                timestamp: Date.now(),
-                task: task_note || ""
-            });
-
-            // Use domain Event object
-            append_log_record(paths, Event.create({ event: "stop", job: state.current_job!, timestamp: Date.now(), task: task_note || "" }));
-
-            stop_timer_interval();
-            reset_state_after_stop();
-            update_status_bar();
+            const last = target.lastEvent;
+            const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
+            const event = target.stop(task_note || undefined, ts);
+            repo.appendValidated(event);
+            setActiveSession(repo.loadActiveSession());
         })
     );
 

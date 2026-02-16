@@ -1,71 +1,70 @@
 import * as vscode from "vscode";
-import { TimeScopePaths } from "./paths";
-import { load_event_collection_for_job, append_log_record } from "./logs";
-import { Event } from "./event";
-import { state, reset_state_after_stop } from "./state";
-import { start_timer_interval, stop_timer_interval, update_status_bar } from "./timer";
+import { LogRepository } from "./logRepository";
+import { Session } from "./session";
 
 /**
  * Detect an open session at startup and prompt the user to recover.
  */
-export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
+function ensureAfter(lastTimestamp: number, requested: number): number {
+    return requested <= lastTimestamp ? lastTimestamp + 1 : requested;
+}
+
+export async function checkAndRecover(repo: LogRepository): Promise<Session | null> {
     try {
-        const col = load_event_collection_for_job(paths);
-        const sorted = col.sorted();
-        if (sorted.length === 0) return;
+        const sessions = Array.from(repo.loadSessionsByJob().values());
+        const openSessions = sessions.filter(s => !s.isIdle);
+        if (openSessions.length === 0) return repo.loadActiveSession();
 
-        const last = sorted[sorted.length - 1];
-        if (last.type === "stop") return; // cleanly stopped
+        for (const session of openSessions) {
+            const last = session.lastEvent;
+            if (!last) continue;
 
-        const lastEvent = last.type; // start | pause | resume
-        const lastTimestamp = last.timestamp;
-        const job = last.job;
+            const lastEvent = last.type;
+            const lastTimestamp = last.timestamp;
+            const job = session.currentJob;
+            const accumulating = lastEvent === "start" || lastEvent === "resume";
 
-        const accumulating = lastEvent === "start" || lastEvent === "resume";
+            // Build choices per user story
+            let choices: string[] = [];
+            if (accumulating) {
+                choices = [
+                    `Close session at shutdown (stop when VSCode closed)`, // default on escape
+                    `Close session now (stop @ now)`,
+                    `Pause session at shutdown (pause when VSCode closed)`,
+                    `Pause session now (pause @ now)`,
+                    `Resume timer with break (pause when VSCode closed, resume @ now)`,
+                    `Resume timer with no break (resume @ last recorded time)`
+                ];
+            } else {
+                choices = [
+                    `Close session at shutdown (stop when VSCode closed)`,
+                    `Close session now (stop @ now)`,
+                    `Stay in paused state (no change)` // default on escape
+                ];
+            }
 
-        // Build choices per user story
-        let choices: string[] = [];
-        if (accumulating) {
-            choices = [
-                `Close session at shutdown (stop when VSCode closed)`, // default on escape
-                `Close session now (stop @ now)`,
-                `Pause session at shutdown (pause when VSCode closed)`,
-                `Pause session now (pause @ now)`,
-                `Resume timer with break (pause when VSCode closed, resume @ now)`,
-                `Resume timer with no break (resume @ last recorded time)`
-            ];
-        } else {
-            choices = [
-                `Close session at shutdown (stop when VSCode closed)`,
-                `Close session now (stop @ now)`,
-                `Stay in paused state (no change)` // default on escape
-            ];
-        }
+            const picked = await vscode.window.showQuickPick(choices, {
+                placeHolder: `Detected open session for '${job}' (last event: ${lastEvent}). Choose recovery action:`,
+                canPickMany: false
+            });
 
-        const picked = await vscode.window.showQuickPick(choices, {
-            placeHolder: `Detected open session for '${job}' (last event: ${lastEvent}). Choose recovery action:`,
-            canPickMany: false
-        });
+            // Default behaviors when user dismisses prompt
+            let selection = picked;
+            if (!selection) {
+                selection = accumulating ? choices[0] : choices[2];
+            }
 
-        // Default behaviors when user dismisses prompt
-        let selection = picked;
-        if (!selection) {
-            selection = accumulating ? choices[0] : choices[2];
-        }
+            const now = Date.now();
 
-        const now = Date.now();
-
-        // Map selection to actions
+            // Map selection to actions
             if (selection.startsWith("Close session")) {
-            const atNow = selection.includes("now");
-            const ts = atNow ? now : lastTimestamp;
-                append_log_record(paths, Event.create({ event: "stop", job, timestamp: ts, task: "recovered" }));
-            stop_timer_interval();
-            reset_state_after_stop();
-            update_status_bar();
-            vscode.window.showInformationMessage(`Recovered: stopped job '${job}'.`);
-            return;
-        }
+                const atNow = selection.includes("now");
+                const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
+                const stopEvent = session.stop("recovered", ts);
+                repo.appendValidated(stopEvent);
+                vscode.window.showInformationMessage(`Recovered: stopped job '${job}'.`);
+                continue;
+            }
 
             if (selection.startsWith("Pause session")) {
             const atNow = selection.includes("now");
