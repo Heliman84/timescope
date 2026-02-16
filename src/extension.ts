@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { resolve_paths, TimeScopePaths } from "./core/paths";
 import { load_all_jobs, add_job, rename_job, delete_job } from "./core/jobs";
 import { append_log_record, load_all_logs, load_event_collection_for_job } from "./core/logs";
+import { Event } from "./core/event";
 import { state, ui, reset_state_after_stop } from "./core/state";
 import { 
     start_timer_interval,
@@ -141,11 +142,8 @@ export function activate(context: vscode.ExtensionContext) {
         state.pause_time = null;
         state.elapsed_ms_before_pause = 0;
 
-        append_log_record(paths, {
-            event: "start",
-            job,
-            timestamp: Date.now()
-        });
+        // Use domain Event object (immutable)
+        append_log_record(paths, Event.create({ event: "start", job, timestamp: Date.now() }));
 
         start_timer_interval();
         update_status_bar();
@@ -171,6 +169,9 @@ export function activate(context: vscode.ExtensionContext) {
                 job: state.current_job!,
                 timestamp: Date.now()
             });
+
+            // Use domain Event object
+            append_log_record(paths, Event.create({ event: "pause", job: state.current_job!, timestamp: Date.now() }));
 
             update_status_bar();
         })
@@ -203,6 +204,9 @@ export function activate(context: vscode.ExtensionContext) {
                 timestamp: Date.now()
             });
 
+            // Use domain Event object
+            append_log_record(paths, Event.create({ event: "resume", job: state.current_job!, timestamp: Date.now() }));
+
             update_status_bar();
         })
     );
@@ -229,6 +233,9 @@ export function activate(context: vscode.ExtensionContext) {
                 timestamp: Date.now(),
                 task: task_note || ""
             });
+
+            // Use domain Event object
+            append_log_record(paths, Event.create({ event: "stop", job: state.current_job!, timestamp: Date.now(), task: task_note || "" }));
 
             stop_timer_interval();
             reset_state_after_stop();
