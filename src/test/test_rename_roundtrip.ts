@@ -3,8 +3,7 @@ import * as path from "path";
 import * as assert from "assert";
 import { append_log_record, rename_job_in_log_file } from "../core/logs";
 import { TimeScopePaths } from "../core/paths";
-import { LogRecord } from "../core/types";
-import { EventCollection } from "../core/event";
+import { Event, EventCollection } from "../core/event";
 
 /**
  * test_rename_roundtrip
@@ -23,12 +22,12 @@ export function run_rename_roundtrip_test(): void {
         global_log_path: globalPath
     };
 
-    const recs: LogRecord[] = [
-        { event: "start", job: "alpha", timestamp: 100 },
-        { event: "pause", job: "alpha", timestamp: 200 },
-        { event: "stop", job: "alpha", timestamp: 300, task: "done" },
-        { event: "start", job: "beta", timestamp: 400 },
-        { event: "stop", job: "beta", timestamp: 500 }
+    const recs: Event[] = [
+        Event.create({ event: "start", job: "alpha", timestamp: 100 }),
+        Event.create({ event: "pause", job: "alpha", timestamp: 200 }),
+        Event.create({ event: "stop", job: "alpha", timestamp: 300, task: "done" }),
+        Event.create({ event: "start", job: "beta", timestamp: 400 }),
+        Event.create({ event: "stop", job: "beta", timestamp: 500 })
     ];
 
     for (const r of recs) append_log_record(paths, r);
@@ -40,8 +39,8 @@ export function run_rename_roundtrip_test(): void {
     const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
 
     // Expected: same records but alpha -> gamma
-    const expectedRecs = recs.map(r => ({ ...r, job: r.job === "alpha" ? "gamma" : r.job } as LogRecord));
-    const expectedLines = EventCollection.fromRecords(expectedRecs).toLines();
+    const expectedEvents = recs.map(r => (r.job === "alpha" ? r.withJob("gamma") : r));
+    const expectedLines = EventCollection.fromEvents(expectedEvents).toLines();
     // files now include a file-level header as the first line
     const headerLine = JSON.stringify({ _format_version: 1 });
     expectedLines.unshift(headerLine);

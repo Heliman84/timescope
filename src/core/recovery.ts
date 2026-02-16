@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { TimeScopePaths } from "./paths";
 import { load_event_collection_for_job, append_log_record } from "./logs";
+import { Event } from "./event";
 import { state, reset_state_after_stop } from "./state";
 import { start_timer_interval, stop_timer_interval, update_status_bar } from "./timer";
 
@@ -14,9 +15,9 @@ export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
         if (sorted.length === 0) return;
 
         const last = sorted[sorted.length - 1];
-        if (last.event === "stop") return; // cleanly stopped
+        if (last.type === "stop") return; // cleanly stopped
 
-        const lastEvent = last.event; // start | pause | resume
+        const lastEvent = last.type; // start | pause | resume
         const lastTimestamp = last.timestamp;
         const job = last.job;
 
@@ -55,10 +56,10 @@ export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
         const now = Date.now();
 
         // Map selection to actions
-        if (selection.startsWith("Close session")) {
+            if (selection.startsWith("Close session")) {
             const atNow = selection.includes("now");
             const ts = atNow ? now : lastTimestamp;
-            append_log_record(paths, { event: "stop", job, timestamp: ts, task: "recovered" });
+                append_log_record(paths, Event.create({ event: "stop", job, timestamp: ts, task: "recovered" }));
             stop_timer_interval();
             reset_state_after_stop();
             update_status_bar();
@@ -66,10 +67,10 @@ export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
             return;
         }
 
-        if (selection.startsWith("Pause session")) {
+            if (selection.startsWith("Pause session")) {
             const atNow = selection.includes("now");
             const ts = atNow ? now : lastTimestamp;
-            append_log_record(paths, { event: "pause", job, timestamp: ts });
+                append_log_record(paths, Event.create({ event: "pause", job, timestamp: ts }));
             // set runtime state to paused
             state.is_running = true;
             state.is_paused = true;
@@ -103,7 +104,7 @@ export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
                     return;
                 } else {
                     // lastEvent === 'pause' -> append resume at lastTimestamp
-                    append_log_record(paths, { event: "resume", job, timestamp: lastTimestamp });
+                    append_log_record(paths, Event.create({ event: "resume", job, timestamp: lastTimestamp }));
                     state.is_running = true;
                     state.is_paused = false;
                     state.current_job = job;
@@ -119,13 +120,13 @@ export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
 
             // Break case: ensure there's a pause at shutdown (unless already paused)
             // and a resume now.
-            if (lastEvent === "start" || lastEvent === "resume") {
-                // insert a pause at the last timestamp to mark the break
-                append_log_record(paths, { event: "pause", job, timestamp: lastTimestamp });
-            }
+                if (lastEvent === "start" || lastEvent === "resume") {
+                    // insert a pause at the last timestamp to mark the break
+                    append_log_record(paths, Event.create({ event: "pause", job, timestamp: lastTimestamp }));
+                }
 
             // resume now
-            append_log_record(paths, { event: "resume", job, timestamp: now });
+            append_log_record(paths, Event.create({ event: "resume", job, timestamp: now }));
             state.is_running = true;
             state.is_paused = false;
             state.current_job = job;

@@ -1,8 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { TimeScopePaths } from "./paths";
-import { LogRecord, Event } from "./types";
-import { EventCollection, ValidationError, parseLogLine } from "./event";
+import { Event, EventCollection, ValidationError } from "./event";
 
 const HEADER_KEY = "_format_version";
 const HEADER_LINE = JSON.stringify({ _format_version: 1 });
@@ -18,7 +17,7 @@ function ensure_dir_exists(file_path: string) {
 }
 
 function safe_read_lines(file_path: string): string[] {
-    if (!fs.existsSync(file_path)) return [];
+    if (!file_path || !fs.existsSync(file_path)) return [];
     const raw = fs.readFileSync(file_path, "utf8");
     return raw
         .split("\n")
@@ -34,23 +33,21 @@ function safe_read_lines(file_path: string): string[] {
  * Append a typed log record to the global (canonical) log, and to the
  * workspace mirror if one is present.
  */
-export function append_log_record(paths: TimeScopePaths, record: LogRecord): void {
-    const line = EventCollection.formatRecord(record) + "\n";
+export function append_log_record(paths: TimeScopePaths, event: Event): void {
+    const line = event.toJSONL() + "\n";
 
     // Ensure directories exist
     ensure_dir_exists(paths.global_log_path);
-    if (paths.workspace_log_path) {
-        ensure_dir_exists(paths.workspace_log_path);
-    }
+    if (paths.workspace_log_path) ensure_dir_exists(paths.workspace_log_path);
 
     // Dedup check: avoid appending the same record twice (e.g., on retry)
     try {
         const existing = safe_read_lines(paths.global_log_path);
         // Find last parsed record (skip header or malformed trailing lines)
         for (let i = existing.length - 1; i >= 0; i--) {
-            const parsed = parseLogLine(existing[i]);
-            if (!parsed) continue;
-            if (EventCollection.recordsEqual(parsed, record)) return; // duplicate
+            const parsed_event = Event.fromJSONL(existing[i]);
+            if (!parsed_event) continue;
+            if (event.equals(parsed_event)) return; // duplicate
             break;
         }
     } catch {
@@ -79,9 +76,13 @@ export function append_log_record(paths: TimeScopePaths, record: LogRecord): voi
 /**
  * Load all logs (global + workspace mirror) and return only valid LogRecord entries.
  */
-export function load_all_logs(paths: TimeScopePaths): LogRecord[] {
-    // Backwards compatible API - returns only parsed records (no source/raw)
-    return load_all_log_entries(paths).map(e => e.record);
+export function load_all_logs(paths: TimeScopePaths): EventCollection {
+    // Return an EventCollection containing parsed events from global
+    // and optional workspace mirrors. Header lines are ignored by parse_lines.
+    const all_lines: string[] = [];
+    all_lines.push(...safe_read_lines(paths.global_log_path));
+    if (paths.workspace_log_path) all_lines.push(...safe_read_lines(paths.workspace_log_path));
+    return EventCollection.parse_lines(all_lines);
 }
 
 /**
@@ -95,7 +96,7 @@ export function load_all_logs(paths: TimeScopePaths): LogRecord[] {
  */
 export function load_event_collection_for_job(paths: TimeScopePaths, job?: string) {
     const lines = safe_read_lines(paths.global_log_path);
-    const col = EventCollection.fromLines(lines);
+    const col = EventCollection.parse_lines(lines);
     if (job) return col.filterByJob(job);
     return col;
 }
@@ -104,184 +105,88 @@ export function load_event_collection_for_job(paths: TimeScopePaths, job?: strin
  * Load log entries including raw line text, source file, and line index. This
  * is useful for precise updates from the UI.
  */
-export function load_all_log_entries(paths: TimeScopePaths): Array<import("./types").LogEntry> {
-    const entries: Array<import("./types").LogEntry> = [];
+export function load_all_log_entries(paths: TimeScopePaths): Array<{ record: Event; raw: string; source: "global" | "workspace"; lineIndex: number }> {
+    const entries: Array<{ record: Event; raw: string; source: "global" | "workspace"; lineIndex: number }> = [];
 
-    const global_lines = safe_read_lines(paths.global_log_path);
-    for (let i = 0; i < global_lines.length; i++) {
-        const line = global_lines[i];
-        // Skip file-level header lines
+    const pushLine = (line: string, src: "global" | "workspace", idx: number) => {
         try {
             const obj = JSON.parse(line);
-            if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
+            if (obj && (obj as any)[HEADER_KEY] !== undefined) return;
         } catch {
             // fall through to parse attempt
         }
+        const parsed = Event.fromJSONL(line);
+        if (parsed) entries.push({ record: parsed, raw: line, source: src, lineIndex: idx });
+        else entries.push({ record: Event.create({ event: "stop", job: "__MALFORMED__", timestamp: 0, task: line }), raw: line, source: src, lineIndex: idx });
+    };
 
-        const parsed = parseLogLine(line);
-        if (parsed) {
-            entries.push({ record: parsed, raw: line, source: "global", lineIndex: i });
-        } else {
-            // still include malformed lines as raw entries (they'll be shown but not editable)
-            entries.push({ record: { event: "start", job: "", timestamp: 0 } as any, raw: line, source: "global", lineIndex: i });
-        }
-    }
+    const global_lines = safe_read_lines(paths.global_log_path);
+    for (let i = 0; i < global_lines.length; i++) pushLine(global_lines[i], "global", i);
 
     if (paths.workspace_log_path) {
         const ws_lines = safe_read_lines(paths.workspace_log_path);
-        for (let i = 0; i < ws_lines.length; i++) {
-            const line = ws_lines[i];
-            try {
-                const obj = JSON.parse(line);
-                if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
-            } catch {}
-
-            const parsed = parseLogLine(line);
-            if (parsed) {
-                entries.push({ record: parsed, raw: line, source: "workspace", lineIndex: i });
-            } else {
-                entries.push({ record: { event: "start", job: "", timestamp: 0 } as any, raw: line, source: "workspace", lineIndex: i });
-            }
-        }
+        for (let i = 0; i < ws_lines.length; i++) pushLine(ws_lines[i], "workspace", i);
     }
 
     return entries;
 }
 
-// Parsing of lines is provided by `parseLogLine` in event.ts
-
 export function rename_job_in_log_file(paths: TimeScopePaths, old_name: string, new_name: string) {
     function rewrite_file(file_path: string | null) {
         if (!file_path || !fs.existsSync(file_path)) return;
-
         const lines = safe_read_lines(file_path);
-        const rewritten: string[] = [];
-
-        for (const line of lines) {
-            const parsed = parseLogLine(line);
-            if (!parsed) {
-                // keep malformed lines unchanged
-                rewritten.push(line);
-                continue;
-            }
-
-            // Only modify matching job names
-            let record: LogRecord = parsed;
-            if (record.job === old_name) {
-                record = { ...parsed, job: new_name } as LogRecord;
-            }
-
-            const new_line = EventCollection.formatRecord(record);
-            rewritten.push(new_line);
-        }
-
-        // Ensure the resulting file has a header on the first line. If the
-        // original file already contained a header we preserved it above as an
-        // unchanged line; otherwise inject the canonical header.
-        if (rewritten.length === 0) {
-            rewritten.unshift(HEADER_LINE);
-        } else {
-            try {
-                const firstObj = JSON.parse(rewritten[0]);
-                if (!firstObj || (firstObj as any)[HEADER_KEY] === undefined) {
-                    rewritten.unshift(HEADER_LINE);
-                }
-            } catch {
-                rewritten.unshift(HEADER_LINE);
-            }
-        }
-
+        const col = EventCollection.parse_lines(lines);
+        const renamed = col.renameJob(old_name, new_name);
+        const outLines = renamed.toLines();
+        const toWrite = outLines.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...outLines];
         ensure_dir_exists(file_path);
-        fs.writeFileSync(file_path, rewritten.join("\n") + "\n", "utf8");
+        fs.writeFileSync(file_path, toWrite.join("\n") + "\n", "utf8");
     }
 
-    // Rewrite global canonical log
     rewrite_file(paths.global_log_path);
-
-    // Rewrite workspace mirror (if present)
-    if (paths.workspace_log_path) {
-        rewrite_file(paths.workspace_log_path);
-    }
+    if (paths.workspace_log_path) rewrite_file(paths.workspace_log_path);
 }
 
-/**
- * Replace a single log entry across global and workspace logs. It will first
- * attempt to replace an exact matching raw line; if not found it will attempt
- * to find matching record fields (event+job+timestamp) and replace those.
- * After replacement, the job's event sequence is validated to avoid creating
- * invalid start/stop ordering.
- */
-export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, new_record: LogRecord): { globalReplaced: boolean; workspaceReplaced: boolean; errors?: ValidationError[] } {
+export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, new_record: Event): { globalReplaced: boolean; workspaceReplaced: boolean; errors?: ValidationError[] } {
     const result = { globalReplaced: false, workspaceReplaced: false, errors: undefined as ValidationError[] | undefined };
 
     function replace_in_file(file_path: string | undefined | null): boolean {
         if (!file_path || !fs.existsSync(file_path)) return false;
-
-        let replaced = false;
         const lines = safe_read_lines(file_path);
-        const rewritten: string[] = [];
+        const col = EventCollection.parse_lines(lines);
 
-        for (const line of lines) {
-            if (!replaced && line === old_raw_line) {
-                // Exact replacement
-                rewritten.push(EventCollection.formatRecord(new_record));
-                replaced = true;
-                continue;
-            }
-            rewritten.push(line);
+        // Determine target event to replace
+        const parsedOld = Event.fromJSONL(old_raw_line);
+        let newCol: EventCollection | null = null;
+        if (parsedOld) {
+            newCol = col.replaceEvent(parsedOld, new_record);
+        } else {
+            const match = col.toEvents().find(e => new_record.equals(e));
+            if (match) newCol = col.replaceEvent(match, new_record);
+            else return false;
         }
 
-        if (!replaced) {
-            // Try field-based replacement: find lines that parse and match event+job+timestamp of old line
-            for (let i = 0; i < rewritten.length; i++) {
-                const parsed = parseLogLine(rewritten[i]);
-                if (!parsed) continue;
-                if (parsed.event === new_record.event && parsed.job === new_record.job && parsed.timestamp === new_record.timestamp) {
-                    // same timestamp -> replace
-                    rewritten[i] = EventCollection.formatRecord(new_record);
-                    replaced = true;
-                    break;
-                }
-            }
-        }
+        const origLines = col.toLines();
+        const newLines = newCol.toLines();
+        const changed = origLines.length !== newLines.length || origLines.some((v, i) => v !== newLines[i]);
+        if (!changed) return false;
 
-        if (replaced) {
-            ensure_dir_exists(file_path);
-            // Ensure header exists on write
-            if (rewritten.length === 0) {
-                rewritten.unshift(HEADER_LINE);
-            } else {
-                try {
-                    const firstObj = JSON.parse(rewritten[0]);
-                    if (!firstObj || (firstObj as any)[HEADER_KEY] === undefined) {
-                        rewritten.unshift(HEADER_LINE);
-                    }
-                } catch {
-                    rewritten.unshift(HEADER_LINE);
-                }
-            }
+        const toWrite = newLines.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...newLines];
+        ensure_dir_exists(file_path);
+        fs.writeFileSync(file_path, toWrite.join("\n") + "\n", "utf8");
 
-            fs.writeFileSync(file_path, rewritten.join("\n") + "\n", "utf8");
-        }
-
-        return replaced;
+        return true;
     }
 
-    // Do replacements
     result.globalReplaced = replace_in_file(paths.global_log_path);
     result.workspaceReplaced = replace_in_file(paths.workspace_log_path);
 
-    // Validate job sequence for the affected job using the global (canonical) log only
     try {
         const validationErrors = load_event_collection_for_job(paths, new_record.job).validate({ startFromLatest: true });
-        if (validationErrors.length > 0) {
-            result.errors = validationErrors;
-        }
+        if (validationErrors.length > 0) result.errors = validationErrors;
     } catch (ex) {
         result.errors = [{ index: -1, code: "exception", message: String(ex) }];
     }
 
     return result;
 }
-
-// validation moved to src/core/event.ts

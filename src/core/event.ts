@@ -1,72 +1,13 @@
-import { LogRecord } from "./types";
-
 /**
- * Parse a single JSONL log line into a `LogRecord` or `null` if malformed.
- * This is the canonical parser for log lines and belongs with event semantics.
+ * Domain types and DTOs for events.
  */
-export function parseLogLine(line: string): LogRecord | null {
-    try {
-        const obj = JSON.parse(line);
-        if (!obj) return null;
-        // File-level header: skip lines that are the header metadata
-        if ((obj as any)._format_version !== undefined) return null;
-        if (typeof obj.event !== "string" || typeof obj.job !== "string" || typeof obj.timestamp !== "number") return null;
-        if (obj.event === "stop") {
-            if (obj.task !== undefined && typeof obj.task !== "string") return null;
-            return { event: "stop", job: obj.job, timestamp: obj.timestamp, task: obj.task } as LogRecord;
-        }
-        if (obj.event === "start" || obj.event === "pause" || obj.event === "resume") {
-            return { event: obj.event, job: obj.job, timestamp: obj.timestamp } as LogRecord;
-        }
-        return null;
-    } catch {
-        return null;
-    }
-}
+export type EventType = "start" | "stop" | "pause" | "resume";
 
-
-/**
- * Validate a sequence of `LogRecord` events for a single job.
- * Returns an array of validation error messages (empty if valid).
- *
- * Rules enforced:
- * - Sequence must begin with `start`.
- * - `start` -> (`pause` | `stop`) allowed.
- * - `pause` -> (`resume` | `stop`) allowed.
- * - `resume` -> (`pause` | `stop`) allowed.
- * - `stop` transitions to `idle`; a subsequent `start` is allowed to begin a new run.
- * - A `stop` without a prior `start` is invalid.
- * - `resume` without prior `pause` is invalid.
- * - consecutive `pause` or `resume` without appropriate state is invalid.
- */
-
-
-
-/**
- * Lightweight wrapper for a single event record.
- */
-export class Event {
-    constructor(public readonly record: LogRecord) {}
-
-    get event(): string {
-        return this.record.event;
-    }
-
-    get job(): string {
-        return this.record.job;
-    }
-
-    get timestamp(): number {
-        return this.record.timestamp;
-    }
-
-    get task(): string | undefined {
-        return (this.record as any).task;
-    }
-
-    toRecord(): LogRecord {
-        return this.record;
-    }
+export interface EventDTO {
+    event: EventType;
+    job: string;
+    timestamp: number;
+    task?: string;
 }
 
 export type State = "idle" | "running" | "paused";
@@ -75,230 +16,301 @@ export interface ValidationError {
     index: number;
     code: string;
     message: string;
-    record?: LogRecord;
+    record?: EventDTO;
 }
 
 /**
- * Collection of events for a job (or arbitrary set). Provides helpers
- * for validation, state inspection, and simple mutations.
+ * Immutable domain object representing a single Event.
+ * All semantics and transitions live on this class.
+ */
+export class Event {
+    private readonly _type: EventType;
+    private readonly _job: string;
+    private readonly _timestamp: number;
+    private readonly _task?: string;
+
+    // Private constructor enforces use of factory methods.
+    private constructor(dto: EventDTO) {
+        this._type = dto.event;
+        this._job = dto.job;
+        this._timestamp = dto.timestamp;
+        this._task = dto.task;
+    }
+
+    // Create from a validated DTO. Throws on invalid DTO.
+    static create(dto: EventDTO): Event {
+        if (typeof dto !== "object" || dto === null) throw new Error("Invalid EventDTO");
+        const { event, job, timestamp, task } = dto as EventDTO;
+        if (!["start", "stop", "pause", "resume"].includes(event)) throw new Error("Invalid event type");
+        if (typeof job !== "string" || job.length === 0) throw new Error("Invalid job");
+        if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) throw new Error("Invalid timestamp");
+        if (task !== undefined && typeof task !== "string") throw new Error("Invalid task");
+        return new Event({ event, job, timestamp, task });
+    }
+
+    // Non-throwing parser from a JSONL line. Returns null for headers or malformed lines.
+    static fromJSONL(line: string): Event | null {
+        try {
+            const obj = JSON.parse(line);
+            if (!obj || typeof obj !== "object") return null;
+            // skip file-level headers
+            if ((obj as any)._format_version !== undefined) return null;
+            const dto: EventDTO = {
+                event: obj.event,
+                job: obj.job,
+                timestamp: obj.timestamp,
+                task: obj.task
+            } as EventDTO;
+            // Use create to validate DTO; if invalid, let it throw and we catch below
+            return Event.create(dto);
+        } catch {
+            return null;
+        }
+    }
+
+    // Serialize via the DTO boundary.
+    toDTO(): EventDTO {
+        const out: EventDTO = { event: this._type, job: this._job, timestamp: this._timestamp };
+        if (this._task !== undefined) out.task = this._task;
+        return out;
+    }
+
+    // JSONL representation. Deterministic key ordering via explicit object construction.
+    toJSONL(): string {
+        const dto = this.toDTO();
+        // Ensure consistent key ordering: event, job, timestamp, task
+        if (dto.task !== undefined) {
+            return JSON.stringify({ event: dto.event, job: dto.job, timestamp: dto.timestamp, task: dto.task });
+        }
+        return JSON.stringify({ event: dto.event, job: dto.job, timestamp: dto.timestamp });
+    }
+
+    toString(): string {
+        return this.toJSONL();
+    }
+
+    // Read-only accessors
+    get type(): EventType { return this._type; }
+    get job(): string { return this._job; }
+    get timestamp(): number { return this._timestamp; }
+    get task(): string | undefined { return this._task; }
+
+    // Domain semantics helpers
+    isStart(): boolean { return this._type === "start"; }
+    isStop(): boolean { return this._type === "stop"; }
+    isPause(): boolean { return this._type === "pause"; }
+    isResume(): boolean { return this._type === "resume"; }
+    isTerminal(): boolean { return this.isStop(); }
+
+    // Determine whether a transition from this event to `next` is allowed.
+    isTransitionAllowed(next: Event): boolean {
+        if (this._job !== next._job) return false; // transitions only meaningful for same job
+        if (this._type === next._type) return false; // disallow consecutive duplicates
+
+        switch (this._type) {
+            case "start":
+                return next.isPause() || next.isStop();
+            case "pause":
+                return next.isResume() || next.isStop();
+            case "resume":
+                return next.isPause() || next.isStop();
+            case "stop":
+                return next.isStart(); // new run may start after stop
+            default:
+                return false;
+        }
+    }
+
+    // Validate a transition; returns a ValidationError describing the violation or null when allowed.
+    validateTransition(next: Event): ValidationError | null {
+        if (this._job !== next._job) {
+            return { index: -1, code: "mismatched_job", message: `Transition between different jobs: ${this._job} -> ${next._job}`, record: next.toDTO() };
+        }
+        if (next.timestamp <= this._timestamp) {
+            return { index: -1, code: "timestamp_non_increasing", message: `Timestamps must increase: ${this._timestamp} >= ${next.timestamp}`, record: next.toDTO() };
+        }
+        if (this._type === next._type) {
+            return { index: -1, code: "consecutive_duplicate", message: `Consecutive duplicate event '${this._type}'`, record: next.toDTO() };
+        }
+        if (!this.isTransitionAllowed(next)) {
+            return { index: -1, code: "invalid_transition", message: `Invalid transition ${this._type} -> ${next._type} for job ${this._job}`, record: next.toDTO() };
+        }
+        return null;
+    }
+
+    // Deterministic duration between two events (may be negative if timestamps are out-of-order).
+    durationUntil(next: Event): number {
+        return next._timestamp - this._timestamp;
+    }
+
+    equals(other?: Event): boolean {
+        if (!other) return false;
+        return this._type === other._type && this._job === other._job && this._timestamp === other._timestamp && (this._task || "") === (other._task || "");
+    }
+
+    // Immutable transformations: return a new Event with a single field changed.
+    withJob(newJob: string): Event {
+        if (typeof newJob !== "string" || newJob.length === 0) throw new Error("Invalid job");
+        const dto = this.toDTO();
+        dto.job = newJob;
+        return Event.create(dto);
+    }
+
+    withTimestamp(newTimestamp: number): Event {
+        if (typeof newTimestamp !== "number" || !Number.isFinite(newTimestamp)) throw new Error("Invalid timestamp");
+        const dto = this.toDTO();
+        dto.timestamp = newTimestamp;
+        return Event.create(dto);
+    }
+
+    withTask(newTask: string | undefined): Event {
+        if (newTask !== undefined && typeof newTask !== "string") throw new Error("Invalid task");
+        const dto = this.toDTO();
+        if (newTask === undefined) delete (dto as any).task;
+        else dto.task = newTask;
+        return Event.create(dto);
+    }
+}
+
+
+/**
+ * Collection of `Event` domain objects. Uses domain semantics for validation
+ * and serialization boundaries.
  */
 export class EventCollection {
-    private records: LogRecord[];
+    private events: Event[];
 
-    constructor(records?: LogRecord[]) {
-        this.records = records ? records.slice() : [];
+    constructor(events?: Event[]) {
+        this.events = events ? events.slice() : [];
     }
 
-    static fromRecords(records: LogRecord[]): EventCollection {
-        return new EventCollection(records);
+    static fromEvents(events: Event[]): EventCollection {
+        return new EventCollection(events);
     }
 
-    /** Build an EventCollection from raw JSONL lines. Malformed lines are ignored. */
-    static fromLines(lines: string[]): EventCollection {
-        const parsed: LogRecord[] = [];
+    // Parse JSONL lines into domain `Event` objects; malformed lines and headers are ignored.
+    static fromLines(lines: Iterable<string>): EventCollection {
+        const parsed: Event[] = [];
         for (const l of lines) {
-            const p = parseLogLine(l);
-            if (p) parsed.push(p);
+            const ev = Event.fromJSONL(l);
+            if (ev) parsed.push(ev);
         }
         return new EventCollection(parsed);
     }
 
-    /**
-     * Serialize a single LogRecord to a nicely aligned JSONL line. This keeps
-     * records readable and stable for diffs while avoiding per-record version
-     * fields. Padding sizes below control column alignment.
-     */
-    static formatRecord(record: LogRecord): string {
-        const EVENT_PAD = 8; // pad event value to this width
-        const JOB_PAD = 25;  // pad job value to this width
-
-        function format_event(ev: string): string {
-            const raw = `"event":"${ev}"`;
-            const padCount = Math.max(0, EVENT_PAD - ev.length);
-            return raw + " ".repeat(padCount);
-        }
-
-        function format_job(job: string): string {
-            const raw = `"job":"${job}"`;
-            const padCount = Math.max(0, JOB_PAD - job.length);
-            return raw + " ".repeat(padCount);
-        }
-
-        const event_part = format_event(record.event);
-        const job_part = format_job(record.job);
-        const timestamp_part = `"timestamp":${record.timestamp}`;
-
-        if (record.event === "stop") {
-            const task_part = `"task":"${record.task || ""}"`;
-            return `{${event_part}, ${job_part}, ${timestamp_part}, ${task_part}}`;
-        }
-
-        return `{${event_part}, ${job_part}, ${timestamp_part}}`;
+    // Backwards-compatible alias
+    static parse(lines: Iterable<string>): EventCollection {
+        return EventCollection.fromLines(lines);
     }
 
-    /** Return a new EventCollection filtered to records for `job`. */
-    filterByJob(job: string): EventCollection {
-        return new EventCollection(this.records.filter(r => r.job === job));
-    }
-
-    sorted(): LogRecord[] {
-        return this.records.slice().sort((a, b) => a.timestamp - b.timestamp);
-    }
-
-    add(record: LogRecord): void {
-        this.records.push(record);
-    }
-
-    toRecords(): LogRecord[] {
-        return this.records.slice();
-    }
-
-    
-
-    /** Compare two records for equality (used to avoid duplicate appends). */
-    static recordsEqual(a: LogRecord, b: LogRecord): boolean {
-        if (a.event !== b.event) return false;
-        if (a.job !== b.job) return false;
-        if (a.timestamp !== b.timestamp) return false;
-        const at = (a as any).task || "";
-        const bt = (b as any).task || "";
-        return at === bt;
-    }
-
-    /**
-     * Return JSONL formatted lines for the collection in ascending timestamp order.
-     */
+    // Return JSONL lines for the collection in ascending timestamp order.
     toLines(): string[] {
-        return this.sorted().map(r => EventCollection.formatRecord(r));
+        return this.sorted().map(e => e.toJSONL());
     }
 
-    /**
-     * Validate the collection's event sequence.
-     *
-     * Performs both syntactic and semantic checks on a timestamp-sorted copy
-     * of the collection and returns an array of `ValidationError` objects for
-     * each rule violation. The method does not mutate the collection.
-     *
-     * Checks performed:
-     * - Empty collections return an empty error array.
-     * - Timestamps are strictly increasing (`timestamp_non_increasing`).
-     * - No consecutive duplicate event types (`consecutive_duplicate`).
-     * - Sequence must begin with `start` (`must_start`).
-     * - State-machine rules for transitions:
-     *   - `start` allowed only from `idle` (`unexpected_start`).
-     *   - `pause` allowed only from `running` (`unexpected_pause`).
-     *   - `resume` allowed only from `paused` (`unexpected_resume`).
-     *   - `stop` allowed only from non-`idle` (`unexpected_stop`).
-     * - Unknown event types are reported (`unknown_event`).
-     *
-     * Return value:
-     * - An array of `ValidationError` objects: `{ index, code, message, record? }`.
-     * - `index` refers to the position in the timestamp-sorted sequence.
-     *
-     * Options:
-     * @param opts.startFromLatest If true, sort errors newest-first to
-     * assist interactive recovery workflows (default: oldest-first).
-     */
+    serialize(): string[] { return this.toLines(); }
+
+    filterByJob(job: string): EventCollection {
+        return new EventCollection(this.events.filter(e => e.job === job));
+    }
+
+    sorted(): Event[] {
+        return this.events.slice().sort((a, b) => a.timestamp - b.timestamp);
+    }
+
+    add(ev: Event): void {
+        this.events.push(ev);
+    }
+
+    toEvents(): Event[] { return this.events.slice(); }
+
+    // Compare two events for equality
+    static eventsEqual(a: Event, b: Event): boolean { return a.equals(b); }
+
+    // Convenience snake_case alias
+    static parse_lines(lines: Iterable<string>): EventCollection { return EventCollection.parse(lines); }
+    to_lines(): string[] { return this.serialize(); }
+
+    // Immutable operations
+    replaceEvent(oldEvent: Event, newEvent: Event): EventCollection {
+        const idx = this.events.findIndex(e => e.equals(oldEvent));
+        if (idx === -1) return new EventCollection(this.events);
+        const next = this.events.slice();
+        next[idx] = newEvent;
+        return new EventCollection(next);
+    }
+
+    mapEvents(fn: (e: Event) => Event): EventCollection {
+        const mapped = this.events.map(e => fn(e));
+        return new EventCollection(mapped);
+    }
+
+    renameJob(oldName: string, newName: string): EventCollection {
+        return this.mapEvents(e => (e.job === oldName ? e.withJob(newName) : e));
+    }
+
+    retimeEvent(target: Event, newTimestamp: number): EventCollection {
+        return this.updateEvent(target, e => e.withTimestamp(newTimestamp));
+    }
+
+    updateEvent(target: Event, updater: (e: Event) => Event): EventCollection {
+        const idx = this.events.findIndex(e => e.equals(target));
+        if (idx === -1) return new EventCollection(this.events);
+        const copy = this.events.slice();
+        const updated = updater(copy[idx]);
+        copy[idx] = updated;
+        return new EventCollection(copy);
+    }
+
+    // Rewrite allows mapping to a replacement Event or returning null to remove the event.
+    rewrite(fn: (e: Event) => Event | null): EventCollection {
+        const out: Event[] = [];
+        for (const e of this.events) {
+            const r = fn(e);
+            if (r) out.push(r);
+        }
+        return new EventCollection(out);
+    }
+
+    // Validate the collection using domain semantics.
     validate(opts?: { startFromLatest?: boolean }): ValidationError[] {
         const errors: ValidationError[] = [];
-        const sorted = this.records.slice().sort((a, b) => a.timestamp - b.timestamp);
-
-        // If there are no records, nothing to validate
+        const sorted = this.sorted();
         if (sorted.length === 0) return errors;
 
-        // Enforce strictly increasing timestamps
-        for (let i = 1; i < sorted.length; i++) {
-            if (sorted[i].timestamp <= sorted[i - 1].timestamp) {
-                errors.push({
-                    index: i,
-                    code: "timestamp_non_increasing",
-                    message: `Timestamps must increase: ${sorted[i - 1].timestamp} >= ${sorted[i].timestamp} at index ${i}`,
-                    record: sorted[i]
-                });
-            }
-        }
-
-        // Disallow consecutive duplicate events (same event type back-to-back)
-        for (let i = 1; i < sorted.length; i++) {
-            if (sorted[i].event === sorted[i - 1].event) {
-                errors.push({
-                    index: i,
-                    code: "consecutive_duplicate",
-                    message: `Consecutive duplicate event '${sorted[i].event}' at index ${i}`,
-                    record: sorted[i]
-                });
-            }
-        }
-
-        // Ensure sequence begins with a start event for this job
+        // Ensure sequence begins with start for the first event
         const first = sorted[0];
-        if (first.event !== "start") {
-            errors.push({ index: 0, code: "must_start", message: `Sequence for job ${first.job} must begin with start (found ${first.event} at ${first.timestamp})`, record: first });
+        if (!first.isStart()) {
+            errors.push({ index: 0, code: "must_start", message: `Sequence for job ${first.job} must begin with start (found ${first.type} at ${first.timestamp})`, record: first.toDTO() });
         }
 
-        // State-machine validation (forward in time)
-        let state: State = "idle";
-        for (let i = 0; i < sorted.length; i++) {
-            const r = sorted[i];
-            const e = r.event;
-
-            if (e === "start") {
-                if (state !== "idle") {
-                    errors.push({ index: i, code: "unexpected_start", message: `Unexpected start at ${r.timestamp} for job ${r.job}`, record: r });
-                }
-                state = "running";
-                continue;
+        for (let i = 1; i < sorted.length; i++) {
+            const prev = sorted[i - 1];
+            const cur = sorted[i];
+            const vt = prev.validateTransition(cur);
+            if (vt) {
+                vt.index = i;
+                errors.push(vt);
             }
-
-            if (e === "pause") {
-                if (state !== "running") {
-                    errors.push({ index: i, code: "unexpected_pause", message: `Unexpected pause at ${r.timestamp} for job ${r.job}`, record: r });
-                }
-                state = "paused";
-                continue;
-            }
-
-            if (e === "resume") {
-                if (state !== "paused") {
-                    errors.push({ index: i, code: "unexpected_resume", message: `Unexpected resume at ${r.timestamp} for job ${r.job}`, record: r });
-                }
-                state = "running";
-                continue;
-            }
-
-            if (e === "stop") {
-                if (state === "idle") {
-                    errors.push({ index: i, code: "unexpected_stop", message: `Unexpected stop at ${r.timestamp} for job ${r.job}`, record: r });
-                }
-                state = "idle";
-                continue;
-            }
-
-            // Unknown event type
-            errors.push({ index: i, code: "unknown_event", message: `Unknown event '${e}' at ${r.timestamp} for job ${r.job}`, record: r });
         }
 
-        // If requested, order errors starting from latest-first to facilitate fixing recent records first
-        if (opts && opts.startFromLatest) {
-            errors.sort((a, b) => b.index - a.index);
-        } else {
-            errors.sort((a, b) => a.index - b.index);
-        }
+        // Sort errors per request
+        if (opts && opts.startFromLatest) errors.sort((a, b) => b.index - a.index);
+        else errors.sort((a, b) => a.index - b.index);
 
         return errors;
     }
 
     currentState(): State {
         let state: State = "idle";
-        const sorted = this.sorted();
-        for (const r of sorted) {
-            if (r.event === "start") state = "running";
-            else if (r.event === "pause") state = "paused";
-            else if (r.event === "resume") state = "running";
-            else if (r.event === "stop") state = "idle";
+        for (const r of this.sorted()) {
+            if (r.isStart()) state = "running";
+            else if (r.isPause()) state = "paused";
+            else if (r.isResume()) state = "running";
+            else if (r.isStop()) state = "idle";
         }
         return state;
     }
 }
 
-// no default export; validation lives on EventCollection
+// No default export; validation lives on EventCollection and Event

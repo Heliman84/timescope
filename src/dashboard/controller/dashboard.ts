@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import { resolve_paths } from "../../core/paths";
 import { load_all_log_entries, update_log_entry } from "../../core/logs";
-import { parseLogLine } from "../../core/event";
+import { Event } from "../../core/event";
 
 export async function handle_dashboard(context: vscode.ExtensionContext) {
     const panel = vscode.window.createWebviewPanel(
@@ -52,12 +52,12 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             for (const e of entries) {
                 const r = e.record;
                 // If parsing failed (malformed), skip
-                if (!r || typeof r.event !== "string" || typeof r.job !== "string" || typeof r.timestamp !== "number") continue;
+                if (!r || typeof r.type !== "string" || typeof r.job !== "string" || typeof r.timestamp !== "number") continue;
 
-                const key = `${r.event}|${r.job}|${r.timestamp}|${(r as any).task || ""}`;
+                const key = `${r.type}|${r.job}|${r.timestamp}|${(r as any).task || ""}`;
                 if (!map.has(key)) {
                     map.set(key, {
-                        event: r.event,
+                        event: r.type,
                         job: r.job,
                         timestamp: r.timestamp,
                         task: (r as any).task || "",
@@ -86,12 +86,19 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             const summary = { globalReplaced: false, workspaceReplaced: false, errors: [] as string[] };
 
             for (const occ of occurrences) {
-                const res = update_log_entry(paths, occ.raw, new_record);
+                let candidate: Event;
+                try {
+                    candidate = Event.create(new_record);
+                } catch {
+                    // if payload is already an Event instance, allow it
+                    candidate = new_record as Event;
+                }
+                const res = update_log_entry(paths, occ.raw, candidate);
                 summary.globalReplaced = summary.globalReplaced || res.globalReplaced;
                 summary.workspaceReplaced = summary.workspaceReplaced || res.workspaceReplaced;
                 if (res.errors) {
                     // Filter errors to only those that reference the edited occurrences
-                    const occRecords = occurrences.map((o: any) => parseLogLine(o.raw)).filter((r: any) => !!r) as any[];
+                    const occRecords = occurrences.map((o: any) => Event.fromJSONL(o.raw)).filter((r: any) => !!r) as any[];
                     for (const er of res.errors) {
                         if (typeof er === 'string') {
                             summary.errors.push(er);
@@ -99,7 +106,7 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                         }
                         const rec = (er as any).record;
                         if (!rec) continue;
-                        const matched = occRecords.some(r => r.event === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
+                        const matched = occRecords.some(r => r.type === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
                         if (matched) summary.errors.push(er.message || JSON.stringify(er));
                     }
                 }
@@ -110,11 +117,11 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             const map = new Map<string, any>();
             for (const e of updated_entries) {
                 const r = e.record;
-                if (!r || typeof r.event !== "string" || typeof r.job !== "string" || typeof r.timestamp !== "number") continue;
-                const key = `${r.event}|${r.job}|${r.timestamp}|${(r as any).task || ""}`;
+                if (!r || typeof r.type !== "string" || typeof r.job !== "string" || typeof r.timestamp !== "number") continue;
+                const key = `${r.type}|${r.job}|${r.timestamp}|${(r as any).task || ""}`;
                 if (!map.has(key)) {
                     map.set(key, {
-                        event: r.event,
+                        event: r.type,
                         job: r.job,
                         timestamp: r.timestamp,
                         task: (r as any).task || "",
@@ -143,12 +150,18 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             for (const ed of edits) {
                 const occurrences = ed.occurrences || [];
                 const new_record = ed.new_record;
+                let candidate: Event;
+                try {
+                    candidate = Event.create(new_record);
+                } catch {
+                    candidate = new_record as Event;
+                }
                 for (const occ of occurrences) {
-                    const res = update_log_entry(paths, occ.raw, new_record);
+                    const res = update_log_entry(paths, occ.raw, candidate);
                     summary.globalReplaced = summary.globalReplaced || res.globalReplaced;
                     summary.workspaceReplaced = summary.workspaceReplaced || res.workspaceReplaced;
                     if (res.errors) {
-                        const occRecords = occurrences.map((o: any) => parseLogLine(o.raw)).filter((r: any) => !!r) as any[];
+                        const occRecords = occurrences.map((o: any) => Event.fromJSONL(o.raw)).filter((r: any) => !!r) as any[];
                         for (const er of res.errors) {
                             if (typeof er === 'string') {
                                 summary.errors.push(er);
@@ -156,7 +169,7 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                             }
                             const rec = (er as any).record;
                             if (!rec) continue;
-                            const matched = occRecords.some(r => r.event === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
+                            const matched = occRecords.some(r => r.type === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
                             if (matched) summary.errors.push(er.message || JSON.stringify(er));
                         }
                     }
@@ -168,11 +181,11 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             const map = new Map<string, any>();
             for (const e of updated_entries) {
                 const r = e.record;
-                if (!r || typeof r.event !== "string" || typeof r.job !== "string" || typeof r.timestamp !== "number") continue;
-                const key = `${r.event}|${r.job}|${r.timestamp}|${(r as any).task || ""}`;
+                if (!r || typeof r.type !== "string" || typeof r.job !== "string" || typeof r.timestamp !== "number") continue;
+                const key = `${r.type}|${r.job}|${r.timestamp}|${(r as any).task || ""}`;
                 if (!map.has(key)) {
                     map.set(key, {
-                        event: r.event,
+                        event: r.type,
                         job: r.job,
                         timestamp: r.timestamp,
                         task: (r as any).task || "",

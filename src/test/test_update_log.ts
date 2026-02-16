@@ -2,9 +2,8 @@ import * as fs from "fs";
 import * as path from "path";
 import * as assert from "assert";
 import { append_log_record, load_all_log_entries, update_log_entry } from "../core/logs";
-import { parseLogLine } from "../core/event";
+import { Event } from "../core/event";
 import { TimeScopePaths } from "../core/paths";
-import { LogRecord } from "../core/types";
 
 export function run_update_log_tests(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `update-${Date.now()}`);
@@ -20,20 +19,20 @@ export function run_update_log_tests(): void {
     };
 
     // create matching records in both files
-    append_log_record(paths, { event: "start", job: "foil", timestamp: 1000 });
-    append_log_record(paths, { event: "stop", job: "foil", timestamp: 2000, task: "t" });
+    append_log_record(paths, Event.create({ event: "start", job: "foil", timestamp: 1000 }));
+    append_log_record(paths, Event.create({ event: "stop", job: "foil", timestamp: 2000, task: "t" }));
 
     // duplicate into workspace mirror (simulate previously written)
     fs.appendFileSync(wsPath, fs.readFileSync(globalPath, "utf8"), "utf8");
 
     // Load entries and pick the first start line raw
     const entries = load_all_log_entries(paths);
-    const startEntry = entries.find(e => e.record.event === "start" && e.record.job === "foil");
+    const startEntry = entries.find(e => e.record.type === "start" && e.record.job === "foil");
     assert.ok(startEntry, "found start entry");
 
     const old_raw = startEntry!.raw;
 
-    const newRecord: LogRecord = { event: "start", job: "foil", timestamp: 500 };
+    const newRecord = Event.create({ event: "start", job: "foil", timestamp: 500 });
 
     const res = update_log_entry(paths, old_raw, newRecord);
     assert.ok(res.globalReplaced || res.workspaceReplaced, "expected at least one replacement");
@@ -43,7 +42,7 @@ export function run_update_log_tests(): void {
     }
 
     // Verify both files now have the new timestamp
-    const all = load_all_log_entries(paths).filter(e => e.record.job === "foil" && e.record.event === "start");
+    const all = load_all_log_entries(paths).filter(e => e.record.job === "foil" && e.record.type === "start");
     assert.ok(all.some(e => e.record.timestamp === 500), "at least one start updated to 500");
 
     console.log("✅ update_log tests passed");
@@ -72,12 +71,12 @@ export function run_dashboard_controller_error_scoping_test(): void {
 
     const errors = [errA, errOther];
 
-    const occRecords = occurrences.map((o: any) => parseLogLine(o.raw)).filter((r: any) => !!r) as any[];
+    const occRecords = occurrences.map((o: any) => Event.fromJSONL(o.raw)).filter((r: any) => !!r) as any[];
     const filtered: string[] = [];
     for (const er of errors) {
         const rec = (er as any).record;
         if (!rec) continue;
-        const matched = occRecords.some(r => r.event === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
+        const matched = occRecords.some(r => r.type === rec.event && r.job === rec.job && r.timestamp === rec.timestamp && ((r as any).task || '') === ((rec as any).task || ''));
         if (matched) filtered.push(er.message);
     }
 
