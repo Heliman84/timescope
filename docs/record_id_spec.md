@@ -27,9 +27,9 @@ This identifier is:
 - Represent using exactly 5 characters, left‑padded with 0 if needed.
 
 Example:
-1739582342 seconds → base36 → K3T2A
+1739582342 seconds → base36 → k3t2a
 
-This provides ~25 years of unique seconds before rollover.
+This provides ~19 years of unique seconds before rollover.
 
 ---
 
@@ -40,12 +40,13 @@ Inputs:
 
 Event Type Mapping:
 start  = 0
-stop   = 1
-pause  = 2
-resume = 3
+pause  = 1
+resume = 2
+stop   = 3
 
 Bucket Calculation:
 bucket = floor(timestamp_original_ms / 111)   // 0–8
+** edge case: 999ms is in bucket 8, not bucket 9 ***
 
 Combine bucket + event type:
 bucket1_value = bucket * 4 + event_type       // 0–35
@@ -67,7 +68,7 @@ Job Identity:
 Each job has a permanent, immutable job_id stored in jobs.json:
 
 {
-  "job_id": "k3f9",
+  "job_id": "k3f9g",
   "title": "Lantern - Speaker"
 }
 
@@ -81,7 +82,7 @@ Hashing:
 - Take the first 3 characters.
 
 Example:
-hash("k3f9") → 0xA93F12C4 → base36 → A9F12C4 → A9F
+hash("k3f9g") → 0xA93F12C4 → base36 → a9f12c4 → a9f
 
 Properties:
 - Stable across renames
@@ -98,12 +99,12 @@ Properties:
 <time5>-<bucket1>-<jobHash3>
 
 Example:
-K3T2A-4-A9F
+k3t2a-4-a9f
 
 Where:
-- K3T2A → timestamp_original_seconds
-- 4 → bucket (ms) + event type
-- A9F → job hash
+- k3t2a → timestamp_original_seconds
+- 4 → bucket (ms) + event type -- 4 means bucket 1 (111–221ms) + event type 0 (start)
+- a9f → job hash
 
 ---
 
@@ -124,7 +125,7 @@ This value is stable forever.
 A collision requires all of the following:
 
 - same job
-- same second
+- same second (within any 19‑year bucket)
 - same 111ms bucket
 - same event type
 
@@ -138,20 +139,20 @@ No additional collision handling is required.
 ## 6. Example IDs
 
 Same job, same second, different ms:
-K3T2A-4-A9F
-K3T2A-5-A9F
-K3T2A-6-A9F
+k3t2a-4-a9f
+k3t2a-5-a9f
+k3t2a-6-a9f
 
 Same second, different jobs:
-K3T2A-4-A9F
-K3T2A-4-B2K
-K3T2A-4-C7X
+k3t2a-4-a9f
+k3t2a-4-b2k
+k3t2a-4-c7x
 
 Chronological progression:
-K3T29-X-A9F
-K3T2A-0-A9F
-K3T2B-1-A9F
-K3T2C-2-A9F
+k3t29-x-a9f
+k3t2a-0-a9f
+k3t2b-1-a9f
+k3t2c-2-a9f
 
 ---
 
@@ -171,3 +172,65 @@ This Record ID scheme is:
 - Domain‑specific and ergonomic
 
 It is designed for clarity, stability, and long‑term maintainability.
+
+
+## 8. Job ID Specification
+
+Each job in TimeScope receives a permanent, immutable identifier:
+
+job_id = <job5>
+
+This identifier is:
+
+- Deterministic — identical seed titles always produce identical IDs  
+- Stable — unaffected by renames or edits  
+- Compact — 5 characters, base‑36 lowercase  
+- Human‑readable — short, scannable, visually distinct  
+- Machine‑friendly — safe for filenames, URLs, and sorting  
+
+The job_id is created once and never changes.
+
+---
+
+### 8.1 Identity Input
+
+A job’s identity is defined solely by its original title:
+
+seed_title — the title at the moment the job is created
+
+This value is stored permanently and never modified.  
+The visible `title` field may change freely without affecting job_id.
+
+---
+
+### 8.2 Hashing
+
+Compute a stable 32‑bit hash of:
+
+hash_input = seed_title
+
+Use FNV‑1a 32‑bit (or any deterministic, platform‑independent hash).
+
+Convert the hash to base‑36 **lowercase**.
+
+Take the first 5 characters:
+
+job5 = base36_lower(hash)[0..4]
+
+Example:
+
+hash("Lantern - Speaker") → 0xA93F12C4  
+base36_lower → a9f12c4  
+job_id = a9f12
+
+---
+
+### 8.3 Properties
+
+- Stable across renames  
+- Stable across machines  
+- Stable across merges  
+- Not reversible  
+- Collision‑resistant for all practical purposes  
+- Minimal identity semantics (title‑only)  
+- Future‑proof — additional identity inputs may be added later without breaking existing IDs

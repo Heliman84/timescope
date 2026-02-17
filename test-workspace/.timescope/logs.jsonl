@@ -1,34 +1,34 @@
 {"_format_version":1}
-{"event":"start"   , "job":"good_job1", "timestamp":1767882370514}
-{"event":"stop"    , "job":"good_job1", "timestamp":1767895198080, "task":"simple start_stop"}
-{"event":"start"   , "job":"bad_job1", "timestamp":1767898178692}
-{"event":"pause"   , "job":"bad_job1", "timestamp":1767901855245}
-{"event":"resume"  , "job":"bad_job1", "timestamp":1767906292338}
-{"event":"start"   , "job":"good_job2", "timestamp":1767906292338}
-{"event":"pause"   , "job":"good_job2", "timestamp":1767909284567}
-{"event":"resume"  , "job":"good_job2", "timestamp":1767912636238}
-{"event":"stop"    , "job":"good_job2", "timestamp":1767912967977, "task":"_should be a good job_ BUT this had a stop injected before pause"}
-{"event":"stop"    , "job":"bad_job3", "timestamp":1769998732862, "task":"missing start"}
-{"event":"start"   , "job":"bad_job4", "timestamp":1770040988301}
-{"event":"start"   , "job":"good_job3", "timestamp":1770041303663}
-{"event":"stop"    , "job":"good_job3", "timestamp":1770041324337, "task":"scrubber inserted stop before this"}
-{"event":"start"   , "job":"good_job4", "timestamp":1770041328196}
-{"event":"stop"    , "job":"good_job4", "timestamp":1770042346618, "task":"simple start_stop"}
-{"event":"start"   , "job":"bad_job5", "timestamp":1770059437814}
-{"event":"pause"   , "job":"bad_job5", "timestamp":1770062558121}
-{"event":"resume"  , "job":"bad_job5", "timestamp":1770062568306}
-{"event":"pause"   , "job":"bad_job5", "timestamp":1770071904578}
-{"event":"resume"  , "job":"bad_job5", "timestamp":1770075761282}
-{"event":"start"   , "job":"bad_job6", "timestamp":1770075761282}
-{"event":"start"   , "job":"good_job5", "timestamp":1770236820000}
-{"event":"stop"    , "job":"good_job5"                , "timestamp":1770246000000, "task":"simple start_stop_test"}
-{"event":"start"   , "job":"test-issue9"              , "timestamp":1771119060000}
-{"event":"pause"   , "job":"test-issue9"              , "timestamp":1771119060000}
-{"event":"resume"  , "job":"test-issue9"              , "timestamp":1771119060000}
-{"event":"stop"    , "job":"test-issue9"              , "timestamp":1771119060000, "task":"bug test - identical timestamps?"}
-{"event":"start"   , "job":"test-issue9"              , "timestamp":1771119496661}
-{"event":"pause"   , "job":"test-issue9"              , "timestamp":1771119500996}
-{"event":"resume"  , "job":"test-issue9"              , "timestamp":1771119503471}
-{"event":"stop"    , "job":"test-issue9"              , "timestamp":1771119513000, "task":"will this overwrite? test check this"}
+{"event":"start"   , "job":"good_job1"                     , "timestamp":1767882370514}
+{"event":"stop"    , "job":"good_job1"                     , "timestamp":1767895198080, "task":"simple start_stop"}
+{"event":"start"   , "job":"bad_job1"                      , "timestamp":1767898178692}
+{"event":"pause"   , "job":"bad_job1"                      , "timestamp":1767901855245}
+{"event":"resume"  , "job":"bad_job1"                      , "timestamp":1767906292338}
+{"event":"start"   , "job":"good_job2"                     , "timestamp":1767906292338}
+{"event":"pause"   , "job":"good_job2"                     , "timestamp":1767909284567}
+{"event":"resume"  , "job":"good_job2"                     , "timestamp":1767912636238}
+{"event":"stop"    , "job":"good_job2"                     , "timestamp":1767912967977, "task":"_should be a good job_ BUT this had a stop injected before pause"}
+{"event":"stop"    , "job":"bad_job3"                      , "timestamp":1769998732862, "task":"missing start"}
+{"event":"start"   , "job":"bad_job4"                      , "timestamp":1770040988301}
+{"event":"start"   , "job":"good_job3"                     , "timestamp":1770041303663}
+{"event":"stop"    , "job":"good_job3"                     , "timestamp":1770041324337, "task":"scrubber inserted stop before this"}
+{"event":"start"   , "job":"good_job4"                     , "timestamp":1770041328196}
+{"event":"stop"    , "job":"good_job4"                     , "timestamp":1770042346618, "task":"simple start_stop"}
+{"event":"start"   , "job":"bad_job5"                      , "timestamp":1770059437814}
+{"event":"pause"   , "job":"bad_job5"                      , "timestamp":1770062558121}
+{"event":"resume"  , "job":"bad_job5"                      , "timestamp":1770062568306}
+{"event":"pause"   , "job":"bad_job5"                      , "timestamp":1770071904578}
+{"event":"resume"  , "job":"bad_job5"                      , "timestamp":1770075761282}
+{"event":"start"   , "job":"bad_job6"                      , "timestamp":1770075761282}
+{"event":"start"   , "job":"good_job5"                     , "timestamp":1770236820000}
+{"event":"stop"    , "job":"good_job5"                     , "timestamp":1770246000000, "task":"simple start_stop_test"}
+{"event":"start"   , "job":"test-issue9"                   , "timestamp":1771119060000}
+{"event":"pause"   , "job":"test-issue9"                   , "timestamp":1771119060000}
+{"event":"resume"  , "job":"test-issue9"                   , "timestamp":1771119060000}
+{"event":"stop"    , "job":"test-issue9"                   , "timestamp":1771119060000, "task":"bug test - identical timestamps?"}
+{"event":"start"   , "job":"test-issue9"                   , "timestamp":1771119496661}
+{"event":"pause"   , "job":"test-issue9"                   , "timestamp":1771119680000}
+{"event":"resume"  , "job":"test-issue9"                   , "timestamp":1771119803000}
+{"event":"stop"    , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"will this overwrite? test check this"}
 {"event":"start"   , "job":"test-issue9"                   , "timestamp":1771299903663}
 {"event":"stop"    , "job":"test-issue9"                   , "timestamp":1771299932604, "task":"check  padding"}
