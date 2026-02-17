@@ -1,9 +1,9 @@
 # TimeScope Record ID Specification
 
 
-## 1. Overview
+## 1. Event Record ID Specification
 
-Each TimeScope record receives a deterministic, compact, human‑readable identifier:
+Each TimeScope event record receives a deterministic, compact, human‑readable identifier of 9 characters (11 total):
 
 <time5>-<bucket1>-<jobHash3>
 
@@ -12,15 +12,14 @@ This identifier is:
 - Deterministic — identical inputs always produce identical IDs
 - Stable — unaffected by job renames or timestamp edits
 - Chronologically sortable — lexicographic sort = chronological order
-- Compact — 10 characters including separators
+- Compact — 11 characters including separators
 - Human‑scannable — left = time, middle = sub‑second ordering, right = job grouping
 
 ---
 
+### 2. Components
 
-## 2. Components
-
-### 2.1 time5 — Base‑36 Timestamp
+#### 2.1 time5 — Base‑36 Timestamp
 - Derived from timestamp_original, the timestamp assigned when the record was first created.
 - Even if the visible timestamp is edited later, timestamp_original remains unchanged.
 - Convert timestamp_original_seconds to base‑36.
@@ -33,7 +32,7 @@ This provides ~19 years of unique seconds before rollover.
 
 ---
 
-### 2.2 bucket1 — Monotonic Sub‑Second + Event Type Discriminator
+#### 2.2 bucket1 — Monotonic Sub‑Second + Event Type Discriminator
 Inputs:
 - timestamp_original_ms (0–999)
 - event_type (mapped to 0–3)
@@ -63,7 +62,7 @@ Properties:
 
 ---
 
-### 2.3 jobHash3 — Stable Job Hash
+#### 2.3 jobHash3 — Stable Job Hash
 Job Identity:
 Each job has a permanent, immutable job_id stored in jobs.json:
 
@@ -93,8 +92,7 @@ Properties:
 
 ---
 
-
-## 3. Final Record ID Format
+### 3. Final Record ID Format
 
 <time5>-<bucket1>-<jobHash3>
 
@@ -108,8 +106,7 @@ Where:
 
 ---
 
-
-## 4. Session ID
+### 4. Session ID
 
 A session is defined by its start event:
 
@@ -119,8 +116,7 @@ This value is stable forever.
 
 ---
 
-
-## 5. Collision Behavior
+### 5. Collision Behavior
 
 A collision requires all of the following:
 
@@ -135,8 +131,7 @@ No additional collision handling is required.
 
 ---
 
-
-## 6. Example IDs
+### 6. Example IDs
 
 Same job, same second, different ms:
 k3t2a-4-a9f
@@ -157,7 +152,7 @@ k3t2c-2-a9f
 ---
 
 
-## 7. Summary of Guarantees
+### 7. Summary of Guarantees
 
 This Record ID scheme is:
 
@@ -215,7 +210,7 @@ Convert the hash to base‑36 **lowercase**.
 
 Take the first 5 characters:
 
-job5 = base36_lower(hash)[0..4]
+job5 = base36_lower(hash) [0..4]
 
 Example:
 
