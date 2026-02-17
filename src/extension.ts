@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 
 import { resolve_paths, TimeScopePaths } from "./core/paths";
 import { load_all_jobs, add_job, rename_job, delete_job } from "./core/jobs";
-import { ui } from "./core/state";
+import { runtimeState, ui } from "./core/state";
 import { 
     start_timer_interval,
     stop_timer_interval,
@@ -23,16 +23,14 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     const paths: TimeScopePaths = resolve_paths(context);
     const repo = new LogRepository(paths);
-    let activeSession: Session | null = null;
-
     const setActiveSession = (session: Session | null) => {
-        activeSession = session;
+        runtimeState.activeSession = session;
         update_status_bar();
-        if (activeSession && !activeSession.isIdle) start_timer_interval();
+        if (runtimeState.activeSession && runtimeState.activeSession.isOpen) start_timer_interval();
         else stop_timer_interval();
     };
 
-    set_session_provider(() => activeSession);
+    set_session_provider(() => runtimeState.activeSession);
 
     //
     // Update settings UI to show resolved global paths
@@ -95,7 +93,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Check for orphaned session from previous VSCode shutdown and offer recovery
     const recoveredSession = await checkAndRecover(repo);
-    setActiveSession(recoveredSession);
+    setActiveSession(recoveredSession && recoveredSession.isOpen ? recoveredSession : null);
 
     //
     // ────────────────────────────────────────────────────────────────
@@ -147,18 +145,18 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     function start_job(job: string) {
-        const session = repo.loadSession(job);
-        if (!session.isIdle) {
-            vscode.window.showWarningMessage(`Session already active for job '${job}'.`);
+        const last = repo.loadLastSession();
+        if (last && last.isOpen) {
+            vscode.window.showWarningMessage(`Session already active for job '${last.currentJob}'.`);
             return;
         }
 
-        const last = session.lastEvent;
-        const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
-        const event = session.start(ts);
-        repo.appendValidated(event);
+        const ts = last ? ensureAfter(last.lastEvent.timestamp, Date.now()) : Date.now();
+        const session = Session.start(job, ts);
+        repo.appendValidated(session.startEvent);
 
-        setActiveSession(repo.loadActiveSession());
+        const next = repo.loadLastSession();
+        setActiveSession(next && next.isOpen ? next : null);
     }
 
     //
@@ -168,28 +166,18 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.pause", async () => {
-            const sessions = Array.from(repo.loadSessionsByJob().values()).filter(s => s.isRunning);
-            if (sessions.length === 0) {
+            const session = repo.loadLastSession();
+            if (!session || !session.isOpen || !session.isRunning) {
                 vscode.window.showWarningMessage("Cannot pause — no running sessions.");
                 return;
             }
 
-            let target: Session | null = sessions[0];
-            if (sessions.length > 1) {
-                const picked = await vscode.window.showQuickPick(
-                    sessions.map(s => ({ label: s.currentJob })),
-                    { placeHolder: "Select a job to pause" }
-                );
-                if (!picked) return;
-                target = sessions.find(s => s.currentJob === picked.label) || null;
-            }
-
-            if (!target) return;
-            const last = target.lastEvent;
-            const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
-            const event = target.pause(ts);
+            const lastEvent = session.lastEvent;
+            const ts = ensureAfter(lastEvent.timestamp, Date.now());
+            const event = session.pause(ts);
             repo.appendValidated(event);
-            setActiveSession(repo.loadActiveSession());
+            const next = repo.loadLastSession();
+            setActiveSession(next && next.isOpen ? next : null);
         })
     );
 
@@ -200,28 +188,18 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.resume", async () => {
-            const sessions = Array.from(repo.loadSessionsByJob().values()).filter(s => s.isPaused);
-            if (sessions.length === 0) {
+            const session = repo.loadLastSession();
+            if (!session || !session.isOpen || !session.isPaused) {
                 vscode.window.showWarningMessage("Cannot resume — no paused sessions.");
                 return;
             }
 
-            let target: Session | null = sessions[0];
-            if (sessions.length > 1) {
-                const picked = await vscode.window.showQuickPick(
-                    sessions.map(s => ({ label: s.currentJob })),
-                    { placeHolder: "Select a job to resume" }
-                );
-                if (!picked) return;
-                target = sessions.find(s => s.currentJob === picked.label) || null;
-            }
-
-            if (!target) return;
-            const last = target.lastEvent;
-            const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
-            const event = target.resume(ts);
+            const lastEvent = session.lastEvent;
+            const ts = ensureAfter(lastEvent.timestamp, Date.now());
+            const event = session.resume(ts);
             repo.appendValidated(event);
-            setActiveSession(repo.loadActiveSession());
+            const next = repo.loadLastSession();
+            setActiveSession(next && next.isOpen ? next : null);
         })
     );
 
@@ -232,33 +210,21 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.stop", async () => {
-            const sessions = Array.from(repo.loadSessionsByJob().values()).filter(s => !s.isIdle);
-            if (sessions.length === 0) {
+            const session = repo.loadLastSession();
+            if (!session || !session.isOpen) {
                 vscode.window.showWarningMessage("No active session to stop.");
                 return;
             }
-
-            let target: Session | null = sessions[0];
-            if (sessions.length > 1) {
-                const picked = await vscode.window.showQuickPick(
-                    sessions.map(s => ({ label: s.currentJob })),
-                    { placeHolder: "Select a job to stop" }
-                );
-                if (!picked) return;
-                target = sessions.find(s => s.currentJob === picked.label) || null;
-            }
-
-            if (!target) return;
 
             const task_note = await vscode.window.showInputBox({
                 prompt: "Task description (optional)"
             });
 
-            const last = target.lastEvent;
-            const ts = last ? ensureAfter(last.timestamp, Date.now()) : Date.now();
-            const event = target.stop(task_note || undefined, ts);
+            const lastEvent = session.lastEvent;
+            const ts = ensureAfter(lastEvent.timestamp, Date.now());
+            const event = session.stop(task_note || undefined, ts);
             repo.appendValidated(event);
-            setActiveSession(repo.loadActiveSession());
+            setActiveSession(null);
         })
     );
 

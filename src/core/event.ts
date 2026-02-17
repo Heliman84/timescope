@@ -10,8 +10,6 @@ export interface EventDTO {
     task?: string;
 }
 
-export type State = "idle" | "running" | "paused";
-
 export interface ValidationError {
     index: number;
     code: string;
