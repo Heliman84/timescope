@@ -3,6 +3,8 @@
  */
 export type EventType = "start" | "stop" | "pause" | "resume";
 
+export type State = "idle" | "running" | "paused";
+
 export interface EventDTO {
     event: EventType;
     job: string;

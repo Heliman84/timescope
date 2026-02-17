@@ -140,23 +140,17 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    function ensureAfter(lastTimestamp: number, requested: number): number {
-        return requested <= lastTimestamp ? lastTimestamp + 1 : requested;
-    }
-
     function start_job(job: string) {
-        const last = repo.loadLastSession();
-        if (last && last.isOpen) {
-            vscode.window.showWarningMessage(`Session already active for job '${last.currentJob}'.`);
+        if (runtimeState.activeSession && runtimeState.activeSession.isOpen) {
+            vscode.window.showWarningMessage(`Session already active for job '${runtimeState.activeSession.currentJob}'.`);
             return;
         }
 
-        const ts = last ? ensureAfter(last.lastEvent.timestamp, Date.now()) : Date.now();
-        const session = Session.start(job, ts);
-        repo.appendValidated(session.startEvent);
-
-        const next = repo.loadLastSession();
-        setActiveSession(next && next.isOpen ? next : null);
+        const session = Session.start(job);
+        const startEvent = session.startEvent;
+        if (!startEvent) throw new Error("Failed to create start event");
+        repo.appendValidated(startEvent);
+        setActiveSession(session);
     }
 
     //
@@ -166,18 +160,15 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.pause", async () => {
-            const session = repo.loadLastSession();
+            const session = runtimeState.activeSession;
             if (!session || !session.isOpen || !session.isRunning) {
                 vscode.window.showWarningMessage("Cannot pause — no running sessions.");
                 return;
             }
 
-            const lastEvent = session.lastEvent;
-            const ts = ensureAfter(lastEvent.timestamp, Date.now());
-            const event = session.pause(ts);
+            const event = session.pause();
             repo.appendValidated(event);
-            const next = repo.loadLastSession();
-            setActiveSession(next && next.isOpen ? next : null);
+            setActiveSession(session);
         })
     );
 
@@ -188,18 +179,15 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.resume", async () => {
-            const session = repo.loadLastSession();
+            const session = runtimeState.activeSession;
             if (!session || !session.isOpen || !session.isPaused) {
                 vscode.window.showWarningMessage("Cannot resume — no paused sessions.");
                 return;
             }
 
-            const lastEvent = session.lastEvent;
-            const ts = ensureAfter(lastEvent.timestamp, Date.now());
-            const event = session.resume(ts);
+            const event = session.resume();
             repo.appendValidated(event);
-            const next = repo.loadLastSession();
-            setActiveSession(next && next.isOpen ? next : null);
+            setActiveSession(session);
         })
     );
 
@@ -210,7 +198,7 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.stop", async () => {
-            const session = repo.loadLastSession();
+            const session = runtimeState.activeSession;
             if (!session || !session.isOpen) {
                 vscode.window.showWarningMessage("No active session to stop.");
                 return;
@@ -220,9 +208,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 prompt: "Task description (optional)"
             });
 
-            const lastEvent = session.lastEvent;
-            const ts = ensureAfter(lastEvent.timestamp, Date.now());
-            const event = session.stop(task_note || undefined, ts);
+            const event = session.stop(task_note || undefined);
             repo.appendValidated(event);
             setActiveSession(null);
         })
