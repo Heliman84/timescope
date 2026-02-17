@@ -177,3 +177,17 @@ Picking up after the refactor notes above, here are the concrete follow-on chang
   * Added: `src/core/recovery.ts`.
   * Workspace test fixture updated: `test-workspace/.timescope/logs.jsonl` (header + sample adjustments).
 
+### Domain-oriented refactor: Session, LogRepository, and in-memory state authority
+
+Recent work completed a major architectural refactor to restore domain-driven design principles and eliminate disk reloads during active use:
+
+Initial testing of the session recovery failed completely. This was because there were still many pieces that were fragile/programmed in place, not following proper OOP principles. So this section of effort was focused on cleaning up the architecture to make the recovery implementation more straightforward and robust. The main changes were:
+
+* **Session as single-run state machine:** Added `Session` as domain object representing a single start→(pause/resume)*→stop timeline. `Session` now owns all run-level validation, state transitions, and elapsed time calculations.
+* **LogRepository as centralized persistence:** Created `LogRepository` to own all file I/O (JSONL parsing, append dedup, workspace/global mirroring). Implemented backward-scanning APIs (`loadLastSession`, `loadLastNSessions`) for efficient O(n) tail queries without reconstructing entire session history.
+* **In-memory activeSession as authoritative state:** Refactored extension command handlers (start, pause, resume, stop) to read from `runtimeState.activeSession` instead of calling `repo.loadLastSession()` after each event. Commands now mutate the in-memory session, persist to disk via `repo.appendValidated()`, and refresh UI—no redundant disk reads during active use.
+* **Centralized runtime state:** Unified all extension-wide mutable state (active session, session provider, timer interval) in `runtimeState` container to provide clear visibility of what persists across the extension lifecycle.
+* **EventCollection remains pure:** Stripped session logic from `EventCollection`; it is now a pure immutable data container for parsing, serializing, filtering, and basic operations—no state machine behavior.
+
+This refactor improves testability, reduces coupling, eliminates wasteful disk I/O during active operation, and ensures the in-memory session is the single source of truth while the extension runs. It has also massively improved the robustness of the codebase making all parts more concise, readable, and maintainable. The recovery implementation was then built on top of this cleaner architecture, allowing for a more straightforward and reliable implementation.
+

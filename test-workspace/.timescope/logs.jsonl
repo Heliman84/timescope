@@ -30,3 +30,5 @@
 {"event":"pause"   , "job":"test-issue9"              , "timestamp":1771119500996}
 {"event":"resume"  , "job":"test-issue9"              , "timestamp":1771119503471}
 {"event":"stop"    , "job":"test-issue9"              , "timestamp":1771119513000, "task":"will this overwrite? test check this"}
+{"event":"start"   , "job":"test-issue9"                   , "timestamp":1771299903663}
+{"event":"stop"    , "job":"test-issue9"                   , "timestamp":1771299932604, "task":"check  padding"}

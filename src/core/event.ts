@@ -79,10 +79,26 @@ export class Event {
     toJSONL(): string {
         const dto = this.toDTO();
         // Ensure consistent key ordering: event, job, timestamp, task
-        if (dto.task !== undefined) {
-            return JSON.stringify({ event: dto.event, job: dto.job, timestamp: dto.timestamp, task: dto.task });
+        // Preserve human-friendly column padding for readability in the JSONL logs.
+        const EVENT_PAD = 8; // pad event value to this width
+        const JOB_PAD = 30; // pad job value to this width
+
+        const eventVal = JSON.stringify(dto.event); // includes quotes
+        const jobVal = JSON.stringify(dto.job);
+        const tsVal = String(dto.timestamp);
+        const taskVal = dto.task !== undefined ? JSON.stringify(dto.task) : undefined;
+
+        const eventInnerLen = dto.event.length;
+        const jobInnerLen = dto.job.length;
+        const padEvent = Math.max(1, EVENT_PAD - eventInnerLen);
+        const padJob = Math.max(1, JOB_PAD - jobInnerLen);
+        const padEventStr = " ".repeat(padEvent);
+        const padJobStr = " ".repeat(padJob);
+
+        if (taskVal !== undefined) {
+            return `{\"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"task\":${taskVal}` + "}";
         }
-        return JSON.stringify({ event: dto.event, job: dto.job, timestamp: dto.timestamp });
+        return `{\"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}` + "}";
     }
 
     toString(): string {
