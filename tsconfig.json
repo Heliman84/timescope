@@ -6,6 +6,13 @@
         "lib": ["es2020"],
         "sourceMap": true,
         "rootDir": "src",
+        "downlevelIteration": true,
         "strict": true
     }
+    ,
+    "exclude": [
+        "scripts",
+        "out",
+        "test-output"
+    ]
 }

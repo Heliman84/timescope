@@ -191,3 +191,15 @@ Initial testing of the session recovery failed completely. This was because ther
 
 This refactor improves testability, reduces coupling, eliminates wasteful disk I/O during active operation, and ensures the in-memory session is the single source of truth while the extension runs. It has also massively improved the robustness of the codebase making all parts more concise, readable, and maintainable. The recovery implementation was then built on top of this cleaner architecture, allowing for a more straightforward and reliable implementation.
 
+### Changes in this commit
+
+* Added `Runtime` class as the single source of truth owning UI, active session, timer interval, and repositories.
+* Removed procedural `jobs.ts`
+* Introduced a job factory (`Job.create`) and migrated the activation/commands to use domain `Job` and `JobCollection`.
+* Introduced new Job record structure accoring to [Record Format Spec](../docs/record_format_spec.md) and migrated all job file interactions to use this format.
+* Removed legacy global state and module-level UI/timer globals; UI ownership now lives in `Runtime`.
+* Refactored `timer.ts` into pure helper functions that accept a `Runtime` instance and hold no module state.
+* `JobRepository` now detects legacy job-file format and advises running `scripts/upgrade_jobs.ts`.
+* Added `scripts/upgrade_jobs.ts` — an idempotent, atomic developer tool to upgrade legacy job files.
+* Completed the OOP migration across activation, commands, and repositories; tests and TypeScript checks were updated accordingly.
+* This commit finalizes the object‑oriented refactor and prepares the codebase for safer feature development.

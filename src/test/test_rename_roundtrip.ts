@@ -40,7 +40,7 @@ export function run_rename_roundtrip_test(): void {
 
     // Expected: same records but alpha -> gamma
     const expectedEvents = recs.map(r => (r.job === "alpha" ? r.withJob("gamma") : r));
-    const expectedLines = EventCollection.fromEvents(expectedEvents).toLines();
+    const expectedLines = EventCollection.fromArray(expectedEvents).toLines();
     // files now include a file-level header as the first line
     const headerLine = JSON.stringify({ _format_version: 1 });
     expectedLines.unshift(headerLine);

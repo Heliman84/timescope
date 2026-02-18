@@ -200,7 +200,7 @@ export class EventCollection {
         this.events = events ? events.slice() : [];
     }
 
-    static fromEvents(events: Event[]): EventCollection {
+    static fromArray(events: Event[]): EventCollection {
         return new EventCollection(events);
     }
 

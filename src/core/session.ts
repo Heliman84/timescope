@@ -18,7 +18,7 @@ export class Session {
         if (incoming.length > 0) {
             const errors = this.ensureSingleSession(incoming, job);
             if (errors.length > 0) throw new Error(errors[0].message);
-            this.events = EventCollection.fromEvents(incoming);
+            this.events = EventCollection.fromArray(incoming);
         } else {
             this.events = new EventCollection();
         }
@@ -27,7 +27,7 @@ export class Session {
     static fromEvents(events: Event[]): Session {
         if (events.length === 0) throw new Error("Cannot create Session from empty event list");
         const job = events[0].job;
-        return new Session(job, EventCollection.fromEvents(events));
+        return new Session(job, EventCollection.fromArray(events));
     }
 
 
@@ -258,6 +258,6 @@ export class Session {
     }
 
     toEventCollection(): EventCollection {
-        return EventCollection.fromEvents(this.events.toEvents());
+        return EventCollection.fromArray(this.events.toEvents());
     }
 }
