@@ -5,6 +5,7 @@ import { Event, EventCollection, ValidationError } from "./event";
 import { Session } from "./session";
 import { EventDTO } from "./event_dto";
 import { Job } from "./job";
+import { ensureDirExists, readJSONLSafe } from "../utils/fs_utils.ts";
 
 const HEADER_KEY = "_format_version";
 const HEADER_LINE = JSON.stringify({ _format_version: 1 });
@@ -18,29 +19,13 @@ export class EventRepository {
         this.paths = paths;
     }
 
-    private ensureDirExists(filePath: string) {
-        const dir = path.dirname(filePath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-    }
-
-    private safeReadLines(filePath: string | undefined | null): string[] {
-        if (!filePath || !fs.existsSync(filePath)) return [];
-        const raw = fs.readFileSync(filePath, "utf8");
-        return raw
-            .split("\n")
-            .map(l => l.trim())
-            .filter(l => l.length > 0);
-    }
-
     private readLinesForLocation(location: "workspace" | "global" | "both" = "global"): string[] {
         const all: string[] = [];
         if (location === "global" || location === "both") {
-            all.push(...this.safeReadLines(this.paths.global_log_path));
+            all.push(...readJSONLSafe(this.paths.global_log_path));
         }
         if (location === "workspace" || location === "both") {
-            all.push(...this.safeReadLines(this.paths.workspace_log_path));
+            all.push(...readJSONLSafe(this.paths.workspace_log_path));
         }
         return all;
     }
@@ -48,11 +33,11 @@ export class EventRepository {
     appendEvent(event: Event): void {
         const line = event.toJSONL() + "\n";
 
-        this.ensureDirExists(this.paths.global_log_path);
-        if (this.paths.workspace_log_path) this.ensureDirExists(this.paths.workspace_log_path);
+        ensureDirExists(this.paths.global_log_path);
+        if (this.paths.workspace_log_path) ensureDirExists(this.paths.workspace_log_path);
 
         try {
-            const existing = this.safeReadLines(this.paths.global_log_path);
+            const existing = readJSONLSafe(this.paths.global_log_path);
             for (let i = existing.length - 1; i >= 0; i--) {
                 const parsedEvent = Event.fromJSONL(existing[i]);
                 if (!parsedEvent) continue;
@@ -104,88 +89,11 @@ export class EventRepository {
         this.appendEvent(event);
     }
 
-    loadAllLogs(): EventCollection {
-        const allLines = this.readLinesForLocation("both");
-        return EventCollection.parse_lines(allLines);
-    }
-
-    // Read all persisted records as canonical EventDTOs (skips malformed/header lines)
-    readAll(): import("./event_dto").EventDTO[] {
-        const out: import("./event_dto").EventDTO[] = [];
-        const lines = this.readLinesForLocation("both");
-        for (const l of lines) {
-            try {
-                const obj = JSON.parse(l);
-                if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
-
-                    // Strict: Event.fromJSONL will only return an Event for canonical lines.
-                    const ev = Event.fromJSONL(l);
-                    if (!ev) throw new Error("EventRepository.readAll: malformed or non-canonical record encountered");
-                    const dto = ev.toDTO();
-                    out.push(dto);
-            } catch (ex) {
-                // Per Step 4.3: do not normalize or skip — propagate the error.
-                throw ex;
-            }
-        }
-        return out;
-    }
-
-    // Append a canonical EventDTO directly (strict validation applied)
-    appendDTO(dto: EventDTO): void {
-        // Validate strictly via Event.fromDTO (requires canonical DTO)
-        const ev = Event.fromDTO(dto);
-        const line = ev.toJSONL() + "\n";
-
-        this.ensureDirExists(this.paths.global_log_path);
-        if (this.paths.workspace_log_path) this.ensureDirExists(this.paths.workspace_log_path);
-
-        if (!fs.existsSync(this.paths.global_log_path)) {
-            fs.writeFileSync(this.paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
-        } else {
-            fs.appendFileSync(this.paths.global_log_path, line, "utf8");
-        }
-
-        if (this.paths.workspace_log_path) {
-            if (!fs.existsSync(this.paths.workspace_log_path)) {
-                fs.writeFileSync(this.paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
-            } else {
-                fs.appendFileSync(this.paths.workspace_log_path, line, "utf8");
-            }
-        }
-    }
-
     loadEventCollectionForJob(job?: string): EventCollection {
-        const lines = this.safeReadLines(this.paths.global_log_path);
+        const lines = readJSONLSafe(this.paths.global_log_path);
         const col = EventCollection.parse_lines(lines);
         if (job) return col.filterByJob(job);
         return col;
-    }
-
-    loadAllLogEntries(): EventEntry[] {
-        const entries: EventEntry[] = [];
-
-        const pushLine = (line: string, src: "global" | "workspace", idx: number) => {
-            try {
-                const obj = JSON.parse(line);
-                if (obj && (obj as any)[HEADER_KEY] !== undefined) return;
-            } catch {
-                // fall through to parse attempt
-            }
-            const parsed = Event.fromJSONL(line);
-            if (parsed) entries.push({ record: parsed, raw: line, source: src, lineIndex: idx });
-            else entries.push({ record: Event.fromDTO({ id: "", event: "stop", job_title: "__MALFORMED__", timestamp: 0, task: line, job_id: "00000", time_seed: 0 }), raw: line, source: src, lineIndex: idx });
-        };
-
-        const globalLines = this.safeReadLines(this.paths.global_log_path);
-        for (let i = 0; i < globalLines.length; i++) pushLine(globalLines[i], "global", i);
-
-        if (this.paths.workspace_log_path) {
-            const wsLines = this.safeReadLines(this.paths.workspace_log_path);
-            for (let i = 0; i < wsLines.length; i++) pushLine(wsLines[i], "workspace", i);
-        }
-
-        return entries;
     }
 
     loadSessions(location: "workspace" | "global" | "both" = "global"): Session[] {
@@ -393,33 +301,17 @@ export class EventRepository {
         };
 
         if (location === "global") {
-            scanSingleN(this.safeReadLines(this.paths.global_log_path));
+            scanSingleN(this.readJSONLSafe(this.paths.global_log_path));
         } else if (location === "workspace") {
-            scanSingleN(this.safeReadLines(this.paths.workspace_log_path));
+            scanSingleN(this.readJSONLSafe(this.paths.workspace_log_path));
         } else {
             scanBothN(
-                this.safeReadLines(this.paths.global_log_path),
-                this.safeReadLines(this.paths.workspace_log_path)
+                this.readJSONLSafe(this.paths.global_log_path),
+                this.readJSONLSafe(this.paths.workspace_log_path)
             );
         }
 
         return finalized.slice().reverse();
-    }
-
-    renameJobInLog(oldName: string, newName: string): void {
-        const rewriteFile = (filePath: string | null | undefined) => {
-            if (!filePath || !fs.existsSync(filePath)) return;
-            const lines = this.safeReadLines(filePath);
-            const col = EventCollection.parse_lines(lines);
-            const renamed = col.renameJob(oldName, newName);
-            const outLines = renamed.toLines();
-            const toWrite = outLines.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...outLines];
-            this.ensureDirExists(filePath);
-            fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
-        };
-
-        rewriteFile(this.paths.global_log_path);
-        if (this.paths.workspace_log_path) rewriteFile(this.paths.workspace_log_path);
     }
 
     /**
@@ -431,7 +323,7 @@ export class EventRepository {
         if (!job) return;
         const rewriteFile = (filePath: string | null | undefined) => {
             if (!filePath || !fs.existsSync(filePath)) return;
-            const lines = this.safeReadLines(filePath);
+            const lines = this.readJSONLSafe(filePath);
             const parsed: string[] = [];
             for (const l of lines) {
                 const ev = Event.fromJSONL(l);
@@ -454,48 +346,5 @@ export class EventRepository {
 
         rewriteFile(this.paths.global_log_path);
         if (this.paths.workspace_log_path) rewriteFile(this.paths.workspace_log_path);
-    }
-
-    updateLogEntry(oldRawLine: string, newRecord: Event): { globalReplaced: boolean; workspaceReplaced: boolean; errors?: ValidationError[] } {
-        const result = { globalReplaced: false, workspaceReplaced: false, errors: undefined as ValidationError[] | undefined };
-
-        const replaceInFile = (filePath: string | undefined | null): boolean => {
-            if (!filePath || !fs.existsSync(filePath)) return false;
-            const lines = this.safeReadLines(filePath);
-            const col = EventCollection.parse_lines(lines);
-
-            const parsedOld = Event.fromJSONL(oldRawLine);
-            let newCol: EventCollection | null = null;
-            if (parsedOld) {
-                newCol = col.replaceEvent(parsedOld, newRecord);
-            } else {
-                const match = col.toEvents().find(e => newRecord.equals(e));
-                if (match) newCol = col.replaceEvent(match, newRecord);
-                else return false;
-            }
-
-            const origLines = col.toLines();
-            const newLines = newCol.toLines();
-            const changed = origLines.length !== newLines.length || origLines.some((v, i) => v !== newLines[i]);
-            if (!changed) return false;
-
-            const toWrite = newLines.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...newLines];
-            this.ensureDirExists(filePath);
-            fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
-
-            return true;
-        };
-
-        result.globalReplaced = replaceInFile(this.paths.global_log_path);
-        result.workspaceReplaced = replaceInFile(this.paths.workspace_log_path);
-
-        try {
-            const validationErrors = this.loadEventCollectionForJob(newRecord.job).validate({ startFromLatest: true });
-            if (validationErrors.length > 0) result.errors = validationErrors;
-        } catch (ex) {
-            result.errors = [{ index: -1, code: "exception", message: String(ex) }];
-        }
-
-        return result;
     }
 }

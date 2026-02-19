@@ -4,6 +4,7 @@ import { TimeScopePaths } from "./paths";
 import { Job } from "./job";
 import { JobCollection } from "./job_collection";
 import { JobDTO } from "./job_dto";
+import { ensureDirExists, readJSONSafe } from "../utils/fs_utils.ts";
 
 export class JobRepository {
   private readonly paths: TimeScopePaths;
@@ -12,26 +13,12 @@ export class JobRepository {
     this.paths = paths;
   }
 
-  private ensureDirExists(filePath: string) {
-    const dir = path.dirname(filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  }
-
-  private async readFileSafe(filePath: string | undefined | null): Promise<string | null> {
-    if (!filePath) return null;
-    try {
-      if (!fs.existsSync(filePath)) return null;
-      return await fs.promises.readFile(filePath, "utf8");
-    } catch (ex) {
-      throw new Error(`Failed to read jobs file at '${filePath}': ${String(ex)}`);
-    }
-  }
 
   /**
    * Load all jobs from the canonical jobs file and return a JobCollection.
    */
   public async loadAll(): Promise<JobCollection> {
-    const raw = await this.readFileSafe(this.paths.global_jobs_path);
+    const raw = await readJSONSafe(this.paths.global_jobs_path);
     if (!raw) return JobCollection.fromArray([]);
 
     let parsed: unknown;
