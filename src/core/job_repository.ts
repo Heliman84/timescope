@@ -4,7 +4,7 @@ import { TimeScopePaths } from "./paths";
 import { Job } from "./job";
 import { JobCollection } from "./job_collection";
 import { JobDTO } from "./job_dto";
-import { ensureDirExists, readJSONSafe } from "../utils/fs_utils.ts";
+import { ensureDirExists, readJSONSafe } from "../utils/fs_utils";
 
 export class JobRepository {
   private readonly paths: TimeScopePaths;
@@ -184,7 +184,7 @@ export class JobRepository {
   private async writeFile(dtos: JobDTO[]): Promise<void> {
     const filePath = this.paths.global_jobs_path;
     if (!filePath) throw new Error("No global jobs path configured");
-    this.ensureDirExists(filePath);
+    ensureDirExists(filePath);
     try {
       // Preserve canonical ordering: created ascending, tiebreak by job_id
       const sorted = dtos.slice().sort((a, b) => {

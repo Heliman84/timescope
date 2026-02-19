@@ -1,4 +1,5 @@
-import { Event, EventCollection } from "./event";
+import { Event } from "./event";
+import { EventCollection } from "./event_collection";
 import { Job } from "./job";
 
 export interface SessionValidationError {
@@ -10,7 +11,7 @@ export interface SessionValidationError {
 
 export class Session {
     private readonly _job: Job;
-    private readonly events: EventCollection;
+    private readonly _events: EventCollection;
 
     constructor(job: Job, events?: EventCollection) {
         if (!(job instanceof Job)) throw new Error("Invalid job: must be a Job instance");
@@ -19,9 +20,9 @@ export class Session {
         if (incoming.length > 0) {
             const errors = this.ensureSingleSession(incoming, job);
             if (errors.length > 0) throw new Error(errors[0].message);
-            this.events = EventCollection.fromArray(incoming);
+            this._events = EventCollection.fromArray(incoming);
         } else {
-            this.events = new EventCollection();
+            this._events = new EventCollection();
         }
     }
 
@@ -94,17 +95,17 @@ export class Session {
     }
 
     get startEvent(): Event | null {
-        const first = this.events.firstEvent();
+        const first = this._events.firstEvent();
         return first && first.isStart() ? first : null;
     }
 
     get stopEvent(): Event | null {
-        const last = this.events.lastEvent();
+        const last = this._events.lastEvent();
         return last && last.isStop() ? last : null;
     }
 
     get lastEvent(): Event | null {
-        return this.events.lastEvent();
+        return this._events.lastEvent();
     }
 
     get isRunning(): boolean {
@@ -127,7 +128,7 @@ export class Session {
     }
 
     elapsed(now: number = Date.now()): number {
-        const sorted = this.events.sorted();
+        const sorted = this._events.sorted();
         let total = 0;
         let runningStart: number | null = null;
 
@@ -165,7 +166,7 @@ export class Session {
      * The `now` parameter is used when including the ongoing segment; it defaults to Date.now().
      */
     totalElapsed(now: number = Date.now(), openUseNow: boolean = true): number {
-        const sorted = this.events.sorted();
+        const sorted = this._events.sorted();
         let total = 0;
         let runningStart: number | null = null;
 
@@ -197,7 +198,7 @@ export class Session {
         const last = this.lastEvent;
         if (!last) {
             if (!event.isStart()) throw new Error("Session must begin with start event");
-            this.events.add(event);
+            this._events.add(event);
             return;
         }
         if (event.isStart()) throw new Error("Session already started");
@@ -205,7 +206,7 @@ export class Session {
 
         const err = last.validateTransition(event);
         if (err) throw new Error(err.message);
-        this.events.add(event);
+        this._events.add(event);
     }
 
     start(timestamp: number = Date.now()): Event {
@@ -246,8 +247,8 @@ export class Session {
         const stopB = other.stopEvent?.timestamp ?? null;
         if (stopA !== stopB) return false;
 
-        const a = this.events.toEvents();
-        const b = other.events.toEvents();
+        const a = this._events.toEvents();
+        const b = other._events.toEvents();
         if (a.length !== b.length) return false;
         for (let i = 0; i < a.length; i++) {
             if (!a[i].equals(b[i])) return false;
@@ -256,6 +257,6 @@ export class Session {
     }
 
     toEventCollection(): EventCollection {
-        return EventCollection.fromArray(this.events.toEvents());
+        return EventCollection.fromArray(this._events.toEvents());
     }
 }

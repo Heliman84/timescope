@@ -38,8 +38,8 @@ export class EventCollection {
 
     serialize(): string[] { return this.toLines(); }
 
-    filterByJob(job: string): EventCollection {
-        return new EventCollection(this.events.filter(e => e.job === job));
+    filterByJob(job: Job): EventCollection {
+        return new EventCollection(this.events.filter(e => e.job.equals(job)));
     }
 
     sorted(): Event[] {
@@ -118,7 +118,7 @@ export class EventCollection {
      * Convenience: rename all events referencing `oldName` to use `newName`.
      * Preserves the underlying Job.id by calling `Job.rename` on each event's Job.
      */
-    renameJob(oldName: string, newName: string): EventCollection {
+    /*renameJob(oldName: string, newName: string): EventCollection {
         if (typeof oldName !== 'string' || typeof newName !== 'string') throw new Error('renameJob: names must be strings');
         if (oldName === newName) return new EventCollection(this.events);
         const mapped = this.events.map(e => {
@@ -129,7 +129,7 @@ export class EventCollection {
             return e;
         });
         return new EventCollection(mapped);
-    }
+    }*/
 
     retimeEvent(target: Event, newTimestamp: number): EventCollection {
         return this.updateEvent(target, e => e.withTimestamp(newTimestamp));

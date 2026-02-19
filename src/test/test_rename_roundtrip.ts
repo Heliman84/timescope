@@ -1,61 +1,53 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as assert from "assert";
-import { append_log_record, rename_job_in_log_file } from "../core/logs";
 import { TimeScopePaths } from "../core/paths";
-import { Event, EventCollection } from "../core/event";
+import { Event } from "../core/event";
+import { EventRepository } from "../core/event_repository";
 import { Job } from "../core/job";
 
-/** Helper: create an Event from a job title string using the new Job-centric API. */
-function ev(type: "start"|"stop"|"pause"|"resume", jobTitle: string, timestamp: number, task?: string): Event {
-    const job = Job.create({ title: jobTitle });
-    return Event.create(job, type, timestamp, task);
+function ev(type: "start" | "stop" | "pause" | "resume", job: Job, ts: number, task?: string): Event {
+    return Event.create(job, type, ts, task);
 }
 
 /**
- * test_rename_roundtrip
- * Target: `src/core/logs.ts` + `src/core/event.ts`
- * Purpose: Verify that `rename_job_in_log_file` rewrites log files correctly and
- * that the round-tripped file matches the expected serialized output (including header).
+ * Ensures renameJobInLogByJob rewrites titles while preserving job_id.
  */
 export function run_rename_roundtrip_test(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `rename-${Date.now()}`);
     fs.mkdirSync(testRoot, { recursive: true });
 
-    const globalPath = path.join(testRoot, "logs-global.jsonl");
-
     const paths: TimeScopePaths = {
         global_jobs_path: path.join(testRoot, "jobs.json"),
-        global_log_path: globalPath
+        global_log_path: path.join(testRoot, "logs-global.jsonl"),
+        workspace_log_path: path.join(testRoot, "logs-ws.jsonl"),
     };
 
-    const recs: Event[] = [
-        ev("start", "alpha", 100),
-        ev("pause", "alpha", 200),
-        ev("stop", "alpha", 300, "done"),
-        ev("start", "beta", 400),
-        ev("stop", "beta", 500)
-    ];
+    const repo = new EventRepository(paths);
+    const jobAlpha = Job.create({ title: "alpha" });
+    const jobBeta = Job.create({ title: "beta" });
 
-    for (const r of recs) append_log_record(paths, r);
+    repo.appendEvent(ev("start", jobAlpha, 100));
+    repo.appendEvent(ev("pause", jobAlpha, 200));
+    repo.appendEvent(ev("stop", jobAlpha, 300, "done"));
+    repo.appendEvent(ev("start", jobBeta, 400));
+    repo.appendEvent(ev("stop", jobBeta, 500));
 
-    // Rename alpha -> gamma
-    rename_job_in_log_file(paths, "alpha", "gamma");
+    // Pre-rename assertions
+    let raw = fs.readFileSync(paths.global_log_path, "utf8");
+    let parsed = raw.split(/\r?\n/).filter(l => l.trim()).slice(1).map(l => JSON.parse(l));
+    assert.ok(parsed.some(p => p.job === "alpha"), "alpha should appear before rename");
 
-    const raw = fs.readFileSync(globalPath, "utf8");
-    const lines = raw.split("\n").map(l => l.trim()).filter(l => l.length > 0);
+    const renamed = jobAlpha.rename("gamma");
+    repo.renameJobInLogByJob(renamed);
 
-    // Expected: same records but alpha -> gamma
-    const expectedEvents = recs.map(r => (r.job === "alpha" ? r.withJob("gamma") : r));
-    const expectedLines = EventCollection.fromArray(expectedEvents).toLines();
-    // files now include a file-level header as the first line
-    const headerLine = JSON.stringify({ _format_version: 2 });
-    expectedLines.unshift(headerLine);
+    raw = fs.readFileSync(paths.global_log_path, "utf8");
+    parsed = raw.split(/\r?\n/).filter(l => l.trim()).slice(1).map(l => JSON.parse(l));
 
-    assert.strictEqual(lines.length, expectedLines.length, "line count should match expected");
-    for (let i = 0; i < lines.length; i++) {
-        assert.strictEqual(lines[i], expectedLines[i], `line ${i} should match expected`);
-    }
+    // alpha titles should be gone, replaced by gamma while keeping job_id
+    assert.ok(parsed.every(p => p.job !== "alpha"), "no record should retain title alpha");
+    assert.ok(parsed.filter(p => p.job_id === jobAlpha.id).every(p => p.job === "gamma"), "records with alpha id should be renamed to gamma");
+    assert.ok(parsed.filter(p => p.job_id === jobBeta.id).every(p => p.job === "beta"), "other jobs remain untouched");
 
     console.log("✅ rename roundtrip test passed");
 }

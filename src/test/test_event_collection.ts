@@ -1,5 +1,6 @@
 import * as assert from "assert";
-import { Event, EventCollection } from "../core/event";
+import { Event } from "../core/event";
+import { EventCollection } from "../core/event_collection";
 import { Job } from "../core/job";
 
 function r(e: "start"|"pause"|"resume"|"stop", t: number, jobTitle = "job1", task?: string): Event {

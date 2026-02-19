@@ -1,11 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import { TimeScopePaths } from "./paths";
-import { Event, EventCollection, ValidationError } from "./event";
+import { Event, ValidationError } from "./event";
+import { EventCollection } from "./event_collection";
 import { Session } from "./session";
 import { EventDTO } from "./event_dto";
 import { Job } from "./job";
-import { ensureDirExists, readJSONLSafe } from "../utils/fs_utils.ts";
+import { ensureDirExists, readJSONLSafe } from "../utils/fs_utils";
 
 const HEADER_KEY = "_format_version";
 const HEADER_LINE = JSON.stringify({ _format_version: 2 });
@@ -64,7 +65,7 @@ export class EventRepository {
     }
 
     appendValidated(event: Event): void {
-        const sessions = this.loadSessions("global").filter(s => s.currentJob.equals(event.job));
+        const sessions = this.loadSessions("global").filter(s => s.job.equals(event.job));
         const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
 
         if (event.isStart()) {
@@ -89,7 +90,7 @@ export class EventRepository {
         this.appendEvent(event);
     }
 
-    loadEventCollectionForJob(job?: string): EventCollection {
+    loadEventCollectionForJob(job?: Job): EventCollection {
         const lines = readJSONLSafe(this.paths.global_log_path);
         const col = EventCollection.parse_lines(lines);
         if (job) return col.filterByJob(job);
@@ -301,13 +302,13 @@ export class EventRepository {
         };
 
         if (location === "global") {
-            scanSingleN(this.readJSONLSafe(this.paths.global_log_path));
+            scanSingleN(readJSONLSafe(this.paths.global_log_path));
         } else if (location === "workspace") {
-            scanSingleN(this.readJSONLSafe(this.paths.workspace_log_path));
+            scanSingleN(readJSONLSafe(this.paths.workspace_log_path));
         } else {
             scanBothN(
-                this.readJSONLSafe(this.paths.global_log_path),
-                this.readJSONLSafe(this.paths.workspace_log_path)
+                readJSONLSafe(this.paths.global_log_path),
+                readJSONLSafe(this.paths.workspace_log_path)
             );
         }
 
@@ -323,7 +324,7 @@ export class EventRepository {
         if (!job) return;
         const rewriteFile = (filePath: string | null | undefined) => {
             if (!filePath || !fs.existsSync(filePath)) return;
-            const lines = this.readJSONLSafe(filePath);
+            const lines = readJSONLSafe(filePath);
             const parsed: string[] = [];
             for (const l of lines) {
                 const ev = Event.fromJSONL(l);
@@ -340,7 +341,7 @@ export class EventRepository {
                 }
             }
             const toWrite = parsed.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...parsed];
-            this.ensureDirExists(filePath);
+            ensureDirExists(filePath);
             fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
         };
 
