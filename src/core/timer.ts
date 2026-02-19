@@ -27,7 +27,7 @@ export function updateTimerText(runtime: Runtime): void {
         divider.text = session.isPaused
             ? `TimeScope (Paused at ${formatted}):`
             : `TimeScope (${formatted}):`;
-        divider.tooltip = `Active job: ${session.currentJob}`;
+        divider.tooltip = `Active job: ${session.currentJobTitle}`;
     }
 }
 

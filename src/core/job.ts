@@ -28,6 +28,8 @@ export class Job {
   private readonly _createdAt: number;
   private readonly _lastModifiedAt: number;
   private readonly _seed: string;
+  /** True when the Job was reconstructed from event fields only (id + title). */
+  private readonly _partial: boolean;
 
   // Private constructor - trusts validated inputs
   private constructor(props: {
@@ -37,6 +39,7 @@ export class Job {
     created: number;
     lastModified: number;
     jobSeed: string;
+    partial?: boolean;
   }) {
     this._id = props.jobId;
     this._title = props.title;
@@ -44,6 +47,7 @@ export class Job {
     this._createdAt = props.created;
     this._lastModifiedAt = props.lastModified;
     this._seed = props.jobSeed;
+    this._partial = props.partial ?? false;
   }
 
   /**
@@ -93,6 +97,8 @@ export class Job {
   get createdAt(): number { return this._createdAt; }
   get lastModifiedAt(): number { return this._lastModifiedAt; }
   get seed(): string { return this._seed; }
+  /** True when constructed via `fromEventFields` — only `id` and `title` are trustworthy. */
+  get partial(): boolean { return this._partial; }
 
   // Domain behavior: return new Job instances with updated state
   public rename(newTitle: string): Job {
@@ -149,6 +155,36 @@ export class Job {
 
   toString(): string {
       return `Job(${this.id}, "${this.title}")`;
+  }
+
+  /**
+   * Domain equality: jobs are equal when their ids match (identity).
+   */
+  public equals(other: Job): boolean {
+    if (!other) return false;
+    return this._id === other._id;
+  }
+
+  /**
+   * Reconstruct a Job from persisted event fields (e.g. when loading sessions from logs).
+   * Bypasses seed-to-id validation since the original seed title may differ from the
+   * current title after a rename. The resulting Job is suitable for in-memory use
+   * (session tracking, event creation) but should NOT be persisted back to the jobs file
+   * without the full metadata from JobRepository.
+   */
+  public static fromEventFields(jobId: string, title: string): Job {
+    if (typeof jobId !== 'string' || jobId.length === 0) throw new Error('Job.fromEventFields: `jobId` must be a non-empty string');
+    if (typeof title !== 'string' || title.length === 0) throw new Error('Job.fromEventFields: `title` must be a non-empty string');
+    const now = Date.now();
+    return new Job({
+      jobId,
+      title,
+      isArchived: false,
+      created: now,
+      lastModified: now,
+      jobSeed: title,
+      partial: true,
+    });
   }
 
 

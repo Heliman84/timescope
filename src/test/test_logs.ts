@@ -3,7 +3,14 @@ import * as path from "path";
 import * as assert from "assert";
 import { append_log_record, load_all_logs, rename_job_in_log_file, load_all_log_entries } from "../core/logs";
 import { Event } from "../core/event";
+import { Job } from "../core/job";
 import { TimeScopePaths } from "../core/paths";
+
+/** Helper: create an Event from a job title string using the new Job-centric API. */
+function ev(type: "start"|"stop"|"pause"|"resume", jobTitle: string, timestamp: number, task?: string): Event {
+    const job = Job.create({ title: jobTitle });
+    return Event.create(job, type, timestamp, task);
+}
 
 export function run_logs_tests(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `logs-${Date.now()}`);
@@ -15,9 +22,9 @@ export function run_logs_tests(): void {
     };
 
     // Write some records
-    append_log_record(paths, Event.create({ event: "start", job: "alpha", timestamp: 100 }));
-    append_log_record(paths, Event.create({ event: "pause", job: "alpha", timestamp: 200 }));
-    append_log_record(paths, Event.create({ event: "stop", job: "alpha", timestamp: 300, task: "done" }));
+    append_log_record(paths, ev("start", "alpha", 100));
+    append_log_record(paths, ev("pause", "alpha", 200));
+    append_log_record(paths, ev("stop", "alpha", 300, "done"));
 
     const loaded = load_all_logs(paths);
     const loaded_records = loaded.toEvents();
@@ -53,7 +60,7 @@ export function run_logs_header_and_event_parse(): void {
         workspace_log_path: path.join(testRoot, "ws.jsonl")
     };
 
-    append_log_record(paths, Event.create({ event: "start", job: "hdr", timestamp: 1111 }));
+    append_log_record(paths, ev("start", "hdr", 1111));
 
     const raw = fs.readFileSync(globalPath, "utf8");
     const firstLine = raw.split(/\r?\n/)[0];

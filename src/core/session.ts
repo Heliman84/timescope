@@ -1,4 +1,5 @@
 import { Event, EventCollection } from "./event";
+import { Job } from "./job";
 
 export interface SessionValidationError {
     index: number;
@@ -8,12 +9,12 @@ export interface SessionValidationError {
 }
 
 export class Session {
-    private readonly jobName: string;
+    private readonly _job: Job;
     private readonly events: EventCollection;
 
-    constructor(job: string, events?: EventCollection) {
-        if (typeof job !== "string" || job.length === 0) throw new Error("Invalid job");
-        this.jobName = job;
+    constructor(job: Job, events?: EventCollection) {
+        if (!(job instanceof Job)) throw new Error("Invalid job: must be a Job instance");
+        this._job = job;
         const incoming = events ? events.toEvents() : [];
         if (incoming.length > 0) {
             const errors = this.ensureSingleSession(incoming, job);
@@ -40,28 +41,19 @@ export class Session {
         return new Session(job, collection);
     }
 
-    static validateEvents(events: Event[], job?: string): SessionValidationError[] {
-        if (events.length === 0) {
-            return [{ index: -1, code: "empty", message: "Session requires at least one event" }];
-        }
-        const targetJob = job || events[0].job;
-        const session = new Session(targetJob);
-        return session.ensureSingleSession(events, targetJob);
-    }
-
-    static start(job: string, timestamp: number = Date.now()): Session {
+    static start(job: Job, timestamp: number = Date.now()): Session {
         const session = new Session(job);
         session.start(timestamp);
         return session;
     }
 
-    private ensureSingleSession(events: Event[], job: string): SessionValidationError[] {
+    private ensureSingleSession(events: Event[], job: Job): SessionValidationError[] {
         const errors: SessionValidationError[] = [];
         let stopped = false;
 
         for (let i = 0; i < events.length; i++) {
             const ev = events[i];
-            if (ev.job !== job) {
+            if (!ev.job.equals(job)) {
                 errors.push({ index: i, code: "mismatched_job", message: "Events contain multiple jobs", record: ev });
                 continue;
             }
@@ -91,8 +83,14 @@ export class Session {
         return errors;
     }
 
-    get currentJob(): string {
-        return this.jobName;
+    /** The Job domain object for this session. */
+    get job(): Job {
+        return this._job;
+    }
+
+    /** The job title (convenience accessor, backwards-compatible). */
+    get currentJobTitle(): string {
+        return this._job.title;
     }
 
     get startEvent(): Event | null {
@@ -195,7 +193,7 @@ export class Session {
     }
 
     appendEvent(event: Event): void {
-        if (event.job !== this.jobName) throw new Error("Event job does not match session job");
+        if (!event.job.equals(this._job)) throw new Error("Event job does not match session job");
         const last = this.lastEvent;
         if (!last) {
             if (!event.isStart()) throw new Error("Session must begin with start event");
@@ -212,34 +210,34 @@ export class Session {
 
     start(timestamp: number = Date.now()): Event {
         if (this.lastEvent) throw new Error("Session already started");
-        const event = Event.create({ event: "start", job: this.jobName, timestamp });
+        const event = Event.create(this._job, "start", timestamp);
         this.appendEvent(event);
         return event;
     }
 
     pause(timestamp: number = Date.now()): Event {
         if (!this.isRunning) throw new Error("Cannot pause; session is not running");
-        const event = Event.create({ event: "pause", job: this.jobName, timestamp });
+        const event = Event.create(this._job, "pause", timestamp);
         this.appendEvent(event);
         return event;
     }
 
     resume(timestamp: number = Date.now()): Event {
         if (!this.isPaused) throw new Error("Cannot resume; session is not paused");
-        const event = Event.create({ event: "resume", job: this.jobName, timestamp });
+        const event = Event.create(this._job, "resume", timestamp);
         this.appendEvent(event);
         return event;
     }
 
     stop(task: string | undefined, timestamp: number = Date.now()): Event {
         if (!this.isOpen) throw new Error("Cannot stop; session already stopped");
-        const event = Event.create({ event: "stop", job: this.jobName, timestamp, task });
+        const event = Event.create(this._job, "stop", timestamp, task);
         this.appendEvent(event);
         return event;
     }
 
     equals(other: Session): boolean {
-        if (this.jobName !== other.jobName) return false;
+        if (!this._job.equals(other._job)) return false;
         const startA = this.startEvent?.timestamp ?? null;
         const startB = other.startEvent?.timestamp ?? null;
         if (startA !== startB) return false;

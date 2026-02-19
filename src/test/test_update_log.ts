@@ -3,7 +3,14 @@ import * as path from "path";
 import * as assert from "assert";
 import { append_log_record, load_all_log_entries, update_log_entry } from "../core/logs";
 import { Event } from "../core/event";
+import { Job } from "../core/job";
 import { TimeScopePaths } from "../core/paths";
+
+/** Helper: create an Event from a job title string using the new Job-centric API. */
+function ev(type: "start"|"stop"|"pause"|"resume", jobTitle: string, timestamp: number, task?: string): Event {
+    const job = Job.create({ title: jobTitle });
+    return Event.create(job, type, timestamp, task);
+}
 
 export function run_update_log_tests(): void {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `update-${Date.now()}`);
@@ -19,8 +26,8 @@ export function run_update_log_tests(): void {
     };
 
     // create matching records in both files
-    append_log_record(paths, Event.create({ event: "start", job: "foil", timestamp: 1000 }));
-    append_log_record(paths, Event.create({ event: "stop", job: "foil", timestamp: 2000, task: "t" }));
+    append_log_record(paths, ev("start", "foil", 1000));
+    append_log_record(paths, ev("stop", "foil", 2000, "t"));
 
     // duplicate into workspace mirror (simulate previously written)
     fs.appendFileSync(wsPath, fs.readFileSync(globalPath, "utf8"), "utf8");
@@ -32,7 +39,7 @@ export function run_update_log_tests(): void {
 
     const old_raw = startEntry!.raw;
 
-    const newRecord = Event.create({ event: "start", job: "foil", timestamp: 500 });
+    const newRecord = ev("start", "foil", 500);
 
     const res = update_log_entry(paths, old_raw, newRecord);
     assert.ok(res.globalReplaced || res.workspaceReplaced, "expected at least one replacement");
@@ -59,9 +66,11 @@ export function run_update_log_tests(): void {
  * used by `update_log_entry` and the controller interaction pattern.
  */
 export function run_dashboard_controller_error_scoping_test(): void {
-    // Two raw log lines (JSON) representing records
-    const rawA = JSON.stringify({ event: "start", job: "a", timestamp: 1000 });
-    const rawB = JSON.stringify({ event: "stop", job: "b", timestamp: 2000, task: "t" });
+    // Two raw log lines (JSON) representing canonical records with all required fields
+    const jobA = Job.create({ title: "a" });
+    const jobB = Job.create({ title: "b" });
+    const rawA = JSON.stringify({ id: "", event: "start", job: "a", timestamp: 1000, job_id: jobA.id, time_seed: 0 });
+    const rawB = JSON.stringify({ id: "", event: "stop", job: "b", timestamp: 2000, task: "t", job_id: jobB.id, time_seed: 0 });
 
     const occurrences = [{ raw: rawA }, { raw: rawB }];
 

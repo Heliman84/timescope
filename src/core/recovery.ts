@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { LogRepository } from "./logRepository";
+import { EventRepository } from "./event_repository";
 import { Session } from "./session";
 
 /**
@@ -9,7 +9,7 @@ function ensureAfter(lastTimestamp: number, requested: number): number {
     return requested <= lastTimestamp ? lastTimestamp + 1 : requested;
 }
 
-export async function checkAndRecover(repo: LogRepository): Promise<Session | null> {
+export async function checkAndRecover(repo: EventRepository): Promise<Session | null> {
     try {
         const session = repo.loadLastSession("global");
         if (!session || !session.isOpen) return null;
@@ -18,7 +18,7 @@ export async function checkAndRecover(repo: LogRepository): Promise<Session | nu
         if (!last) return null;
         const lastEvent = last.type;
         const lastTimestamp = last.timestamp;
-        const job = session.currentJob;
+        const job_title = session.currentJobTitle;
         const accumulating = lastEvent === "start" || lastEvent === "resume";
 
         let choices: string[] = [];
@@ -40,7 +40,7 @@ export async function checkAndRecover(repo: LogRepository): Promise<Session | nu
         }
 
         const picked = await vscode.window.showQuickPick(choices, {
-            placeHolder: `Detected open session for '${job}' (last event: ${lastEvent}). Choose recovery action:`,
+            placeHolder: `Detected open session for '${job_title}' (last event: ${lastEvent}). Choose recovery action:`,
             canPickMany: false
         });
 
@@ -54,9 +54,9 @@ export async function checkAndRecover(repo: LogRepository): Promise<Session | nu
         if (selection.startsWith("Close session")) {
             const atNow = selection.includes("now");
             const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
-            const stopEvent = session.stop("recovered", ts);
+                const stopEvent = session.stop("recovered", ts);
             repo.appendValidated(stopEvent);
-            vscode.window.showInformationMessage(`Recovered: stopped job '${job}'.`);
+                vscode.window.showInformationMessage(`Recovered: stopped job '${job_title}'.`);
             return null;
         }
 
@@ -65,7 +65,7 @@ export async function checkAndRecover(repo: LogRepository): Promise<Session | nu
             const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
             const pauseEvent = session.pause(ts);
             repo.appendValidated(pauseEvent);
-            vscode.window.showInformationMessage(`Recovered: paused job '${job}'.`);
+            vscode.window.showInformationMessage(`Recovered: paused job '${job_title}'.`);
             return repo.loadLastSession("global");
         }
 
@@ -82,7 +82,7 @@ export async function checkAndRecover(repo: LogRepository): Promise<Session | nu
                 const resumeEvent = session.resume(resumeTs);
                 repo.appendValidated(resumeEvent);
             }
-            vscode.window.showInformationMessage(`Recovered: resumed job '${job}' (break inserted).`);
+            vscode.window.showInformationMessage(`Recovered: resumed job '${job_title}' (break inserted).`);
             return repo.loadLastSession("global");
         }
 
@@ -92,7 +92,7 @@ export async function checkAndRecover(repo: LogRepository): Promise<Session | nu
                 const resumeEvent = session.resume(resumeTs);
                 repo.appendValidated(resumeEvent);
             }
-            vscode.window.showInformationMessage(`Recovered: resumed job '${job}'.`);
+            vscode.window.showInformationMessage(`Recovered: resumed job '${job_title}'.`);
             return repo.loadLastSession("global");
         }
 

@@ -1,9 +1,10 @@
 import * as assert from "assert";
 import { Event, EventCollection } from "../core/event";
+import { Job } from "../core/job";
 
-function r(e: "start"|"pause"|"resume"|"stop", t: number, job = "job1", task?: string): Event {
-    if (e === "stop") return Event.create({ event: e, job, timestamp: t, task });
-    return Event.create({ event: e, job, timestamp: t });
+function r(e: "start"|"pause"|"resume"|"stop", t: number, jobTitle = "job1", task?: string): Event {
+    const job = Job.create({ title: jobTitle });
+    return Event.create(job, e, t, task);
 }
 
 /**

@@ -53,7 +53,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 await runtime.jobRepo.save(created);
                 runtime.jobs = runtime.jobs.add(created);
 
-                const session = Session.start(created.title);
+                const session = Session.start(created);
                 const startEvent = session.startEvent;
                 if (!startEvent) throw new Error("Failed to create start event");
                 runtime.logRepo.appendValidated(startEvent);
@@ -66,7 +66,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to start" });
             if (!job) return;
 
-            const session = Session.start(job.title);
+            const session = Session.start(job);
             const startEvent = session.startEvent;
             if (!startEvent) throw new Error("Failed to create start event");
             runtime.logRepo.appendValidated(startEvent);
@@ -173,11 +173,12 @@ export async function activate(context: vscode.ExtensionContext) {
             const new_name = await vscode.window.showInputBox({ prompt: `Rename job "${job.title}" to:` });
             if (!new_name) return;
 
-            const renamed = job.rename(new_name);
-            await runtime.jobRepo.update(renamed);
-            runtime.jobs = runtime.jobs.update(renamed);
-
-            vscode.window.showInformationMessage(`Renamed job to: ${new_name}`);
+            try {
+                await runtime.renameJob(job, new_name);
+                vscode.window.showInformationMessage(`Renamed job to: ${new_name}`);
+            } catch (ex) {
+                vscode.window.showErrorMessage(`Failed to rename job: ${String(ex)}`);
+            }
         })
     );
 

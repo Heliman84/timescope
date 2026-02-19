@@ -1,6 +1,6 @@
 import { TimeScopePaths } from "./paths";
 import { Event, EventCollection, ValidationError } from "./event";
-import { LogRepository } from "./logRepository";
+import { EventRepository } from "./event_repository";
 
 //
 // PUBLIC API
@@ -11,7 +11,7 @@ import { LogRepository } from "./logRepository";
  * workspace mirror if one is present.
  */
 export function append_log_record(paths: TimeScopePaths, event: Event): void {
-    const repo = new LogRepository(paths);
+    const repo = new EventRepository(paths);
     repo.appendValidated(event);
 }
 
@@ -19,7 +19,7 @@ export function append_log_record(paths: TimeScopePaths, event: Event): void {
  * Load all logs (global + workspace mirror) and return only valid LogRecord entries.
  */
 export function load_all_logs(paths: TimeScopePaths): EventCollection {
-    const repo = new LogRepository(paths);
+    const repo = new EventRepository(paths);
     return repo.loadAllLogs();
 }
 
@@ -33,7 +33,7 @@ export function load_all_logs(paths: TimeScopePaths): EventCollection {
  * Load an `EventCollection` for a specific job from the global canonical log.
  */
 export function load_event_collection_for_job(paths: TimeScopePaths, job?: string) {
-    const repo = new LogRepository(paths);
+    const repo = new EventRepository(paths);
     return repo.loadEventCollectionForJob(job);
 }
 
@@ -42,16 +42,16 @@ export function load_event_collection_for_job(paths: TimeScopePaths, job?: strin
  * is useful for precise updates from the UI.
  */
 export function load_all_log_entries(paths: TimeScopePaths): Array<{ record: Event; raw: string; source: "global" | "workspace"; lineIndex: number }> {
-    const repo = new LogRepository(paths);
+    const repo = new EventRepository(paths);
     return repo.loadAllLogEntries();
 }
 
 export function rename_job_in_log_file(paths: TimeScopePaths, old_name: string, new_name: string) {
-    const repo = new LogRepository(paths);
+    const repo = new EventRepository(paths);
     repo.renameJobInLog(old_name, new_name);
 }
 
 export function update_log_entry(paths: TimeScopePaths, old_raw_line: string, new_record: Event): { globalReplaced: boolean; workspaceReplaced: boolean; errors?: ValidationError[] } {
-    const repo = new LogRepository(paths);
+    const repo = new EventRepository(paths);
     return repo.updateLogEntry(old_raw_line, new_record);
 }

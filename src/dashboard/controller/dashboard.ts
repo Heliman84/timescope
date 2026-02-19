@@ -88,7 +88,7 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
             for (const occ of occurrences) {
                 let candidate: Event;
                 try {
-                    candidate = Event.create(new_record);
+                    candidate = Event.fromDTO(new_record);
                 } catch {
                     // if payload is already an Event instance, allow it
                     candidate = new_record as Event;
@@ -152,7 +152,7 @@ export async function handle_dashboard(context: vscode.ExtensionContext) {
                 const new_record = ed.new_record;
                 let candidate: Event;
                 try {
-                    candidate = Event.create(new_record);
+                    candidate = Event.fromDTO(new_record);
                 } catch {
                     candidate = new_record as Event;
                 }

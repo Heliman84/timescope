@@ -3,13 +3,15 @@ import * as path from "path";
 import { TimeScopePaths } from "./paths";
 import { Event, EventCollection, ValidationError } from "./event";
 import { Session } from "./session";
+import { EventDTO } from "./event_dto";
+import { Job } from "./job";
 
 const HEADER_KEY = "_format_version";
 const HEADER_LINE = JSON.stringify({ _format_version: 1 });
 
-export type LogEntry = { record: Event; raw: string; source: "global" | "workspace"; lineIndex: number };
+export type EventEntry = { record: Event; raw: string; source: "global" | "workspace"; lineIndex: number };
 
-export class LogRepository {
+export class EventRepository {
     private readonly paths: TimeScopePaths;
 
     constructor(paths: TimeScopePaths) {
@@ -77,7 +79,7 @@ export class LogRepository {
     }
 
     appendValidated(event: Event): void {
-        const sessions = this.loadSessions("global").filter(s => s.currentJob === event.job);
+        const sessions = this.loadSessions("global").filter(s => s.currentJob.equals(event.job));
         const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
 
         if (event.isStart()) {
@@ -107,6 +109,52 @@ export class LogRepository {
         return EventCollection.parse_lines(allLines);
     }
 
+    // Read all persisted records as canonical EventDTOs (skips malformed/header lines)
+    readAll(): import("./event_dto").EventDTO[] {
+        const out: import("./event_dto").EventDTO[] = [];
+        const lines = this.readLinesForLocation("both");
+        for (const l of lines) {
+            try {
+                const obj = JSON.parse(l);
+                if (obj && (obj as any)[HEADER_KEY] !== undefined) continue;
+
+                    // Strict: Event.fromJSONL will only return an Event for canonical lines.
+                    const ev = Event.fromJSONL(l);
+                    if (!ev) throw new Error("EventRepository.readAll: malformed or non-canonical record encountered");
+                    const dto = ev.toDTO();
+                    out.push(dto);
+            } catch (ex) {
+                // Per Step 4.3: do not normalize or skip — propagate the error.
+                throw ex;
+            }
+        }
+        return out;
+    }
+
+    // Append a canonical EventDTO directly (strict validation applied)
+    appendDTO(dto: EventDTO): void {
+        // Validate strictly via Event.fromDTO (requires canonical DTO)
+        const ev = Event.fromDTO(dto);
+        const line = ev.toJSONL() + "\n";
+
+        this.ensureDirExists(this.paths.global_log_path);
+        if (this.paths.workspace_log_path) this.ensureDirExists(this.paths.workspace_log_path);
+
+        if (!fs.existsSync(this.paths.global_log_path)) {
+            fs.writeFileSync(this.paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
+        } else {
+            fs.appendFileSync(this.paths.global_log_path, line, "utf8");
+        }
+
+        if (this.paths.workspace_log_path) {
+            if (!fs.existsSync(this.paths.workspace_log_path)) {
+                fs.writeFileSync(this.paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
+            } else {
+                fs.appendFileSync(this.paths.workspace_log_path, line, "utf8");
+            }
+        }
+    }
+
     loadEventCollectionForJob(job?: string): EventCollection {
         const lines = this.safeReadLines(this.paths.global_log_path);
         const col = EventCollection.parse_lines(lines);
@@ -114,8 +162,8 @@ export class LogRepository {
         return col;
     }
 
-    loadAllLogEntries(): LogEntry[] {
-        const entries: LogEntry[] = [];
+    loadAllLogEntries(): EventEntry[] {
+        const entries: EventEntry[] = [];
 
         const pushLine = (line: string, src: "global" | "workspace", idx: number) => {
             try {
@@ -126,7 +174,7 @@ export class LogRepository {
             }
             const parsed = Event.fromJSONL(line);
             if (parsed) entries.push({ record: parsed, raw: line, source: src, lineIndex: idx });
-            else entries.push({ record: Event.create({ event: "stop", job: "__MALFORMED__", timestamp: 0, task: line }), raw: line, source: src, lineIndex: idx });
+            else entries.push({ record: Event.fromDTO({ id: "", event: "stop", job_title: "__MALFORMED__", timestamp: 0, task: line, job_id: "00000", time_seed: 0 }), raw: line, source: src, lineIndex: idx });
         };
 
         const globalLines = this.safeReadLines(this.paths.global_log_path);
@@ -145,10 +193,11 @@ export class LogRepository {
         const col = EventCollection.parse_lines(lines);
         const events = col.sorted();
 
+        // Map job_id → Event[]
         const openByJob = new Map<string, Event[]>();
         const sessions: Session[] = [];
 
-        const finalize = (job: string, evs: Event[]) => {
+        const finalize = (job_id: string, evs: Event[]) => {
             if (evs.length === 0) return;
             try {
                 sessions.push(Session.fromEvents(evs));
@@ -158,29 +207,31 @@ export class LogRepository {
         };
 
         for (const ev of events) {
-            const job = ev.job;
+            const job_id = ev.job.id;
+
             if (ev.isStart()) {
-                const existing = openByJob.get(job);
+                const existing = openByJob.get(job_id);
                 if (existing && existing.length > 0) {
-                    finalize(job, existing);
+                    finalize(job_id, existing);
                 }
-                openByJob.set(job, [ev]);
+                openByJob.set(job_id, [ev]);
                 continue;
             }
 
-            const current = openByJob.get(job);
+            const current = openByJob.get(job_id);
             if (!current || current.length === 0) continue;
             current.push(ev);
 
             if (ev.isStop()) {
-                finalize(job, current);
-                openByJob.delete(job);
+                finalize(job_id, current);
+                openByJob.delete(job_id);
             }
         }
 
-        for (const [job, evs] of openByJob.entries()) {
-            finalize(job, evs);
-            openByJob.delete(job);
+        // finalize any dangling sessions
+        for (const [job_id, evs] of openByJob.entries()) {
+            finalize(job_id, evs);
+            openByJob.delete(job_id);
         }
 
         return sessions.sort((a, b) => {
@@ -195,80 +246,93 @@ export class LogRepository {
         return arr.length === 0 ? null : arr[0];
     }
 
-    loadLastNSessions(location: "workspace" | "global" | "both" = "global", n: number): Session[] {
+    loadLastNSessions(
+        location: "workspace" | "global" | "both" = "global",
+        n: number
+    ): Session[] {
         if (!Number.isInteger(n) || n <= 0) return [];
 
         const finalized: Session[] = [];
 
+        // Pick the most recent incomplete session across jobs
         const tryFinalize = (map: Map<string, Event[]>) => {
-            // When finalizing multiple sessions we should pick the most-recent
-            // job tail available in `map` and create a Session from it.
-            let candidateJob: string | null = null;
+            let candidateJobId: string | null = null;
             let candidateArr: Event[] | null = null;
             let maxTs = -Infinity;
-            for (const [job, arr] of map.entries()) {
+
+            for (const [jobId, arr] of map.entries()) {
                 if (arr.length === 0) continue;
-                const ts = arr[0].timestamp;
+                const ts = arr[0].timestamp; // newest event (reverse scan)
                 if (ts > maxTs) {
                     maxTs = ts;
-                    candidateJob = job;
+                    candidateJobId = jobId;
                     candidateArr = arr;
                 }
             }
+
             if (!candidateArr) return false;
+
             const chronological = candidateArr.slice().reverse();
             try {
                 const s = Session.fromEvents(chronological);
                 finalized.push(s);
-                map.delete(candidateJob!);
+                map.delete(candidateJobId!);
                 return true;
             } catch {
-                map.delete(candidateJob!);
+                map.delete(candidateJobId!);
                 return false;
             }
         };
 
-        // Single-file backward scan collecting up to n sessions
+        // Scan a single log (global OR workspace)
         const scanSingleN = (lines: string[] | null | undefined) => {
             if (!lines || lines.length === 0) return;
-            const byJob = new Map<string, Event[]>();
+
+            const byJob = new Map<string, Event[]>(); // job_id → events
+
             for (let i = lines.length - 1; i >= 0; i--) {
                 const ev = Event.fromJSONL(lines[i]);
                 if (!ev) continue;
-                const job = ev.job;
-                let arr = byJob.get(job);
+
+                const jobId = ev.job.id;
+                let arr = byJob.get(jobId);
                 if (!arr) {
                     arr = [];
-                    byJob.set(job, arr);
+                    byJob.set(jobId, arr);
                 }
+
                 arr.push(ev);
+
                 if (ev.isStart()) {
-                    // finalize this job's session
                     const chronological = arr.slice().reverse();
                     try {
                         const s = Session.fromEvents(chronological);
                         finalized.push(s);
-                        byJob.delete(job);
+                        byJob.delete(jobId);
                         if (finalized.length >= n) return;
                     } catch {
-                        byJob.delete(job);
+                        byJob.delete(jobId);
                     }
                 }
             }
-            // If we still need more, finalize remaining tails by most-recent timestamp
-            while (finalized.length < n && tryFinalize(byJob)) {
-                /* continue finalizing */
-            }
+
+            while (finalized.length < n && tryFinalize(byJob)) {}
         };
 
-        // Merged backward scan for both logs
-        const scanBothN = (gLines: string[] | null | undefined, wLines: string[] | null | undefined) => {
+        // Scan both logs merged by timestamp
+        const scanBothN = (
+            gLines: string[] | null | undefined,
+            wLines: string[] | null | undefined
+        ) => {
             const byJob = new Map<string, Event[]>();
 
             let gi = gLines ? gLines.length - 1 : -1;
             let wi = wLines ? wLines.length - 1 : -1;
 
-            const getPrev = (lines: string[] | null | undefined, startIdx: number): { ev: Event | null; nextIdx: number } => {
+            const getPrev = (
+                lines: string[] | null | undefined,
+                startIdx: number
+            ): { ev: Event | null; nextIdx: number } => {
                 if (!lines) return { ev: null, nextIdx: -1 };
                 let i = startIdx;
                 while (i >= 0) {
@@ -282,8 +346,9 @@ export class LogRepository {
             let gCurr = getPrev(gLines, gi);
             let wCurr = getPrev(wLines, wi);
 
-            while ((gCurr.ev !== null) || (wCurr.ev !== null)) {
+            while (gCurr.ev !== null || wCurr.ev !== null) {
                 let nextEv: Event | null = null;
+
                 if (gCurr.ev && wCurr.ev) {
                     if (gCurr.ev.timestamp >= wCurr.ev.timestamp) {
                         nextEv = gCurr.ev;
@@ -302,29 +367,29 @@ export class LogRepository {
 
                 if (!nextEv) break;
 
-                const job = nextEv.job;
-                let arr = byJob.get(job);
+                const jobId = nextEv.job.id;
+                let arr = byJob.get(jobId);
                 if (!arr) {
                     arr = [];
-                    byJob.set(job, arr);
+                    byJob.set(jobId, arr);
                 }
+
                 arr.push(nextEv);
+
                 if (nextEv.isStart()) {
                     const chronological = arr.slice().reverse();
                     try {
                         const s = Session.fromEvents(chronological);
                         finalized.push(s);
-                        byJob.delete(job);
+                        byJob.delete(jobId);
                         if (finalized.length >= n) return;
                     } catch {
-                        byJob.delete(job);
+                        byJob.delete(jobId);
                     }
                 }
             }
 
-            while (finalized.length < n && tryFinalize(byJob)) {
-                /* finalize more tails */
-            }
+            while (finalized.length < n && tryFinalize(byJob)) {}
         };
 
         if (location === "global") {
@@ -332,10 +397,12 @@ export class LogRepository {
         } else if (location === "workspace") {
             scanSingleN(this.safeReadLines(this.paths.workspace_log_path));
         } else {
-            scanBothN(this.safeReadLines(this.paths.global_log_path), this.safeReadLines(this.paths.workspace_log_path));
+            scanBothN(
+                this.safeReadLines(this.paths.global_log_path),
+                this.safeReadLines(this.paths.workspace_log_path)
+            );
         }
 
-        // Return chronological order (oldest first)
         return finalized.slice().reverse();
     }
 
@@ -347,6 +414,40 @@ export class LogRepository {
             const renamed = col.renameJob(oldName, newName);
             const outLines = renamed.toLines();
             const toWrite = outLines.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...outLines];
+            this.ensureDirExists(filePath);
+            fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
+        };
+
+        rewriteFile(this.paths.global_log_path);
+        if (this.paths.workspace_log_path) rewriteFile(this.paths.workspace_log_path);
+    }
+
+    /**
+     * Rewrite both global and workspace logs, replacing any event that references
+     * the provided Job.id with an updated Event using the supplied Job domain
+     * object. This preserves canonical formatting by using Event.toJSONL().
+     */
+    renameJobInLogByJob(job: Job): void {
+        if (!job) return;
+        const rewriteFile = (filePath: string | null | undefined) => {
+            if (!filePath || !fs.existsSync(filePath)) return;
+            const lines = this.safeReadLines(filePath);
+            const parsed: string[] = [];
+            for (const l of lines) {
+                const ev = Event.fromJSONL(l);
+                if (!ev) {
+                    // preserve malformed/header lines as-is
+                    parsed.push(l);
+                    continue;
+                }
+                if (ev.job_id === job.id) {
+                    const replaced = ev.withJob(job);
+                    parsed.push(replaced.toJSONL());
+                } else {
+                    parsed.push(ev.toJSONL());
+                }
+            }
+            const toWrite = parsed.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...parsed];
             this.ensureDirExists(filePath);
             fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
         };
@@ -396,12 +497,5 @@ export class LogRepository {
         }
 
         return result;
-    }
-
-    loadSession(job: string): Session {
-        const sessions = this.loadSessions("global").filter(s => s.currentJob === job);
-        const last = sessions.length > 0 ? sessions[sessions.length - 1] : null;
-        if (!last) throw new Error("No sessions found for job");
-        return last;
     }
 }

@@ -5,12 +5,8 @@ export type EventType = "start" | "stop" | "pause" | "resume";
 
 export type State = "idle" | "running" | "paused";
 
-export interface EventDTO {
-    event: EventType;
-    job: string;
-    timestamp: number;
-    task?: string;
-}
+import { EventDTO } from "./event_dto";
+import { Job } from "./job";
 
 export interface ValidationError {
     index: number;
@@ -24,28 +20,82 @@ export interface ValidationError {
  * All semantics and transitions live on this class.
  */
 export class Event {
+    private readonly _id: string;
     private readonly _type: EventType;
-    private readonly _job: string;
+    private readonly _job: Job;
     private readonly _timestamp: number;
     private readonly _task?: string;
+    private readonly _time_seed: number;
 
     // Private constructor enforces use of factory methods.
-    private constructor(dto: EventDTO) {
-        this._type = dto.event;
-        this._job = dto.job;
-        this._timestamp = dto.timestamp;
-        this._task = dto.task;
+    private constructor(fields: {
+        id: string;
+        type: EventType;
+        job: Job;
+        timestamp: number;
+        task?: string;
+        time_seed: number;
+    }) {
+        this._id = fields.id;
+        this._type = fields.type;
+        this._job = fields.job;
+        this._timestamp = fields.timestamp;
+        this._task = fields.task;
+        this._time_seed = fields.time_seed;
     }
 
-    // Create from a validated DTO. Throws on invalid DTO.
-    static create(dto: EventDTO): Event {
-        if (typeof dto !== "object" || dto === null) throw new Error("Invalid EventDTO");
-        const { event, job, timestamp, task } = dto as EventDTO;
-        if (!["start", "stop", "pause", "resume"].includes(event)) throw new Error("Invalid event type");
-        if (typeof job !== "string" || job.length === 0) throw new Error("Invalid job");
-        if (typeof timestamp !== "number" || !Number.isFinite(timestamp)) throw new Error("Invalid timestamp");
-        if (task !== undefined && typeof task !== "string") throw new Error("Invalid task");
-        return new Event({ event, job, timestamp, task });
+    /**
+     * Create a new Event from a Job domain object.
+     * Uses placeholder `id` and `time_seed` — actual generation is deferred to Step 4.4.
+     */
+static create(job: Job, type: EventType, timestamp: number, task?: string): Event {
+    if (!(job instanceof Job)) throw new Error("Event.create: 'job' must be a Job instance");
+    if (!["start", "stop", "pause", "resume"].includes(type)) throw new Error("Event.create: invalid 'type'");
+    if (!Number.isFinite(timestamp)) throw new Error("Event.create: 'timestamp' must be finite");
+    if (task !== undefined && typeof task !== "string") throw new Error("Event.create: 'task' must be a string");
+
+    return new Event({
+        id: "",          // placeholder until 4.4
+        type,
+        job,
+        timestamp,
+        task,
+        time_seed: 0,    // placeholder until 4.4
+    });
+}
+
+
+    // Reconstruct from a validated, canonical DTO. Throws on any deviation.
+    static fromDTO(dto: EventDTO): Event {
+        if (typeof dto !== "object" || dto === null) throw new Error("Event.fromDTO: input must be an object");
+
+        const required = ["id", "event", "job_title", "timestamp", "job_id", "time_seed"];
+        const optional = ["task"];
+        const keys = Object.keys(dto as any);
+
+        for (const k of required) {
+            if (!keys.includes(k)) throw new Error(`Event.fromDTO: missing required field '${k}'`);
+        }
+        for (const k of keys) {
+            if (!required.includes(k) && !optional.includes(k)) throw new Error(`Event.fromDTO: unexpected field '${k}'`);
+        }
+
+        if (typeof dto.id !== "string") throw new Error("Event.fromDTO: 'id' must be a string");
+        if (typeof dto.event !== "string" || !["start", "stop", "pause", "resume"].includes(dto.event)) throw new Error("Event.fromDTO: invalid 'event' value");
+        if (typeof dto.job_title !== "string" || dto.job_title.length === 0) throw new Error("Event.fromDTO: 'job_title' must be a non-empty string");
+        if (typeof dto.timestamp !== "number" || !Number.isFinite(dto.timestamp)) throw new Error("Event.fromDTO: 'timestamp' must be a finite number");
+        if (dto.task !== undefined && typeof dto.task !== "string") throw new Error("Event.fromDTO: 'task' must be a string when present");
+        if (typeof dto.job_id !== "string" || dto.job_id.length === 0) throw new Error("Event.fromDTO: 'job_id' must be a non-empty string");
+        if (typeof dto.time_seed !== "number" || !Number.isFinite(dto.time_seed)) throw new Error("Event.fromDTO: 'time_seed' must be a finite number");
+
+        return new Event({
+            id: dto.id,
+            type: dto.event as EventType,
+            job: Job.fromEventFields(dto.job_id, dto.job_title),
+            timestamp: dto.timestamp,
+            task: dto.task,
+            time_seed: dto.time_seed,
+        });
     }
 
     // Non-throwing parser from a JSONL line. Returns null for headers or malformed lines.
@@ -55,14 +105,25 @@ export class Event {
             if (!obj || typeof obj !== "object") return null;
             // skip file-level headers
             if ((obj as any)._format_version !== undefined) return null;
+            // Require canonical fields per spec; if missing or invalid, return null (malformed)
+            if (typeof obj.id !== "string") return null;
+            if (typeof obj.event !== "string") return null;
+            if (typeof obj.job !== "string") return null;
+            if (typeof obj.timestamp !== "number") return null;
+            if (typeof obj.job_id !== "string") return null;
+            if (typeof obj.time_seed !== "number") return null;
+
             const dto: EventDTO = {
+                id: obj.id,
                 event: obj.event,
-                job: obj.job,
+                job_title: obj.job_title,
                 timestamp: obj.timestamp,
-                task: obj.task
+                job_id: obj.job_id,
+                time_seed: obj.time_seed
             } as EventDTO;
-            // Use create to validate DTO; if invalid, let it throw and we catch below
-            return Event.create(dto);
+            if (obj.task !== undefined) dto.task = obj.task;
+
+            return Event.fromDTO(dto);
         } catch {
             return null;
         }
@@ -70,35 +131,43 @@ export class Event {
 
     // Serialize via the DTO boundary.
     toDTO(): EventDTO {
-        const out: EventDTO = { event: this._type, job: this._job, timestamp: this._timestamp };
-        if (this._task !== undefined) out.task = this._task;
-        return out;
+        return {
+            id: this._id,
+            event: this._type,
+            job_title: this._job.title,
+            timestamp: this._timestamp,
+            ...(this._task !== undefined ? { task: this._task } : {}),
+            job_id: this._job.id,
+            time_seed: this._time_seed
+        };
     }
 
     // JSONL representation. Deterministic key ordering via explicit object construction.
     toJSONL(): string {
         const dto = this.toDTO();
-        // Ensure consistent key ordering: event, job, timestamp, task
+        // Ensure consistent key ordering: id, event, job, timestamp, task, job_id, time_seed
         // Preserve human-friendly column padding for readability in the JSONL logs.
         const EVENT_PAD = 8; // pad event value to this width
         const JOB_PAD = 30; // pad job value to this width
-
+        const idVal = JSON.stringify(dto.id);
         const eventVal = JSON.stringify(dto.event); // includes quotes
-        const jobVal = JSON.stringify(dto.job);
+        const jobVal = JSON.stringify(dto.job_title);
         const tsVal = String(dto.timestamp);
         const taskVal = dto.task !== undefined ? JSON.stringify(dto.task) : undefined;
+        const jobIdVal = JSON.stringify(dto.job_id);
+        const timeSeedVal = String(dto.time_seed);
 
         const eventInnerLen = dto.event.length;
-        const jobInnerLen = dto.job.length;
+        const jobInnerLen = dto.job_title.length;
         const padEvent = Math.max(1, EVENT_PAD - eventInnerLen);
         const padJob = Math.max(1, JOB_PAD - jobInnerLen);
         const padEventStr = " ".repeat(padEvent);
         const padJobStr = " ".repeat(padJob);
 
         if (taskVal !== undefined) {
-            return `{\"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"task\":${taskVal}` + "}";
+            return `{\"id\":${idVal}, \"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"task\":${taskVal}, \"job_id\":${jobIdVal}, \"time_seed\":${timeSeedVal}` + "}";
         }
-        return `{\"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}` + "}";
+        return `{\"id\":${idVal}, \"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"job_id\":${jobIdVal}, \"time_seed\":${timeSeedVal}` + "}";
     }
 
     toString(): string {
@@ -107,9 +176,15 @@ export class Event {
 
     // Read-only accessors
     get type(): EventType { return this._type; }
-    get job(): string { return this._job; }
+    get job(): Job { return this._job; }
+    get job_title(): string { return this._job.title; }
     get timestamp(): number { return this._timestamp; }
     get task(): string | undefined { return this._task; }
+    get id(): string { return this._id; }
+    get job_id(): string { return this._job.id; }
+    get time_seed(): number { return this._time_seed; }
+    /** The full Job domain object associated with this event. */
+    get jobObject(): Job { return this._job; }
 
     // Domain semantics helpers
     isStart(): boolean { return this._type === "start"; }
@@ -120,7 +195,7 @@ export class Event {
 
     // Determine whether a transition from this event to `next` is allowed.
     isTransitionAllowed(next: Event): boolean {
-        if (this._job !== next._job) return false; // transitions only meaningful for same job
+        if (!this._job.equals(next._job)) return false; // transitions only meaningful for same job
         if (this._type === next._type) return false; // disallow consecutive duplicates
 
         switch (this._type) {
@@ -139,8 +214,8 @@ export class Event {
 
     // Validate a transition; returns a ValidationError describing the violation or null when allowed.
     validateTransition(next: Event): ValidationError | null {
-        if (this._job !== next._job) {
-            return { index: -1, code: "mismatched_job", message: `Transition between different jobs: ${this._job} -> ${next._job}`, record: next.toDTO() };
+        if (!this._job.equals(next._job)) {
+            return { index: -1, code: "mismatched_job", message: `Transition between different jobs: ${this._job.title} -> ${next._job.title}`, record: next.toDTO() };
         }
         if (next.timestamp <= this._timestamp) {
             return { index: -1, code: "timestamp_non_increasing", message: `Timestamps must increase: ${this._timestamp} >= ${next.timestamp}`, record: next.toDTO() };
@@ -149,7 +224,7 @@ export class Event {
             return { index: -1, code: "consecutive_duplicate", message: `Consecutive duplicate event '${this._type}'`, record: next.toDTO() };
         }
         if (!this.isTransitionAllowed(next)) {
-            return { index: -1, code: "invalid_transition", message: `Invalid transition ${this._type} -> ${next._type} for job ${this._job}`, record: next.toDTO() };
+            return { index: -1, code: "invalid_transition", message: `Invalid transition ${this._type} -> ${next._type} for job ${this._job.title}`, record: next.toDTO() };
         }
         return null;
     }
@@ -161,203 +236,45 @@ export class Event {
 
     equals(other?: Event): boolean {
         if (!other) return false;
-        return this._type === other._type && this._job === other._job && this._timestamp === other._timestamp && (this._task || "") === (other._task || "");
+        return this._type === other._type && this._job.equals(other._job) && this._timestamp === other._timestamp && (this._task || "") === (other._task || "");
     }
 
     // Immutable transformations: return a new Event with a single field changed.
-    withJob(newJob: string): Event {
-        if (typeof newJob !== "string" || newJob.length === 0) throw new Error("Invalid job");
-        const dto = this.toDTO();
-        dto.job = newJob;
-        return Event.create(dto);
+    // These bypass the DTO boundary to preserve the full Job domain object.
+    withJob(newJob: Job): Event {
+        if (!(newJob instanceof Job)) throw new Error("Invalid job");
+        return new Event({
+            id: this._id,
+            type: this._type,
+            job: newJob,
+            timestamp: this._timestamp,
+            task: this._task,
+            time_seed: this._time_seed,
+        });
     }
 
     withTimestamp(newTimestamp: number): Event {
         if (typeof newTimestamp !== "number" || !Number.isFinite(newTimestamp)) throw new Error("Invalid timestamp");
-        const dto = this.toDTO();
-        dto.timestamp = newTimestamp;
-        return Event.create(dto);
+        return new Event({
+            id: this._id,
+            type: this._type,
+            job: this._job,
+            timestamp: newTimestamp,
+            task: this._task,
+            time_seed: this._time_seed,
+        });
     }
 
     withTask(newTask: string | undefined): Event {
         if (newTask !== undefined && typeof newTask !== "string") throw new Error("Invalid task");
-        const dto = this.toDTO();
-        if (newTask === undefined) delete (dto as any).task;
-        else dto.task = newTask;
-        return Event.create(dto);
+        return new Event({
+            id: this._id,
+            type: this._type,
+            job: this._job,
+            timestamp: this._timestamp,
+            task: newTask,
+            time_seed: this._time_seed,
+        });
     }
 }
 
-
-/**
- * Collection of `Event` domain objects. Uses domain semantics for validation
- * and serialization boundaries.
- */
-export class EventCollection {
-    private events: Event[];
-
-    constructor(events?: Event[]) {
-        this.events = events ? events.slice() : [];
-    }
-
-    static fromArray(events: Event[]): EventCollection {
-        return new EventCollection(events);
-    }
-
-    // Parse JSONL lines into domain `Event` objects; malformed lines and headers are ignored.
-    static fromLines(lines: Iterable<string>): EventCollection {
-        const parsed: Event[] = [];
-        for (const l of lines) {
-            const ev = Event.fromJSONL(l);
-            if (ev) parsed.push(ev);
-        }
-        return new EventCollection(parsed);
-    }
-
-    // Backwards-compatible alias
-    static parse(lines: Iterable<string>): EventCollection {
-        return EventCollection.fromLines(lines);
-    }
-
-    // Return JSONL lines for the collection in ascending timestamp order.
-    toLines(): string[] {
-        return this.sorted().map(e => e.toJSONL());
-    }
-
-    serialize(): string[] { return this.toLines(); }
-
-    filterByJob(job: string): EventCollection {
-        return new EventCollection(this.events.filter(e => e.job === job));
-    }
-
-    sorted(): Event[] {
-        return this.events.slice().sort((a, b) => a.timestamp - b.timestamp);
-    }
-
-    add(ev: Event): void {
-        this.events.push(ev);
-    }
-
-    firstEvent(): Event | null {
-        return this.events.length > 0 ? this.events[0] : null;
-    }
-
-    lastEvent(): Event | null {
-        return this.events.length > 0 ? this.events[this.events.length - 1] : null;
-    }
-
-    get(index: number): Event {
-        if (!Number.isInteger(index) || index < 0 || index >= this.events.length) {
-            throw new Error(`Event index out of bounds: ${index}`);
-        }
-        return this.events[index];
-    }
-
-    find(predicate: (e: Event) => boolean): Event | undefined {
-        return this.events.find(predicate);
-    }
-
-    appendValidated(ev: Event): void {
-        const last = this.lastEvent();
-        if (!last) {
-            if (!ev.isStart()) throw new Error("First event must be start");
-            this.events.push(ev);
-            return;
-        }
-        const err = last.validateTransition(ev);
-        if (err) throw new Error(err.message);
-        this.events.push(ev);
-    }
-
-    toEvents(): Event[] { return this.events.slice(); }
-
-    // Compare two events for equality
-    static eventsEqual(a: Event, b: Event): boolean { return a.equals(b); }
-
-    // Convenience snake_case alias
-    static parse_lines(lines: Iterable<string>): EventCollection { return EventCollection.parse(lines); }
-    to_lines(): string[] { return this.serialize(); }
-
-    // Immutable operations
-    replaceEvent(oldEvent: Event, newEvent: Event): EventCollection {
-        const idx = this.events.findIndex(e => e.equals(oldEvent));
-        if (idx === -1) return new EventCollection(this.events);
-        const next = this.events.slice();
-        next[idx] = newEvent;
-        return new EventCollection(next);
-    }
-
-    mapEvents(fn: (e: Event) => Event): EventCollection {
-        const mapped = this.events.map(e => fn(e));
-        return new EventCollection(mapped);
-    }
-
-    renameJob(oldName: string, newName: string): EventCollection {
-        return this.mapEvents(e => (e.job === oldName ? e.withJob(newName) : e));
-    }
-
-    retimeEvent(target: Event, newTimestamp: number): EventCollection {
-        return this.updateEvent(target, e => e.withTimestamp(newTimestamp));
-    }
-
-    updateEvent(target: Event, updater: (e: Event) => Event): EventCollection {
-        const idx = this.events.findIndex(e => e.equals(target));
-        if (idx === -1) return new EventCollection(this.events);
-        const copy = this.events.slice();
-        const updated = updater(copy[idx]);
-        copy[idx] = updated;
-        return new EventCollection(copy);
-    }
-
-    // Rewrite allows mapping to a replacement Event or returning null to remove the event.
-    rewrite(fn: (e: Event) => Event | null): EventCollection {
-        const out: Event[] = [];
-        for (const e of this.events) {
-            const r = fn(e);
-            if (r) out.push(r);
-        }
-        return new EventCollection(out);
-    }
-
-    // Validate the collection using domain semantics.
-    validate(opts?: { startFromLatest?: boolean }): ValidationError[] {
-        const errors: ValidationError[] = [];
-        const sorted = this.sorted();
-        if (sorted.length === 0) return errors;
-
-        // Ensure sequence begins with start for the first event
-        const first = sorted[0];
-        if (!first.isStart()) {
-            errors.push({ index: 0, code: "must_start", message: `Sequence for job ${first.job} must begin with start (found ${first.type} at ${first.timestamp})`, record: first.toDTO() });
-        }
-
-        for (let i = 1; i < sorted.length; i++) {
-            const prev = sorted[i - 1];
-            const cur = sorted[i];
-            const vt = prev.validateTransition(cur);
-            if (vt) {
-                vt.index = i;
-                errors.push(vt);
-            }
-        }
-
-        // Sort errors per request
-        if (opts && opts.startFromLatest) errors.sort((a, b) => b.index - a.index);
-        else errors.sort((a, b) => a.index - b.index);
-
-        return errors;
-    }
-
-    currentState(): State {
-        let state: State = "idle";
-        for (const r of this.sorted()) {
-            if (r.isStart()) state = "running";
-            else if (r.isPause()) state = "paused";
-            else if (r.isResume()) state = "running";
-            else if (r.isStop()) state = "idle";
-        }
-        return state;
-    }
-}
-
-// No default export; validation lives on EventCollection and Event

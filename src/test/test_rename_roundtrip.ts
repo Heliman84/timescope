@@ -4,6 +4,13 @@ import * as assert from "assert";
 import { append_log_record, rename_job_in_log_file } from "../core/logs";
 import { TimeScopePaths } from "../core/paths";
 import { Event, EventCollection } from "../core/event";
+import { Job } from "../core/job";
+
+/** Helper: create an Event from a job title string using the new Job-centric API. */
+function ev(type: "start"|"stop"|"pause"|"resume", jobTitle: string, timestamp: number, task?: string): Event {
+    const job = Job.create({ title: jobTitle });
+    return Event.create(job, type, timestamp, task);
+}
 
 /**
  * test_rename_roundtrip
@@ -23,11 +30,11 @@ export function run_rename_roundtrip_test(): void {
     };
 
     const recs: Event[] = [
-        Event.create({ event: "start", job: "alpha", timestamp: 100 }),
-        Event.create({ event: "pause", job: "alpha", timestamp: 200 }),
-        Event.create({ event: "stop", job: "alpha", timestamp: 300, task: "done" }),
-        Event.create({ event: "start", job: "beta", timestamp: 400 }),
-        Event.create({ event: "stop", job: "beta", timestamp: 500 })
+        ev("start", "alpha", 100),
+        ev("pause", "alpha", 200),
+        ev("stop", "alpha", 300, "done"),
+        ev("start", "beta", 400),
+        ev("stop", "beta", 500)
     ];
 
     for (const r of recs) append_log_record(paths, r);

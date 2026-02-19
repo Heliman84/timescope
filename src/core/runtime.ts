@@ -1,16 +1,17 @@
 import * as vscode from "vscode";
 import { resolve_paths, TimeScopePaths } from "./paths";
 import { JobRepository } from "./job_repository";
-import { LogRepository } from "./logRepository";
+import { EventRepository } from "./event_repository";
 import { JobCollection } from "./job_collection";
 import { Session } from "./session";
+import { Job } from "./job";
 import { updateTimerText, updateStatusBar, startTimerInterval, stopTimerInterval } from "./timer";
 
 export class Runtime {
   public readonly paths: TimeScopePaths;
   public jobs: JobCollection;
   public readonly jobRepo: JobRepository;
-  public readonly logRepo: LogRepository;
+  public readonly logRepo: EventRepository;
 
   public activeSession: Session | null = null;
   public timerInterval: NodeJS.Timeout | null = null;
@@ -27,9 +28,44 @@ export class Runtime {
   constructor(context: vscode.ExtensionContext) {
     this.paths = resolve_paths(context);
     this.jobRepo = new JobRepository(this.paths);
-    this.logRepo = new LogRepository(this.paths);
+    this.logRepo = new EventRepository(this.paths);
     this.jobs = JobCollection.fromArray([]);
     // UI is created when `initializeUI()` is called by the extension activation flow.
+  }
+
+  /**
+   * Rename a job across the domain and persisted logs.
+   * - Renames the Job in the JobCollection and persists via JobRepository.
+   * - Rewrites both global and workspace logs to use the updated Job object.
+   */
+  public async renameJob(job: Job, newTitle: string): Promise<void> {
+    if (!job) throw new Error('renameJob: job must be provided');
+    const existing = this.jobs.findById(job.id);
+    if (!existing) throw new Error(`renameJob: job id '${job.id}' not found`);
+
+    const renamed = existing.rename(newTitle);
+
+    // Persist updated job record
+    await this.jobRepo.update(renamed);
+
+    // Update in-memory collection
+    this.jobs = this.jobs.update(renamed);
+
+    // Rewrite logs to reference updated job fields (by id)
+    this.logRepo.renameJobInLogByJob(renamed);
+    // If an active session references the renamed job, update it in-memory so UI
+    // and timers reflect the new title without requiring a full reload.
+    if (this.activeSession && this.activeSession.job.equals(job)) {
+      try {
+        const updatedCollection = this.activeSession.toEventCollection().withUpdatedJob(renamed);
+        const newSession = Session.fromCollection(updatedCollection);
+        this.setActiveSession(newSession);
+      } catch (ex) {
+        // If rebuilding the session fails validation, clear the active session
+        // to avoid inconsistent in-memory state.
+        this.setActiveSession(null);
+      }
+    }
   }
 
   public initializeUI(): void {

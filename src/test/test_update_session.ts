@@ -3,7 +3,14 @@ import * as path from "path";
 import * as assert from "assert";
 import { append_log_record, load_all_log_entries, update_log_entry } from "../core/logs";
 import { Event } from "../core/event";
+import { Job } from "../core/job";
 import { TimeScopePaths } from "../core/paths";
+
+/** Helper: create an Event from a job title string using the new Job-centric API. */
+function ev(type: "start"|"stop"|"pause"|"resume", jobTitle: string, timestamp: number, task?: string): Event {
+    const job = Job.create({ title: jobTitle });
+    return Event.create(job, type, timestamp, task);
+}
 
 /**
  * test_update_session_flow
@@ -22,17 +29,17 @@ export function run_update_session_tests(): void {
     };
 
     // Create session with start, pause, resume, stop
-    append_log_record(paths, Event.create({ event: "start", job: "sess", timestamp: 1000 }));
-    append_log_record(paths, Event.create({ event: "pause", job: "sess", timestamp: 1500 }));
-    append_log_record(paths, Event.create({ event: "resume", job: "sess", timestamp: 2000 }));
-    append_log_record(paths, Event.create({ event: "stop", job: "sess", timestamp: 3000, task: "work" }));
+    append_log_record(paths, ev("start", "sess", 1000));
+    append_log_record(paths, ev("pause", "sess", 1500));
+    append_log_record(paths, ev("resume", "sess", 2000));
+    append_log_record(paths, ev("stop", "sess", 3000, "work"));
 
     // Update start and stop
     const entries = load_all_log_entries(paths);
     const startEnt = entries.find(e => e.record.type === 'start' && e.record.job === 'sess')!;
     const stopEnt = entries.find(e => e.record.type === 'stop' && e.record.job === 'sess')!;
-    const res1 = update_log_entry(paths, startEnt.raw, Event.create({ event: 'start', job: 'sess', timestamp: 800 }));
-    const res2 = update_log_entry(paths, stopEnt.raw, Event.create({ event: 'stop', job: 'sess', timestamp: 2500, task: 'work' }));
+    const res1 = update_log_entry(paths, startEnt.raw, ev('start', 'sess', 800));
+    const res2 = update_log_entry(paths, stopEnt.raw, ev('stop', 'sess', 2500, 'work'));
 
     if (res1.errors && res1.errors.length) {
         const msgs = res1.errors.map((e: any) => typeof e === 'string' ? e : (e.message || JSON.stringify(e)));
