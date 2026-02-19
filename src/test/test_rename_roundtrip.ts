@@ -49,7 +49,7 @@ export function run_rename_roundtrip_test(): void {
     const expectedEvents = recs.map(r => (r.job === "alpha" ? r.withJob("gamma") : r));
     const expectedLines = EventCollection.fromArray(expectedEvents).toLines();
     // files now include a file-level header as the first line
-    const headerLine = JSON.stringify({ _format_version: 1 });
+    const headerLine = JSON.stringify({ _format_version: 2 });
     expectedLines.unshift(headerLine);
 
     assert.strictEqual(lines.length, expectedLines.length, "line count should match expected");

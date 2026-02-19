@@ -46,23 +46,26 @@ export class Event {
 
     /**
      * Create a new Event from a Job domain object.
-     * Uses placeholder `id` and `time_seed` — actual generation is deferred to Step 4.4.
+     * Generates a deterministic record ID from the timestamp, event type, and job identity.
      */
-static create(job: Job, type: EventType, timestamp: number, task?: string): Event {
-    if (!(job instanceof Job)) throw new Error("Event.create: 'job' must be a Job instance");
-    if (!["start", "stop", "pause", "resume"].includes(type)) throw new Error("Event.create: invalid 'type'");
-    if (!Number.isFinite(timestamp)) throw new Error("Event.create: 'timestamp' must be finite");
-    if (task !== undefined && typeof task !== "string") throw new Error("Event.create: 'task' must be a string");
+    static create(job: Job, type: EventType, timestamp: number, task?: string): Event {
+        if (!(job instanceof Job)) throw new Error("Event.create: 'job' must be a Job instance");
+        if (!["start", "stop", "pause", "resume"].includes(type)) throw new Error("Event.create: invalid 'type'");
+        if (!Number.isFinite(timestamp)) throw new Error("Event.create: 'timestamp' must be finite");
+        if (task !== undefined && typeof task !== "string") throw new Error("Event.create: 'task' must be a string");
 
-    return new Event({
-        id: "",          // placeholder until 4.4
-        type,
-        job,
-        timestamp,
-        task,
-        time_seed: 0,    // placeholder until 4.4
-    });
-}
+        const time_seed = timestamp;
+        const id = Event.generate_record_id(time_seed, type, job.id);
+
+        return new Event({
+            id,
+            type,
+            job,
+            timestamp,
+            task,
+            time_seed,
+        });
+    }
 
 
     // Reconstruct from a validated, canonical DTO. Throws on any deviation.
@@ -116,7 +119,7 @@ static create(job: Job, type: EventType, timestamp: number, task?: string): Even
             const dto: EventDTO = {
                 id: obj.id,
                 event: obj.event,
-                job_title: obj.job_title,
+                job_title: obj.job,
                 timestamp: obj.timestamp,
                 job_id: obj.job_id,
                 time_seed: obj.time_seed
@@ -164,10 +167,18 @@ static create(job: Job, type: EventType, timestamp: number, task?: string): Even
         const padEventStr = " ".repeat(padEvent);
         const padJobStr = " ".repeat(padJob);
 
+        // Column alignment: the ID value starts at the same position for all event types.
+        // start/stop:   {"id":  "value"  — 2 spaces after the colon (before value)
+        // pause/resume: {  "id":"value"  — 2 spaces after { (before key)
+        const isPauseResume = dto.event === "pause" || dto.event === "resume";
+        const idPrefix = isPauseResume ? "{  \"id\":" : "{\"id\":  ";
+        const eventGap = "  ";
+
         if (taskVal !== undefined) {
-            return `{\"id\":${idVal}, \"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"task\":${taskVal}, \"job_id\":${jobIdVal}, \"time_seed\":${timeSeedVal}` + "}";
+            return `${idPrefix}${idVal},${eventGap}\"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"task\":${taskVal}, \"job_id\":${jobIdVal}, \"time_seed\":${timeSeedVal}` + "}";
         }
-        return `{\"id\":${idVal}, \"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal}, \"job_id\":${jobIdVal}, \"time_seed\":${timeSeedVal}` + "}";
+        const TASK_PLACEHOLDER = " ".repeat(12); // visual alignment when task is absent
+        return `${idPrefix}${idVal},${eventGap}\"event\":${eventVal}${padEventStr}, \"job\":${jobVal}${padJobStr}, \"timestamp\":${tsVal},${TASK_PLACEHOLDER} \"job_id\":${jobIdVal}, \"time_seed\":${timeSeedVal}` + "}";
     }
 
     toString(): string {
@@ -275,6 +286,65 @@ static create(job: Job, type: EventType, timestamp: number, task?: string): Even
             task: newTask,
             time_seed: this._time_seed,
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Record ID generation (per record_id_spec.md)
+    // ------------------------------------------------------------------
+
+    /**
+     * Generate a deterministic event record ID: `<time5>-<bucket1>-<jobHash3>`.
+     * @param time_seed  Original Unix ms timestamp (immutable identity input).
+     * @param event_type The event type (start | stop | pause | resume).
+     * @param job_id     The stable, immutable job identifier.
+     */
+    static generate_record_id(time_seed: number, event_type: EventType, job_id: string): string {
+        const time5 = Event.compute_time5(time_seed);
+        const bucket1 = Event.compute_bucket1(time_seed, event_type);
+        const job_hash3 = Event.compute_job_hash3(job_id);
+        return `${time5}-${bucket1}-${job_hash3}`;
+    }
+
+    /**
+     * Base-36 encode the seconds portion of a Unix ms timestamp, left-padded to 5 chars.
+     */
+    static compute_time5(timestamp_ms: number): string {
+        const seconds = Math.floor(timestamp_ms / 1000);
+        return (seconds >>> 0).toString(36).padStart(5, '0').slice(-5);
+    }
+
+    /**
+     * Compute the single base-36 bucket character from ms-within-second and event type.
+     *
+     * bucket   = floor(ms_part / 111)          → 0–8  (999ms maps to 8)
+     * type_ord = start:0 | pause:1 | resume:2 | stop:3
+     * value    = bucket * 4 + type_ord          → 0–35
+     */
+    static compute_bucket1(timestamp_ms: number, event_type: EventType): string {
+        const ms_part = Math.floor(timestamp_ms) % 1000;
+        const bucket = Math.min(Math.floor(ms_part / 111), 8); // 0-8 (edge: 999ms → 8, not 9)
+        const type_map: Record<EventType, number> = { start: 0, pause: 1, resume: 2, stop: 3 };
+        const type_ord = type_map[event_type];
+        const value = bucket * 4 + type_ord;              // 0-35
+        return value.toString(36);
+    }
+
+    /**
+     * Stable 3-character hash of a job_id using FNV-1a 32-bit, base-36 encoded.
+     */
+    static compute_job_hash3(job_id: string): string {
+        const hash32 = Event.fnv1a32(job_id);
+        return (hash32 >>> 0).toString(36).toLowerCase().padStart(3, '0').slice(0, 3);
+    }
+
+    /** FNV-1a 32-bit hash — deterministic and platform-independent over UTF-16 code units. */
+    private static fnv1a32(str: string): number {
+        let h = 0x811c9dc5 >>> 0;
+        for (let i = 0; i < str.length; i++) {
+            h ^= str.charCodeAt(i);
+            h = Math.imul(h, 0x01000193) >>> 0;
+        }
+        return h >>> 0;
     }
 }
 

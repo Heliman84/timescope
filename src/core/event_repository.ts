@@ -8,7 +8,7 @@ import { Job } from "./job";
 import { ensureDirExists, readJSONLSafe } from "../utils/fs_utils.ts";
 
 const HEADER_KEY = "_format_version";
-const HEADER_LINE = JSON.stringify({ _format_version: 1 });
+const HEADER_LINE = JSON.stringify({ _format_version: 2 });
 
 export type EventEntry = { record: Event; raw: string; source: "global" | "workspace"; lineIndex: number };
 

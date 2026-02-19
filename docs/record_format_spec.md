@@ -51,7 +51,7 @@ Each line is either a header or an event record. All records are valid JSON obje
 Must appear as the first line of the file:
 
 ```json
-{ "_format_version": 1 }
+{ "_format_version": 2 }
 ```
 
 **Purpose:** File versioning for future schema evolution.
@@ -78,10 +78,10 @@ Where:
 
 Examples:
 ```json
-{"id":"k3t2a-4-a9f", "event":"start"  , "job":"test-issue9"                   , "timestamp":1771119496661, "job_id":"k3f9g", "time_seed":1771119496661}
-{"id":"k3t2a-6-a9f", "event":"pause"  , "job":"test-issue9"                   , "timestamp":1771119680000, "job_id":"k3f9g", "time_seed":1771119680000}
-{"id":"k3t2b-1-a9f", "event":"resume" , "job":"test-issue9"                   , "timestamp":1771119803000, "job_id":"k3f9g", "time_seed":1771119803000}
-{"id":"k3t2b-3-a9f", "event":"stop"   , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"generating format_spec.md", "job_id":"k3f9g", "time_seed":1771120113000}
+{"id":  "ah8js-k-4fr",  "event":"start"   , "job":"test-issue9"                   , "timestamp":1771119496661,             "job_id":"16lor", "time_seed":1771119496661}
+{  "id":"ah8ow-1-4fr",  "event":"pause"   , "job":"test-issue9"                   , "timestamp":1771119680000,             "job_id":"16lor", "time_seed":1771119680000}
+{  "id":"ah8sb-2-4fr",  "event":"resume"  , "job":"test-issue9"                   , "timestamp":1771119803000,             "job_id":"16lor", "time_seed":1771119803000}
+{"id":  "ah90x-3-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"generating format_spec.md", "job_id":"16lor", "time_seed":1771120113000}
 ```
 
 ---
@@ -155,7 +155,7 @@ After parsing, timescope validates:
 ```json
 [
   {
-    "job_id": "k3f9g",
+    "job_id": "16lor",
     "job_title": "test-issue9",
     "is_archived": false,
     "created": 1771119490000,
@@ -167,11 +167,11 @@ After parsing, timescope validates:
 
 **logs.jsonl:**
 ```json
-{ " _format_version": 1 }
-{"id":"k3t2a-4-a9f", "event":"start"  , "job":"test-issue9"                   , "timestamp":1771119496661, "job_id":"k3f9g", "time_seed":1771119496661}
-{"id":"k3t2a-6-a9f", "event":"pause"  , "job":"test-issue9"                   , "timestamp":1771119680000, "job_id":"k3f9g", "time_seed":1771119680000}
-{"id":"k3t2b-1-a9f", "event":"resume" , "job":"test-issue9"                   , "timestamp":1771119803000, "job_id":"k3f9g", "time_seed":1771119803000}
-{"id":"k3t2b-3-a9f", "event":"stop"   , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"generating format_spec.md", "job_id":"k3f9g", "time_seed":1771120113000}
+{ "_format_version": 2 }
+{"id":  "ah8js-k-4fr",  "event":"start"   , "job":"test-issue9"                   , "timestamp":1771119496661,             "job_id":"16lor", "time_seed":1771119496661}
+{  "id":"ah8ow-1-4fr",  "event":"pause"   , "job":"test-issue9"                   , "timestamp":1771119680000,             "job_id":"16lor", "time_seed":1771119680000}
+{  "id":"ah8sb-2-4fr",  "event":"resume"  , "job":"test-issue9"                   , "timestamp":1771119803000,             "job_id":"16lor", "time_seed":1771119803000}
+{"id":  "ah90x-3-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"generating format_spec.md", "job_id":"16lor", "time_seed":1771120113000}
 ```
 
 This represents a single 10-minute session for "test-issue9".
@@ -183,6 +183,10 @@ Records are stored with **human-readable padding** for manual inspection:
 
 - Event values are padded to 8 characters
 - Job names are padded to 30 characters
+- `start`/`stop`: 2 spaces after `"id":` (before the value) — `{"id":  "..."`
+- `pause`/`resume`: 2 spaces before `"id"` (after `{`) — `{  "id":"..."`
+- This keeps the ID value and all subsequent columns aligned across all event types
+- When `task` is absent, 12 spaces are inserted before `"job_id"` to visually align columns
 
 The padding is cosmetic; the JSON remains fully valid.
 
