@@ -4,6 +4,10 @@ import { Job } from "./job";
 /**
  * Collection of `Event` domain objects. Uses domain semantics for validation
  * and serialization boundaries.
+ *
+ * File-location metadata (global_line_index, workspace_line_index) lives
+ * directly on each Event. EventCollection is a pure domain collection:
+ * filtering, validation, immutable transforms.
  */
 export class EventCollection {
     private events: Event[];

@@ -9,10 +9,11 @@ function r(e: "start"|"pause"|"resume"|"stop", t: number, jobTitle = "job1", tas
 }
 
 /**
- * test_event_collection_validation
- * Target: `src/core/event.ts::EventCollection`
- * Purpose: Validate common and edge-case event sequences (start/pause/resume/stop),
- * ensuring the validator emits appropriate structured errors for invalid sequences.
+ * Tests EventCollection validation:
+ * - Target: EventCollection.validate in src/core/event_collection.ts
+ * - What: validates happy-path and edge-case sequences for start/pause/resume/stop.
+ * - Does: builds valid and invalid runs (duplicates, timestamp regressions, ordering) and inspects errors.
+ * - Why: ensures validator emits structured errors to guard session construction integrity.
  */
 export function run_event_collection_tests(): void {
     // Valid: start -> pause -> resume -> stop

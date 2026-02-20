@@ -11,8 +11,6 @@ import { ensureDirExists, readJSONLSafe } from "../utils/fs_utils";
 const HEADER_KEY = "_format_version";
 const HEADER_LINE = JSON.stringify({ _format_version: 2 });
 
-export type EventEntry = { record: Event; raw: string; source: "global" | "workspace"; lineIndex: number };
-
 export class EventRepository {
     private readonly paths: TimeScopePaths;
 
@@ -37,29 +35,44 @@ export class EventRepository {
         ensureDirExists(this.paths.global_log_path);
         if (this.paths.workspace_log_path) ensureDirExists(this.paths.workspace_log_path);
 
+        // Read global file once — used for both dedupe check and line count.
+        let globalLines: string[] = [];
         try {
-            const existing = readJSONLSafe(this.paths.global_log_path);
-            for (let i = existing.length - 1; i >= 0; i--) {
-                const parsedEvent = Event.fromJSONL(existing[i]);
+            globalLines = readJSONLSafe(this.paths.global_log_path);
+            for (let i = globalLines.length - 1; i >= 0; i--) {
+                const parsedEvent = Event.fromJSONL(globalLines[i]);
                 if (!parsedEvent) continue;
-                if (event.equals(parsedEvent)) return;
+                if (event.equals(parsedEvent)) {
+                    // Already in the global log — set the index so the caller
+                    // knows it's persisted, then return without double-writing.
+                    event.setGlobalLineIndex(i);
+                    return;
+                }
                 break;
             }
         } catch {
             // ignore and proceed to append
         }
 
-        if (!fs.existsSync(this.paths.global_log_path)) {
+        if (globalLines.length === 0) {
+            // New file: header on line 0, event on line 1
             fs.writeFileSync(this.paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
+            event.setGlobalLineIndex(1);
         } else {
+            // Appending: event lands after existing lines
             fs.appendFileSync(this.paths.global_log_path, line, "utf8");
+            event.setGlobalLineIndex(globalLines.length);
         }
 
         if (this.paths.workspace_log_path) {
-            if (!fs.existsSync(this.paths.workspace_log_path)) {
+            // Read workspace file once for line count.
+            const wsLines = readJSONLSafe(this.paths.workspace_log_path);
+            if (wsLines.length === 0) {
                 fs.writeFileSync(this.paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
+                event.setWorkspaceLineIndex(1);
             } else {
                 fs.appendFileSync(this.paths.workspace_log_path, line, "utf8");
+                event.setWorkspaceLineIndex(wsLines.length);
             }
         }
     }
@@ -327,9 +340,15 @@ export class EventRepository {
             const lines = readJSONLSafe(filePath);
             const parsed: string[] = [];
             for (const l of lines) {
+                // Skip header lines — we prepend a fresh header at the end
+                try {
+                    const obj = JSON.parse(l);
+                    if (obj && typeof obj === "object" && (obj as any)._format_version !== undefined) continue;
+                } catch { /* not JSON — fall through to preserve as malformed */ }
+
                 const ev = Event.fromJSONL(l);
                 if (!ev) {
-                    // preserve malformed/header lines as-is
+                    // preserve malformed lines as-is
                     parsed.push(l);
                     continue;
                 }
@@ -340,12 +359,96 @@ export class EventRepository {
                     parsed.push(ev.toJSONL());
                 }
             }
-            const toWrite = parsed.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...parsed];
+            const toWrite = [HEADER_LINE, ...parsed];
             ensureDirExists(filePath);
             fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
         };
 
         rewriteFile(this.paths.global_log_path);
         if (this.paths.workspace_log_path) rewriteFile(this.paths.workspace_log_path);
+    }
+
+    /**
+     * Load every parseable event from both global and workspace logs,
+     * de-duplicated by Event identity. Each Event carries its own
+     * global_line_index and workspace_line_index (-1 if absent from a file).
+     */
+    loadAllEntries(): EventCollection {
+        // id → Event (de-duped; line indices merged onto one object)
+        const byId = new Map<string, Event>();
+        const ordered: string[] = []; // preserve insertion order for the collection
+
+        const scan = (
+            filePath: string | null | undefined,
+            setIndex: (ev: Event, line: number) => void
+        ) => {
+            if (!filePath || !fs.existsSync(filePath)) return;
+            const lines = readJSONLSafe(filePath);
+            for (let i = 0; i < lines.length; i++) {
+                const ev = Event.fromJSONL(lines[i]);
+                if (!ev) continue;
+                const existing = byId.get(ev.id);
+                if (existing) {
+                    // Same event already seen in the other file — merge index
+                    setIndex(existing, i);
+                } else {
+                    setIndex(ev, i);
+                    byId.set(ev.id, ev);
+                    ordered.push(ev.id);
+                }
+            }
+        };
+
+        scan(this.paths.global_log_path, (ev, i) => ev.setGlobalLineIndex(i));
+        scan(this.paths.workspace_log_path, (ev, i) => ev.setWorkspaceLineIndex(i));
+
+        const events = ordered.map(id => byId.get(id)!);
+        return EventCollection.fromArray(events);
+    }
+
+    /**
+     * Replace a specific Event in the log files it appears in.
+     * Uses the Event's own global_line_index / workspace_line_index to know
+     * which files to target, and matches by raw JSONL content for safety.
+     */
+    replaceEvent(
+        oldEvent: Event,
+        newEvent: Event
+    ): { globalReplaced: boolean; workspaceReplaced: boolean } {
+        const result = { globalReplaced: false, workspaceReplaced: false };
+        const oldLine = oldEvent.toJSONL();
+        const newLine = newEvent.toJSONL();
+
+        const rewrite = (filePath: string | null | undefined, key: "globalReplaced" | "workspaceReplaced") => {
+            if (!filePath || !fs.existsSync(filePath)) return;
+            const lines = readJSONLSafe(filePath);
+            let replaced = false;
+            const output: string[] = [];
+
+            for (const l of lines) {
+                if (!replaced && l === oldLine) {
+                    output.push(newLine);
+                    replaced = true;
+                } else {
+                    output.push(l);
+                }
+            }
+
+            if (replaced) {
+                const toWrite = output.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...output];
+                ensureDirExists(filePath);
+                fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
+                result[key] = true;
+            }
+        };
+
+        if (oldEvent.isInGlobal) {
+            rewrite(this.paths.global_log_path, "globalReplaced");
+        }
+        if (oldEvent.isInWorkspace) {
+            rewrite(this.paths.workspace_log_path, "workspaceReplaced");
+        }
+
+        return result;
     }
 }

@@ -6,8 +6,11 @@ import { Job } from "../core/job";
 import { JobRepository } from "../core/job_repository";
 
 /**
- * OOP job repository CRUD tests
- * Verifies persistence, update, and delete using Job domain objects.
+ * Tests JobRepository CRUD:
+ * - Target: JobRepository in src/core/job_repository.ts
+ * - What: exercises save/load/update/delete with Job domain objects.
+ * - Does: writes two jobs, renames one, deletes the other, and reloads to verify persistence semantics.
+ * - Why: ensures the repository’s OOP persistence path matches expected identity and mutation rules.
  */
 export async function run_job_repository_tests(): Promise<void> {
     const testRoot = path.join(__dirname, "..", "..", "test-output", `jobs-${Date.now()}`);

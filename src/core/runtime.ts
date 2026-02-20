@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import { resolve_paths, TimeScopePaths } from "./paths";
 import { JobRepository } from "./job_repository";
 import { EventRepository } from "./event_repository";
+import { Event } from "./event";
+import { EventCollection } from "./event_collection";
 import { JobCollection } from "./job_collection";
 import { Session } from "./session";
 import { Job } from "./job";
@@ -15,6 +17,8 @@ export class Runtime {
 
   public activeSession: Session | null = null;
   public timerInterval: NodeJS.Timeout | null = null;
+
+  private _cachedCollection: EventCollection | null = null;
 
   public ui!: {
     divider: vscode.StatusBarItem;
@@ -31,6 +35,44 @@ export class Runtime {
     this.logRepo = new EventRepository(this.paths);
     this.jobs = JobCollection.fromArray([]);
     // UI is created when `initializeUI()` is called by the extension activation flow.
+  }
+
+  /**
+   * Return a cached EventCollection, loading from disk only if the cache is empty.
+   */
+  public loadEventCollection(): EventCollection {
+    if (!this._cachedCollection) {
+      this._cachedCollection = this.logRepo.loadAllEntries();
+    }
+    return this._cachedCollection;
+  }
+
+  /**
+   * Force-reload the EventCollection from disk and update the cache.
+   */
+  public refreshEventCollection(): EventCollection {
+    this._cachedCollection = this.logRepo.loadAllEntries();
+    return this._cachedCollection;
+  }
+
+  /**
+   * Clear the cached EventCollection so the next access reloads from disk.
+   * Use only after bulk mutations (e.g. renameJob) that rewrite the files.
+   */
+  public invalidateEventCollection(): void {
+    this._cachedCollection = null;
+  }
+
+  /**
+   * Push a newly-written event into the cached collection in-place.
+   * If no cache exists yet, initializes it from disk first.
+   * This avoids a full file re-parse after every append.
+   */
+  public appendToCache(event: Event): void {
+    if (!this._cachedCollection) {
+      this._cachedCollection = this.logRepo.loadAllEntries();
+    }
+    this._cachedCollection.add(event);
   }
 
   /**
@@ -53,6 +95,7 @@ export class Runtime {
 
     // Rewrite logs to reference updated job fields (by id)
     this.logRepo.renameJobInLogByJob(renamed);
+    this.invalidateEventCollection();
     // If an active session references the renamed job, update it in-memory so UI
     // and timers reflect the new title without requiring a full reload.
     if (this.activeSession && this.activeSession.job.equals(job)) {

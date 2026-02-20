@@ -27,6 +27,13 @@ export class Event {
     private readonly _task?: string;
     private readonly _time_seed: number;
 
+    /**
+     * Mutable file-location metadata.
+     * -1 means "not present in that file"; >= 0 is the 0-based line index.
+     */
+    private _global_line_index: number = -1;
+    private _workspace_line_index: number = -1;
+
     // Private constructor enforces use of factory methods.
     private constructor(fields: {
         id: string;
@@ -197,6 +204,38 @@ export class Event {
     /** The full Job domain object associated with this event. */
     get jobObject(): Job { return this._job; }
 
+    /** 0-based line index in the global log file, or -1 if not persisted there. */
+    get global_line_index(): number { return this._global_line_index; }
+    /** 0-based line index in the workspace log file, or -1 if not persisted there. */
+    get workspace_line_index(): number { return this._workspace_line_index; }
+
+    /** Whether this event has been persisted to at least one log file. */
+    get isPersisted(): boolean { return this._global_line_index >= 0 || this._workspace_line_index >= 0; }
+    /** Whether this event exists in the global log. */
+    get isInGlobal(): boolean { return this._global_line_index >= 0; }
+    /** Whether this event exists in the workspace log. */
+    get isInWorkspace(): boolean { return this._workspace_line_index >= 0; }
+
+    /**
+     * Set the line index for a specific log file.
+     * Only allows setting from -1 to a non-negative value, or overwriting
+     * an existing non-negative value (for rewrite/compaction scenarios).
+     */
+    setGlobalLineIndex(index: number): void {
+        if (!Number.isInteger(index) || index < -1) throw new Error('global_line_index must be an integer >= -1');
+        this._global_line_index = index;
+    }
+    setWorkspaceLineIndex(index: number): void {
+        if (!Number.isInteger(index) || index < -1) throw new Error('workspace_line_index must be an integer >= -1');
+        this._workspace_line_index = index;
+    }
+
+    /** Copy file-location metadata from another Event (e.g. after an immutable transform). */
+    copyLocationFrom(other: Event): void {
+        this._global_line_index = other._global_line_index;
+        this._workspace_line_index = other._workspace_line_index;
+    }
+
     // Domain semantics helpers
     isStart(): boolean { return this._type === "start"; }
     isStop(): boolean { return this._type === "stop"; }
@@ -254,7 +293,7 @@ export class Event {
     // These bypass the DTO boundary to preserve the full Job domain object.
     withJob(newJob: Job): Event {
         if (!(newJob instanceof Job)) throw new Error("Invalid job");
-        return new Event({
+        const ev = new Event({
             id: this._id,
             type: this._type,
             job: newJob,
@@ -262,11 +301,13 @@ export class Event {
             task: this._task,
             time_seed: this._time_seed,
         });
+        ev.copyLocationFrom(this);
+        return ev;
     }
 
     withTimestamp(newTimestamp: number): Event {
         if (typeof newTimestamp !== "number" || !Number.isFinite(newTimestamp)) throw new Error("Invalid timestamp");
-        return new Event({
+        const ev = new Event({
             id: this._id,
             type: this._type,
             job: this._job,
@@ -274,11 +315,13 @@ export class Event {
             task: this._task,
             time_seed: this._time_seed,
         });
+        ev.copyLocationFrom(this);
+        return ev;
     }
 
     withTask(newTask: string | undefined): Event {
         if (newTask !== undefined && typeof newTask !== "string") throw new Error("Invalid task");
-        return new Event({
+        const ev = new Event({
             id: this._id,
             type: this._type,
             job: this._job,
@@ -286,6 +329,8 @@ export class Event {
             task: newTask,
             time_seed: this._time_seed,
         });
+        ev.copyLocationFrom(this);
+        return ev;
     }
 
     // ------------------------------------------------------------------

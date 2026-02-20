@@ -57,6 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 const startEvent = session.startEvent;
                 if (!startEvent) throw new Error("Failed to create start event");
                 runtime.logRepo.appendValidated(startEvent);
+                runtime.appendToCache(startEvent);
                 runtime.setActiveSession(session);
                 // job complete exit without running job picker since we just created a job to start
                 return;
@@ -70,6 +71,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const startEvent = session.startEvent;
             if (!startEvent) throw new Error("Failed to create start event");
             runtime.logRepo.appendValidated(startEvent);
+            runtime.appendToCache(startEvent);
             runtime.setActiveSession(session);
         })
     );
@@ -91,6 +93,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             const event = session.pause();
             runtime.logRepo.appendValidated(event);
+            runtime.appendToCache(event);
             runtime.setActiveSession(session);
         })
     );
@@ -110,6 +113,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             const event = session.resume();
             runtime.logRepo.appendValidated(event);
+            runtime.appendToCache(event);
             runtime.setActiveSession(session);
         })
     );
@@ -131,6 +135,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             const event = session.stop(task_note || undefined);
             runtime.logRepo.appendValidated(event);
+            runtime.appendToCache(event);
             runtime.setActiveSession(null);
         })
     );
@@ -142,7 +147,7 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.dashboard", () => {
-            handle_dashboard(context);
+            handle_dashboard(runtime, context);
         })
     );
 

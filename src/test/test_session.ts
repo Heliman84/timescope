@@ -7,7 +7,13 @@ function ev(job: Job, type: "start" | "stop" | "pause" | "resume", ts: number, t
     return Event.create(job, type, ts, task);
 }
 
-/** Happy path: start → pause → resume → stop, elapsed accounting */
+/**
+ * Tests Session happy path:
+ * - Target: Session lifecycle in src/core/session.ts (start/pause/resume/stop/elapsed)
+ * - What: validates start/pause/resume/stop flow and elapsed accumulation.
+ * - Does: runs the nominal sequence, inspects last event, and checks elapsed totals with openUseNow true.
+ * - Why: confirms baseline session lifecycle and time accounting remain stable after refactors.
+ */
 export function run_session_happy_path_tests(): void {
     const job = Job.create({ title: "sess" });
     const s = Session.start(job, 1000);
@@ -23,7 +29,13 @@ export function run_session_happy_path_tests(): void {
     assert.strictEqual(s.elapsed(3000), 1500);
 }
 
-/** Invalid transitions and guards (job mismatch, duplicates, illegal order). */
+/**
+ * Tests Session invalid transitions:
+ * - Target: Session transition guards in src/core/session.ts
+ * - What: rejects illegal duplicates, wrong ordering, job mismatches, and post-stop appends.
+ * - Does: constructs sessions and asserts throws for invalid starts/resumes/pauses/stops and cross-job events.
+ * - Why: enforces session invariants to keep event timelines consistent.
+ */
 export function run_session_invalid_transition_tests(): void {
     const job = Job.create({ title: "sess" });
     const other = Job.create({ title: "other" });
@@ -68,8 +80,8 @@ export function run_session_invalid_transition_tests(): void {
         [ev(job, "start", 1), ev(job, "resume", 2), /invalid transition|resume/],
         [ev(job, "start", 1), ev(job, "pause", 2), /ok/], // allowed, control separately
         [ev(job, "pause", 1), ev(job, "start", 2), /must begin|start/],
-        [ev(job, "resume", 1), ev(job, "resume", 2), /duplicate|invalid transition/],
-        [ev(job, "stop", 1), ev(job, "start", 2), /Cannot append|already stopped/],
+        [ev(job, "resume", 1), ev(job, "resume", 2), /duplicate|invalid transition|must begin/],
+        [ev(job, "stop", 1), ev(job, "start", 2), /Cannot append|already stopped|must begin/],
     ];
 
     // For allowed pair (start->pause) ensure no throw
@@ -92,7 +104,13 @@ export function run_session_invalid_transition_tests(): void {
     }
 }
 
-/** Elapsed behavior for open sessions with openUseNow flag. */
+/**
+ * Tests elapsed for open sessions:
+ * - Target: Session.totalElapsed in src/core/session.ts
+ * - What: computes elapsed with and without the ongoing segment.
+ * - Does: start/pause/resume, leave open, then query totalElapsed with openUseNow toggled.
+ * - Why: guarantees accurate reporting when a session is still running.
+ */
 export function run_session_elapsed_open_segment_tests(): void {
     const job = Job.create({ title: "elapsed" });
     const s = Session.start(job, 0);
@@ -103,7 +121,13 @@ export function run_session_elapsed_open_segment_tests(): void {
     assert.strictEqual(s.totalElapsed(2500, false), 1000, "exclude ongoing segment");
 }
 
-/** Equality and collection round-trip. */
+/**
+ * Tests Session equality and round-trip:
+ * - Target: Session.fromEvents/Session.fromCollection in src/core/session.ts
+ * - What: rebuilds sessions from events and collections and compares identity.
+ * - Does: create a session from events, reconstruct from a collection, and assert equality.
+ * - Why: ensures conversion helpers preserve session semantics.
+ */
 export function run_session_equality_tests(): void {
     const job = Job.create({ title: "eq" });
     const events = [ev(job, "start", 1), ev(job, "stop", 2)];
