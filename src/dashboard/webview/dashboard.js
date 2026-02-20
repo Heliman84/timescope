@@ -63,6 +63,20 @@ window.addEventListener("message", (event) => {
         const save = document.getElementById('session_edit_save');
         if (save) { save.disabled = false; save.textContent = 'Save'; }
 
+        // --- Show warnings (informational, cross-job overlap) ---
+        const warningBox = document.getElementById('session_warning');
+        if (warningBox) {
+            if (result && result.warnings && result.warnings.length > 0) {
+                warningBox.style.display = '';
+                const wMsgs = result.warnings.map(w => (typeof w === 'string' ? w : (w.message || JSON.stringify(w))));
+                warningBox.textContent = '\u26A0 ' + wMsgs.join('\n\u26A0 ');
+            } else {
+                warningBox.style.display = 'none';
+                warningBox.textContent = '';
+            }
+        }
+
+        // --- Show errors (blocking, same-job sequence violation) ---
         if (result && result.errors && result.errors.length > 0) {
             // Show inline errors in the session modal
             const errorBox = document.getElementById('session_error');
@@ -82,6 +96,11 @@ window.addEventListener("message", (event) => {
         const eventsAsc = payload.map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp, id: e.id, job_id: e.job_id, time_seed: e.time_seed })).sort((a, b) => a.timestamp - b.timestamp);
         all_sessions = build_sessions_from_events(eventsAsc);
         render_dashboard(all_sessions);
+
+        // If there are warnings but no errors, keep the modal open so the user sees them
+        if (result && result.warnings && result.warnings.length > 0) {
+            return;
+        }
         // Close session edit modal if open
         close_session_modal();
     }
@@ -622,6 +641,8 @@ function open_session_edit_modal(session) {
     const container = document.getElementById('session_events_container');
     const errorBox = document.getElementById('session_error');
     if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+    const warningBox = document.getElementById('session_warning');
+    if (warningBox) { warningBox.style.display = 'none'; warningBox.textContent = ''; }
 
     container.innerHTML = '';
 

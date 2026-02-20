@@ -13,6 +13,8 @@ export interface ValidationError {
     code: string;
     message: string;
     record?: EventDTO;
+    /** "error" blocks the save; "warning" is informational (e.g. cross-job overlap). Defaults to "error". */
+    severity?: "error" | "warning";
 }
 
 /**

@@ -135,6 +135,128 @@ export class EventCollection {
         return new EventCollection(mapped);
     }*/
 
+    /**
+     * Validate a proposed replacement before writing it to disk.
+     *
+     * Same-job validation (severity: "error"):
+     *   Filters to events belonging to the SAME job as the target event,
+     *   applies the replacement, and runs validate() on just that job's
+     *   event sequence. Errors here block the save — they indicate the
+     *   edit would break the session's own start→pause→resume→stop order
+     *   or create non-increasing timestamps within the same job.
+     *
+     * Cross-job overlap detection (severity: "warning"):
+     *   Checks whether the new timestamp falls inside any OTHER job's
+     *   active session window (between that job's start and stop).
+     *   Warnings are informational — the save is still allowed because
+     *   different jobs are independent timelines, but the user should
+     *   be made aware that the entry now overlaps another job's session.
+     */
+    validateReplacement(oldEvent: Event, newEvent: Event): ValidationError[] {
+        // ── Same-job sequence validation (errors) ──────────────────────
+        const jobSubset = this.filterByJob(oldEvent.job);
+        const proposed = jobSubset.replaceEvent(oldEvent, newEvent);
+        const errors = proposed.validate();
+
+        // ── Cross-job overlap detection (warnings) ─────────────────────
+        errors.push(...this._detectCrossJobOverlaps(newEvent));
+
+        return errors;
+    }
+
+    /**
+     * Validate a batch of proposed replacements before writing to disk.
+     *
+     * Same-job validation (severity: "error"):
+     *   Applies all replacements, then validates each affected job's
+     *   event sequence independently. Errors block the save.
+     *
+     * Cross-job overlap detection (severity: "warning"):
+     *   After applying all replacements, checks each changed event
+     *   for overlap with other jobs' sessions. Warnings are informational.
+     */
+    validateReplacements(edits: { oldEvent: Event; newEvent: Event }[]): ValidationError[] {
+        let proposed: EventCollection = new EventCollection(this.events);
+        const affectedJobIds = new Set<string>();
+        for (const { oldEvent, newEvent } of edits) {
+            proposed = proposed.replaceEvent(oldEvent, newEvent);
+            affectedJobIds.add(oldEvent.job_id);
+        }
+
+        // ── Same-job sequence validation (errors) ──────────────────────
+        const errors: ValidationError[] = [];
+        for (const jobId of affectedJobIds) {
+            const jobEvents = proposed.events.filter(e => e.job_id === jobId);
+            const jobCol = new EventCollection(jobEvents);
+            errors.push(...jobCol.validate());
+        }
+
+        // ── Cross-job overlap detection (warnings) ─────────────────────
+        for (const { newEvent } of edits) {
+            errors.push(...proposed._detectCrossJobOverlaps(newEvent));
+        }
+
+        return errors;
+    }
+
+    /**
+     * Detect whether `event` falls inside another job's active session window.
+     * A session window is the span between a start and a stop for a given job.
+     * Returns warnings (not errors) since cross-job overlap is informational —
+     * different jobs are independent timelines.
+     */
+    _detectCrossJobOverlaps(event: Event): ValidationError[] {
+        const warnings: ValidationError[] = [];
+        const ts = event.timestamp;
+
+        // Build session windows for every OTHER job
+        const otherEvents = this.events.filter(e => e.job_id !== event.job_id);
+        // Group by job_id
+        const byJob = new Map<string, Event[]>();
+        for (const e of otherEvents) {
+            const arr = byJob.get(e.job_id) || [];
+            arr.push(e);
+            byJob.set(e.job_id, arr);
+        }
+
+        for (const [, jobEvents] of byJob) {
+            const sorted = jobEvents.slice().sort((a, b) => a.timestamp - b.timestamp);
+            let windowStart: number | null = null;
+            let jobTitle = sorted[0]?.job_title ?? "unknown";
+
+            for (const e of sorted) {
+                if (e.isStart()) {
+                    windowStart = e.timestamp;
+                } else if (e.isStop() && windowStart !== null) {
+                    // Check if our timestamp falls within [windowStart, stopTimestamp]
+                    if (ts > windowStart && ts < e.timestamp) {
+                        warnings.push({
+                            index: -1,
+                            code: "cross_job_overlap",
+                            message: `Timestamp ${ts} overlaps with an active session for job "${jobTitle}" (${windowStart}–${e.timestamp})`,
+                            record: event.toDTO(),
+                            severity: "warning"
+                        });
+                    }
+                    windowStart = null;
+                }
+            }
+
+            // Open session (start with no stop yet) — check if ts falls after the start
+            if (windowStart !== null && ts > windowStart) {
+                warnings.push({
+                    index: -1,
+                    code: "cross_job_overlap",
+                    message: `Timestamp ${ts} overlaps with an open session for job "${jobTitle}" (started at ${windowStart}, not yet stopped)`,
+                    record: event.toDTO(),
+                    severity: "warning"
+                });
+            }
+        }
+
+        return warnings;
+    }
+
     retimeEvent(target: Event, newTimestamp: number): EventCollection {
         return this.updateEvent(target, e => e.withTimestamp(newTimestamp));
     }

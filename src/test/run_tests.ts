@@ -1,7 +1,12 @@
 import { run_event_repository_append_and_load_tests, run_event_repository_rename_tests, run_event_repository_validation_tests, run_event_repository_last_sessions_tests, run_event_repository_dedupe_tests, run_event_repository_malformed_preservation_tests, run_event_repository_line_index_tests } from "./test_event_repository";
 import { run_session_happy_path_tests, run_session_invalid_transition_tests, run_session_elapsed_open_segment_tests, run_session_equality_tests } from "./test_session";
 import { run_event_collection_tests } from "./test_event_collection";
+import { run_event_collection_extended_tests } from "./test_event_collection_extended";
 import { run_job_repository_tests } from "./test_jobs";
+import { run_dashboard_buildPayload_tests, run_dashboard_filterRelevantErrors_tests, run_dashboard_replaceEvent_tests, run_dashboard_editRoundTrip_tests } from "./test_dashboard";
+import { run_event_tests } from "./test_event";
+import { run_job_domain_tests } from "./test_job";
+import { run_job_collection_tests } from "./test_job_collection";
 
 async function main() {
     try {
@@ -17,7 +22,15 @@ async function main() {
         run_session_elapsed_open_segment_tests();
         run_session_equality_tests();
         run_event_collection_tests();
+        run_event_collection_extended_tests();
+        run_event_tests();
+        run_job_domain_tests();
+        run_job_collection_tests();
         await run_job_repository_tests();
+        run_dashboard_buildPayload_tests();
+        run_dashboard_filterRelevantErrors_tests();
+        run_dashboard_replaceEvent_tests();
+        run_dashboard_editRoundTrip_tests();
         console.log("All tests passed.");
         process.exit(0);
     } catch (err) {
