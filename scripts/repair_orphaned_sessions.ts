@@ -217,7 +217,26 @@ function make_synthetic(
 // Timestamp helpers
 // ═══════════════════════════════════════════════════════════════════════
 
-function fmt_date(ms: number): string { return new Date(ms).toISOString(); }
+// Human-readable local timestamp helpers
+function pad2(n: number): string { return String(n).padStart(2, "0"); }
+
+function formatLocalISO(ms: number): string {
+    const d = new Date(ms);
+    const tzOffsetMin = -d.getTimezoneOffset(); // minutes east of UTC
+    const sign = tzOffsetMin >= 0 ? "+" : "-";
+    const absMin = Math.abs(tzOffsetMin);
+    const tzHH = pad2(Math.floor(absMin / 60));
+    const tzMM = pad2(absMin % 60);
+    const tz = `${sign}${tzHH}:${tzMM}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())} ${tz}`;
+}
+
+function formatLocalForFilename(ms: number): string {
+    const d = new Date(ms);
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}_${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+}
+
+function fmt_date(ms: number): string { return formatLocalISO(ms); }
 
 /**
  * Compute timestamp for a synthetic **stop** that closes an orphaned session.
@@ -314,7 +333,7 @@ function generate_report(params: {
     out.push("");
     out.push(`| Field | Value |`);
     out.push(`|-------|-------|`);
-    out.push(`| Date | ${new Date().toISOString()} |`);
+    out.push(`| Date | ${formatLocalISO(Date.now())} |`);
     out.push(`| Input | \`${input_path}\` |`);
     out.push(`| Format | ${is_v2 ? "v2" : "v1"} |`);
     out.push("");
@@ -596,7 +615,7 @@ try {
 
     const report_path = path.join(
         path.dirname(log_path),
-        `orphan_repair_report_${Date.now()}.md`,
+        `orphan_repair_report_${formatLocalForFilename(Date.now())}.md`,
     );
     fs.writeFileSync(report_path, report, "utf8");
 

@@ -16,6 +16,8 @@ function buildPayload(events: Event[]): any[] {
             timestamp: ev.timestamp,
             task: ev.task || "",
             id: ev.id,
+            job_id: ev.job_id,
+            time_seed: ev.time_seed,
             global_line_index: ev.global_line_index,
             workspace_line_index: ev.workspace_line_index,
         }))
@@ -97,25 +99,41 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
 
             const summary = { globalReplaced: false, workspaceReplaced: false, errors: [] as string[] };
 
-            let candidate: Event;
-            try { candidate = Event.fromDTO(new_record); }
-            catch { candidate = new_record as Event; }
+            if (!targetId) {
+                summary.errors.push("Edit failed: no event ID provided. The log file may contain orphaned or corrupted entries.");
+            } else {
+                let candidate: Event;
+                try { candidate = Event.fromDTO(new_record); }
+                catch (err) {
+                    summary.errors.push(`Edit failed: could not construct event from record — ${err instanceof Error ? err.message : String(err)}`);
+                    const updated = runtime.loadEventCollection();
+                    panel.webview.postMessage({
+                        type: "edit_result",
+                        payload: { summary, payload: buildPayload(updated.toEvents()) }
+                    });
+                    return;
+                }
 
-            const oldEvent = targetId
-                ? collection.find(e => e.id === targetId)
-                : undefined;
+                const oldEvent = collection.find(e => e.id === targetId);
 
-            if (oldEvent) {
-                const result = runtime.logRepo.replaceEvent(oldEvent, candidate);
-                summary.globalReplaced = result.globalReplaced;
-                summary.workspaceReplaced = result.workspaceReplaced;
+                if (!oldEvent) {
+                    summary.errors.push(`Edit failed: event '${targetId}' not found in the current collection. The log file may contain orphaned or corrupted entries — try running the repair script.`);
+                } else {
+                    const result = runtime.logRepo.replaceEvent(oldEvent, candidate);
+                    summary.globalReplaced = result.globalReplaced;
+                    summary.workspaceReplaced = result.workspaceReplaced;
 
-                const updatedCollection = runtime.refreshEventCollection();
-                const errors = updatedCollection.validate();
-                summary.errors.push(...filterRelevantErrors(errors, [oldEvent]));
+                    if (!result.globalReplaced && !result.workspaceReplaced) {
+                        summary.errors.push("Edit failed: the event was found in the collection but could not be matched in the log file on disk. The log file may have been modified externally or contain formatting inconsistencies.");
+                    } else {
+                        const updatedCollection = runtime.refreshEventCollection();
+                        const errors = updatedCollection.validate();
+                        summary.errors.push(...filterRelevantErrors(errors, [oldEvent]));
+                    }
+                }
             }
 
-            const updated = runtime.loadEventCollection();
+            const updated = runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "edit_result",
                 payload: { summary, payload: buildPayload(updated.toEvents()) }
@@ -128,32 +146,51 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
 
             const summary = { globalReplaced: false, workspaceReplaced: false, errors: [] as string[] };
             const editedEvents: Event[] = [];
+            let anyReplaced = false;
 
             for (const ed of edits) {
                 const targetId: string | undefined = ed.id;
+
+                if (!targetId) {
+                    summary.errors.push("Edit skipped: no event ID provided. The log file may contain orphaned or corrupted entries.");
+                    continue;
+                }
+
                 let candidate: Event;
                 try { candidate = Event.fromDTO(ed.new_record); }
-                catch { candidate = ed.new_record as Event; }
+                catch (err) {
+                    summary.errors.push(`Edit skipped for '${targetId}': could not construct event — ${err instanceof Error ? err.message : String(err)}`);
+                    continue;
+                }
 
-                const oldEvent = targetId
-                    ? collection.find(e => e.id === targetId)
-                    : undefined;
+                const oldEvent = collection.find(e => e.id === targetId);
 
-                if (oldEvent) {
-                    const result = runtime.logRepo.replaceEvent(oldEvent, candidate);
+                if (!oldEvent) {
+                    summary.errors.push(`Edit skipped: event '${targetId}' not found in the current collection. The log file may contain orphaned or corrupted entries — try running the repair script.`);
+                    continue;
+                }
+
+                const result = runtime.logRepo.replaceEvent(oldEvent, candidate);
+                if (!result.globalReplaced && !result.workspaceReplaced) {
+                    summary.errors.push(`Edit failed for '${targetId}': the event was found in the collection but could not be matched in the log file on disk. The log may have been modified externally or contain formatting inconsistencies.`);
+                } else {
                     summary.globalReplaced = summary.globalReplaced || result.globalReplaced;
                     summary.workspaceReplaced = summary.workspaceReplaced || result.workspaceReplaced;
                     editedEvents.push(oldEvent);
+                    anyReplaced = true;
                 }
             }
 
-            const updatedCollection = runtime.refreshEventCollection();
-            const errors = updatedCollection.validate();
-            summary.errors.push(...filterRelevantErrors(errors, editedEvents));
+            if (anyReplaced) {
+                const updatedCollection = runtime.refreshEventCollection();
+                const errors = updatedCollection.validate();
+                summary.errors.push(...filterRelevantErrors(errors, editedEvents));
+            }
 
+            const finalCollection = runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "edit_result",
-                payload: { summary, payload: buildPayload(updatedCollection.toEvents()) }
+                payload: { summary, payload: buildPayload(finalCollection.toEvents()) }
             });
         }
     });

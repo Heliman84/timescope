@@ -147,6 +147,21 @@ function is_v2_record(obj: any): boolean {
     );
 }
 
+/** Partial v2: has job_id & time_seed but missing id — upgrade by generating id. */
+function is_partial_v2(obj: any): boolean {
+    return (
+        obj &&
+        typeof obj === "object" &&
+        obj.id === undefined &&
+        typeof obj.job_id === "string" &&
+        typeof obj.time_seed === "number" &&
+        typeof obj.event === "string" &&
+        VALID_EVENT_TYPES.includes(obj.event) &&
+        typeof obj.job === "string" &&
+        typeof obj.timestamp === "number"
+    );
+}
+
 function is_v1_record(obj: any): boolean {
     return (
         obj &&
@@ -178,7 +193,14 @@ if (!log_path) usage();
 function write_atomic(target_path: string, content: string): void {
     const dir = path.dirname(target_path);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const tmp_name = `.upgrade_log_v2.tmp.${process.pid}.${Date.now()}`;
+    // Human-readable local timestamp to the second (YYYYMMDD_HHMMSS)
+    const formatLocalTimestamp = (): string => {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, "0");
+        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    };
+
+    const tmp_name = `.upgrade_log_v2.tmp.${process.pid}.${formatLocalTimestamp()}.${Date.now()}`;
     const tmp_path = path.join(dir, tmp_name);
     fs.writeFileSync(tmp_path, content, { encoding: "utf8", flag: "w" });
     fs.renameSync(tmp_path, target_path);
@@ -231,6 +253,31 @@ try {
             output_lines.push(trimmed);
             already_v2_count++;
             continue;
+        }
+
+        // Partial v2: job_id/time_seed present but id missing — generate id and rewrite
+        if (is_partial_v2(obj)) {
+            try {
+                const event_type = obj.event as EventType;
+                const job_id = obj.job_id as string;
+                const time_seed = obj.time_seed as number;
+                const id = generate_record_id(time_seed, event_type, job_id);
+                const task: string | undefined = typeof obj.task === "string" ? obj.task : undefined;
+                const v2_line = format_v2_line({
+                    id,
+                    event: event_type,
+                    job: obj.job,
+                    timestamp: obj.timestamp,
+                    ...(task !== undefined ? { task } : {}),
+                    job_id,
+                    time_seed,
+                });
+                output_lines.push(v2_line);
+                upgraded_count++;
+                continue;
+            } catch {
+                // fall through to unknown format preservation
+            }
         }
 
         // v1 record — upgrade

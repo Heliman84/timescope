@@ -426,6 +426,12 @@ export class EventRepository {
             const output: string[] = [];
 
             for (const l of lines) {
+                // Skip header lines — we prepend a fresh header at the end
+                try {
+                    const obj = JSON.parse(l);
+                    if (obj && typeof obj === "object" && (obj as any)[HEADER_KEY] !== undefined) continue;
+                } catch { /* not JSON — fall through */ }
+
                 if (!replaced && l === oldLine) {
                     output.push(newLine);
                     replaced = true;
@@ -435,7 +441,7 @@ export class EventRepository {
             }
 
             if (replaced) {
-                const toWrite = output.length === 0 ? [HEADER_LINE] : [HEADER_LINE, ...output];
+                const toWrite = [HEADER_LINE, ...output];
                 ensureDirExists(filePath);
                 fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
                 result[key] = true;
