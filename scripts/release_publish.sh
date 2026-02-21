@@ -57,7 +57,23 @@ fi
 
 # Ensure no trailing slash before appending /releases
 REPO_URL="${REPO_URL%/}"
-open "$REPO_URL/releases/new?tag=$TAG"
+URL="$REPO_URL/releases/new?tag=$TAG"
+
+case "$(uname)" in
+    Darwin)
+        open "$URL"
+        ;;
+    Linux)
+        xdg-open "$URL"
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        cmd.exe /C start "" "$URL"
+        ;;
+    *)
+        echo "Open this URL manually:"
+        echo "$URL"
+        ;;
+esac
 
 echo ""
 echo "Next steps:"

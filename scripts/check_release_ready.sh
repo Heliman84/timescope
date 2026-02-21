@@ -153,12 +153,12 @@ echo "✓ .vsix artifact found: $EXPECTED_VSIX"
 # ============================================================
 # 8. Ensure no dependency changes
 # ============================================================
-if git diff origin/main package.json | grep -q '"dependencies"'; then
+if git diff origin/main package.json | grep '^[+-]' | grep -v '^\(+++\|---\)' | grep -q '"dependencies"'; then
   echo "FAIL: dependencies changed relative to main"
   exit 1
 fi
 
-if git diff origin/main package.json | grep -q '"devDependencies"'; then
+if git diff origin/main package.json | grep '^[+-]' | grep -v '^\(+++\|---\)' | grep -q '"devDependencies"'; then
   echo "FAIL: devDependencies changed relative to main"
   exit 1
 fi
