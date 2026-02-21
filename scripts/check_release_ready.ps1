@@ -128,12 +128,13 @@ Write-Host ([char]0x2713 + " .vsix artifact found: $expectedVsix")
 # ============================================================
 # 8. Ensure no dependency changes
 # ============================================================
-$depDiff = git diff origin/main package.json
-if ($depDiff -match '"dependencies"') {
+$depChanges = git diff origin/main package.json | Where-Object { $_ -match '^[+-]' -and $_ -notmatch '^(\+\+\+|---)' }
+$depChangesText = $depChanges -join "`n"
+if ($depChangesText -match '"dependencies"') {
     Write-Host "FAIL: dependencies changed relative to main"
     exit 1
 }
-if ($depDiff -match '"devDependencies"') {
+if ($depChangesText -match '"devDependencies"') {
     Write-Host "FAIL: devDependencies changed relative to main"
     exit 1
 }
