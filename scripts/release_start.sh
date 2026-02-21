@@ -16,7 +16,25 @@ echo "✓ Release checks passed"
 
 # Open PR creation page for develop → main
 REPO_URL=$(git config --get remote.origin.url | sed 's/\.git$//')
-open "$REPO_URL/compare/main...develop?expand=1"
+# Cross-platform browser open
+URL="$REPO_URL/compare/main...develop?expand=1"
+
+case "$(uname)" in
+    Darwin)
+        open "$URL"
+        ;;
+    Linux)
+        xdg-open "$URL"
+        ;;
+    MINGW*|MSYS*|CYGWIN*)
+        cmd.exe /C start "" "$URL"
+        ;;
+    *)
+        echo "Open this URL manually:"
+        echo "$URL"
+        ;;
+esac
+
 
 echo ""
 echo "✓ Opening release PR creation page"
