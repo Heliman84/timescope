@@ -1,6 +1,6 @@
-import { state, ui } from "./state";
+import type { Runtime } from "./runtime";
 
-function format_duration_ms(ms: number): string {
+function formatDurationMiliseconds(ms: number): string {
     const total_seconds = Math.floor(ms / 1000);
     const hours = Math.floor(total_seconds / 3600);
     const minutes = Math.floor((total_seconds % 3600) / 60);
@@ -9,72 +9,83 @@ function format_duration_ms(ms: number): string {
 
 /**
  * Update the status bar text to reflect the current timer value and job.
+ * Pure helper: operates only on the provided `runtime` instance.
  */
-export function update_timer_text(): void {
-    let total_ms = state.elapsed_ms_before_pause;
-
-    if (state.is_running && state.start_time) {
-        total_ms += Date.now() - state.start_time.getTime();
+export function updateTimerText(runtime: Runtime): void {
+    const session = runtime.activeSession;
+    const divider = runtime.ui?.divider;
+    if (!session || !session.isOpen) {
+        if (divider) {
+            divider.text = "TimeScope:";
+            divider.tooltip = "Idle: No active job";
+        }
+        return;
     }
 
-    const formatted = format_duration_ms(total_ms);
-
-    ui.divider!.text = state.is_paused
-        ? `TimeScope (Paused at ${formatted}):`
-        : `TimeScope (${formatted}):`;
-
-    ui.divider!.tooltip = state.current_job
-        ? `Active job: ${state.current_job}`
-        : "Idle: No active job";
+    const formatted = formatDurationMiliseconds(session.elapsed());
+    if (divider) {
+        divider.text = session.isPaused
+            ? `TimeScope (Paused at ${formatted}):`
+            : `TimeScope (${formatted}):`;
+        divider.tooltip = `Active job: ${session.currentJobTitle}`;
+    }
 }
 
 /**
  * Start or restart a periodic interval to update the timer text.
+ * The interval handle is stored on the `runtime` instance.
  */
-export function start_timer_interval(): void {
-    if (state.timer_interval) clearInterval(state.timer_interval);
-    state.timer_interval = setInterval(update_timer_text, 1000);
+export function startTimerInterval(runtime: Runtime): void {
+    if (runtime.timerInterval) clearInterval(runtime.timerInterval as any);
+    runtime.timerInterval = setInterval(() => updateTimerText(runtime), 1000) as any;
 }
 
 /**
  * Stop and clear the running interval used to update the timer.
  */
-export function stop_timer_interval(): void {
-    if (state.timer_interval) {
-        clearInterval(state.timer_interval);
-        state.timer_interval = null;
+export function stopTimerInterval(runtime: Runtime): void {
+    if (runtime.timerInterval) {
+        clearInterval(runtime.timerInterval as any);
+        runtime.timerInterval = null;
     }
 }
 
 /**
  * Update which status bar controls are visible depending on runtime state.
+ * Pure helper: operates only on the provided `runtime` instance.
  */
-export function update_status_bar(): void {
-    ui.start_button!.hide();
-    ui.pause_button!.hide();
-    ui.resume_button!.hide();
-    ui.stop_button!.hide();
-    ui.divider!.show();
-    ui.summary_button!.show();
+export function updateStatusBar(runtime: Runtime): void {
+    const session = runtime.activeSession;
+    const ui = runtime.ui;
+    if (!ui) return;
 
-    if (!state.is_running && !state.is_paused) {
-        ui.start_button!.show();
-        ui.divider!.text = "TimeScope:";
-        ui.divider!.tooltip = "Idle: No active job";
+    ui.start_button && ui.start_button.hide();
+    ui.pause_button && ui.pause_button.hide();
+    ui.resume_button && ui.resume_button.hide();
+    ui.stop_button && ui.stop_button.hide();
+    ui.divider && ui.divider.show();
+    ui.summary_button && ui.summary_button.show();
+
+    if (!session || !session.isOpen) {
+        ui.start_button && ui.start_button.show();
+        if (ui.divider) {
+            ui.divider.text = "TimeScope:";
+            ui.divider.tooltip = "Idle: No active job";
+        }
         return;
     }
 
     // Update divider text (running or paused)
-    update_timer_text();
+    updateTimerText(runtime);
 
-    if (state.is_running && !state.is_paused) {
-        ui.pause_button!.show();
-        ui.stop_button!.show();
+    if (session.isRunning) {
+        ui.pause_button && ui.pause_button.show();
+        ui.stop_button && ui.stop_button.show();
         return;
     }
 
-    if (state.is_paused) {
-        ui.resume_button!.show();
-        ui.stop_button!.show();
+    if (session.isPaused) {
+        ui.resume_button && ui.resume_button.show();
+        ui.stop_button && ui.stop_button.show();
     }
 }
