@@ -184,7 +184,7 @@ export class JobRepository {
   private async writeFile(dtos: JobDTO[]): Promise<void> {
     const filePath = this.paths.global_jobs_path;
     if (!filePath) throw new Error("No global jobs path configured");
-    ensureDirExists(filePath);
+    await ensureDirExists(filePath);
     try {
       // Preserve canonical ordering: created ascending, tiebreak by job_id
       const sorted = dtos.slice().sort((a, b) => {

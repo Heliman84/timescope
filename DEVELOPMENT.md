@@ -87,11 +87,11 @@ Scripts under `scripts/` are run directly (e.g. `npx ts-node scripts/<name>.ts`)
 
 ## Building & Testing
 
-`ash
+```bash
 npm install          # install dependencies
 npm run compile      # compile TypeScript
 npm test             # compile + run test suite
-`
+```
 
 Press **F5** in VS Code to launch the Extension Development Host.
 
