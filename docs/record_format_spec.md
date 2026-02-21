@@ -1,0 +1,198 @@
+# TimeScope Record Format Specification
+
+
+## Jobs Format
+
+**File:** `jobs.json`
+
+`jobs.json` is an array of job records (objects). Each entry is an immutable identifier plus lightweight metadata used by the UI and for stable ID generation.
+
+Example entry:
+
+```json
+{
+  "job_id": "k3f9g",
+  "job_title": "Lantern - Speaker",
+  "is_archived": false,
+  "created": 1771119496661,
+  "last_modified": 1771200000000,
+  "job_seed": "Lantern - Speaker"
+}
+```
+
+File-level shape (TypeScript):
+
+```ts
+interface JobDTO {
+  job_id: string;        // stable, immutable id (short base36 or UUID)
+  job_title: string;     // human-friendly title (mutable)
+  is_archived?: boolean; // optional; default false
+  created: number;       // Unix time in milliseconds since epoch (creation time)
+  last_modified?: number;// Unix ms; last time title/metadata changed
+  job_seed: string;     // the original `job_title` used to create `job_id`
+}
+```
+
+Notes:
+- Unique identity is `job_id`.
+- `job_title` is editable; renames should update titles but not `job_id`.
+- Sorting in UI may use `job_title`, but persisted files should remain stable and deduplicated by `job_id`.
+
+---
+
+
+## Event Format
+
+**File:** `logs.jsonl` (JSON Lines)
+
+Each line is either a header or an event record. All records are valid JSON objects.
+
+### Header Line (Required)
+Must appear as the first line of the file:
+
+```json
+{ "_format_version": 2 }
+```
+
+**Purpose:** File versioning for future schema evolution.
+
+### Event Records
+One JSON object per line. All fields must be present except `task`.
+
+Event record format:
+
+```json
+{"id":<record_id_pad13>, "event":<ev_pad8>, "job":<job_pad30>, "timestamp":<ts>, "task":<task_opt>,  "job_id":<job_id>, "time_seed":<ts_original>}
+```
+
+Where:
+```json
+{
+  "id": string,
+  "event": "start" | "stop" | "pause" | "resume",
+  "job": string,  "timestamp": number,  "task": string (optional),
+  "job_id": string,
+  "time_seed": number
+}
+```
+
+Examples:
+```json
+{"id":  "ah8js-k-4fr",  "event":"start"   , "job":"test-issue9"                   , "timestamp":1771119496661,             "job_id":"16lor", "time_seed":1771119496661}
+{  "id":"ah8ow-1-4fr",  "event":"pause"   , "job":"test-issue9"                   , "timestamp":1771119680000,             "job_id":"16lor", "time_seed":1771119680000}
+{  "id":"ah8sb-2-4fr",  "event":"resume"  , "job":"test-issue9"                   , "timestamp":1771119803000,             "job_id":"16lor", "time_seed":1771119803000}
+{"id":  "ah90x-3-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"generating format_spec.md", "job_id":"16lor", "time_seed":1771120113000}
+```
+
+---
+
+### Event Record Fields
+
+#### `id` (string, required)
+Deterministic event record ID in the format `<time5>-<bucket1>-<jobHash3>`.
+
+See [Record ID Specification](./record_id_spec.md) for the full derivation rules.
+
+#### `event` (string, required)
+The type of event. Must be one of:
+
+- `"start"` — Begin a time-tracking session
+- `"pause"` — Temporarily pause the clock
+- `"resume"` — Resume from a pause
+- `"stop"` — End the session (optional task description may follow)
+
+#### `job` (string, required)
+The name of the job being tracked. Must:
+- Be non-empty
+- Match a name in `jobs.json`
+- Remain the same for all events in a session
+
+Example: `"TimeScope - Bug Fix"`
+
+#### `timestamp` (number, required)
+Unix time in milliseconds since epoch. Must be:
+- A finite number
+- Strictly increasing across events in the same session
+- Non-negative
+
+Example: `1739582342000` (represents Feb 15, 2025 at 07:52:22 UTC)
+
+#### `task` (string, optional)
+A free-text description of what was completed. Typically included with `stop` events.
+
+Examples:
+- `"Fixed issue #9"`
+- `"Updated documentation"`
+- `"Code review and merge"`
+
+If omitted, the field is not present in the JSON (not `null`).
+
+#### `job_id` (string, required)
+Stable, immutable job identifier from `jobs.json`. This is the canonical link between events and jobs, and is used to derive `id`.
+
+#### `time_seed` (number, required)
+Original Unix time in milliseconds used to generate `id`. This value is immutable, even if `timestamp` is edited later.
+
+---
+
+#### Malformed Lines
+Non-throwing parser: if a line cannot be parsed as valid JSON or does not match the event schema, it is skiped silently.
+
+#### Event Validation
+After parsing, timescope validates:
+- `id` matches the record ID format
+- `event` is one of: `"start"`, `"stop"`, `"pause"`, `"resume"`
+- `job` is a non-empty string
+- `job_id` is a non-empty string
+- `timestamp` is a finite number
+- `time_seed` is a finite number
+- `task` (if present) is a string
+
+---
+
+### Minimal Example
+**jobs.json:**
+```json
+[
+  {
+    "job_id": "16lor",
+    "job_title": "test-issue9",
+    "is_archived": false,
+    "created": 1771119490000,
+    "last_modified": 1771119490000,
+    "job_seed": "test-issue9"
+  }
+]
+```
+
+**logs.jsonl:**
+```json
+{ "_format_version": 2 }
+{"id":  "ah8js-k-4fr",  "event":"start"   , "job":"test-issue9"                   , "timestamp":1771119496661,             "job_id":"16lor", "time_seed":1771119496661}
+{  "id":"ah8ow-1-4fr",  "event":"pause"   , "job":"test-issue9"                   , "timestamp":1771119680000,             "job_id":"16lor", "time_seed":1771119680000}
+{  "id":"ah8sb-2-4fr",  "event":"resume"  , "job":"test-issue9"                   , "timestamp":1771119803000,             "job_id":"16lor", "time_seed":1771119803000}
+{"id":  "ah90x-3-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771120113000, "task":"generating format_spec.md", "job_id":"16lor", "time_seed":1771120113000}
+```
+
+This represents a single 10-minute session for "test-issue9".
+
+---
+
+### Formatting Notes
+Records are stored with **human-readable padding** for manual inspection:
+
+- Event values are padded to 8 characters
+- Job names are padded to 30 characters
+- `start`/`stop`: 2 spaces after `"id":` (before the value) — `{"id":  "..."`
+- `pause`/`resume`: 2 spaces before `"id"` (after `{`) — `{  "id":"..."`
+- This keeps the ID value and all subsequent columns aligned across all event types
+- When `task` is absent, 12 spaces are inserted before `"job_id"` to visually align columns
+
+The padding is cosmetic; the JSON remains fully valid.
+
+---
+
+
+## Related Documentation
+
+- [Record ID Specification](./record_id_spec.md) — Deterministic record IDs

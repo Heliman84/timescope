@@ -177,3 +177,51 @@ Picking up after the refactor notes above, here are the concrete follow-on chang
   * Added: `src/core/recovery.ts`.
   * Workspace test fixture updated: `test-workspace/.timescope/logs.jsonl` (header + sample adjustments).
 
+### Domain-oriented refactor: Session, LogRepository, and in-memory state authority
+
+Recent work completed a major architectural refactor to restore domain-driven design principles and eliminate disk reloads during active use:
+
+Initial testing of the session recovery failed completely. This was because there were still many pieces that were fragile/programmed in place, not following proper OOP principles. So this section of effort was focused on cleaning up the architecture to make the recovery implementation more straightforward and robust. The main changes were:
+
+* **Session as single-run state machine:** Added `Session` as domain object representing a single start→(pause/resume)*→stop timeline. `Session` now owns all run-level validation, state transitions, and elapsed time calculations.
+* **LogRepository as centralized persistence:** Created `LogRepository` to own all file I/O (JSONL parsing, append dedup, workspace/global mirroring). Implemented backward-scanning APIs (`loadLastSession`, `loadLastNSessions`) for efficient O(n) tail queries without reconstructing entire session history.
+* **In-memory activeSession as authoritative state:** Refactored extension command handlers (start, pause, resume, stop) to read from `runtimeState.activeSession` instead of calling `repo.loadLastSession()` after each event. Commands now mutate the in-memory session, persist to disk via `repo.appendValidated()`, and refresh UI—no redundant disk reads during active use.
+* **Centralized runtime state:** Unified all extension-wide mutable state (active session, session provider, timer interval) in `runtimeState` container to provide clear visibility of what persists across the extension lifecycle.
+* **EventCollection remains pure:** Stripped session logic from `EventCollection`; it is now a pure immutable data container for parsing, serializing, filtering, and basic operations—no state machine behavior.
+
+This refactor improves testability, reduces coupling, eliminates wasteful disk I/O during active operation, and ensures the in-memory session is the single source of truth while the extension runs. It has also massively improved the robustness of the codebase making all parts more concise, readable, and maintainable. The recovery implementation was then built on top of this cleaner architecture, allowing for a more straightforward and reliable implementation.
+
+### Changes in this commit
+
+* Added `Runtime` class as the single source of truth owning UI, active session, timer interval, and repositories.
+* Removed procedural `jobs.ts`
+* Introduced a job factory (`Job.create`) and migrated the activation/commands to use domain `Job` and `JobCollection`.
+* Introduced new Job record structure accoring to [Record Format Spec](../docs/record_format_spec.md) and migrated all job file interactions to use this format.
+* Removed legacy global state and module-level UI/timer globals; UI ownership now lives in `Runtime`.
+* Refactored `timer.ts` into pure helper functions that accept a `Runtime` instance and hold no module state.
+* `JobRepository` now detects legacy job-file format and advises running `scripts/upgrade_jobs.ts`.
+* Added `scripts/upgrade_jobs.ts` — an idempotent, atomic developer tool to upgrade legacy job files.
+* Completed the OOP migration across activation, commands, and repositories; tests and TypeScript checks were updated accordingly.
+* This commit finalizes the object‑oriented refactor and prepares the codebase for safer feature development.
+
+### Summary of changes `1d705ff`–`fecd9bd`
+
+**Architecture & domain model**
+* Replaced `LogRepository` and procedural `logs.ts`/`jobs.ts` with `EventRepository` (JSONL I/O, append-dedup, line-index tracking) and immutable `Event`/`EventCollection`/`Job`/`JobCollection` domain objects.
+* `Event` is now fully immutable with deterministic record IDs (FNV-1a), DTO round-trip fidelity, padded JSONL serialization, and built-in transition validation.
+* `EventCollection` owns filtering, sorting, immutable transforms (`replaceEvent`, `retimeEvent`, `mapEvents`, `rewrite`, `withUpdatedJob`), and pre-save validation (`validateReplacement`/`validateReplacements`) that blocks same-job ordering violations and warns on cross-job session overlaps.
+* `Runtime` caches the loaded `EventCollection`, eliminating redundant disk reads during active use.
+* Extracted `fs_utils.ts` for shared file-system helpers; extracted `dashboard_utils.ts` for vscode-free pure functions (`buildPayload`, `filterRelevantErrors`).
+
+**Dashboard edit flow**
+* Fixed silent-failure bug: webview now preserves `id`/`job_id`/`time_seed` on events and sends complete DTOs on save.
+* Controller reconstructs events via `Event.fromDTO`, looks up by ID, and runs `validateReplacement` before writing—invalid retimes are rejected with user-facing error messages; cross-job overlaps surface as warnings (yellow banner, save still proceeds).
+* `replaceEvent` filters header lines before rewriting to prevent header duplication.
+
+**Log format & migration tooling**
+* Introduced `_format_version: 2` file header and `upgrade_log_to_v2.ts` migration script.
+* Added `repair_orphaned_sessions.ts` for interactive orphan detection and repair with markdown report output.
+* Added `validate_jobs.ts` / `validate_upgraded.ts` developer validation scripts.
+
+**Test suite**
+* Grew from ~5 test files / ~22 functions to 11 test files / ~50+ functions covering: `Event`, `Job`, `JobCollection`, `EventCollection` (extended), `EventRepository`, `Session`, dashboard (`buildPayload`, `filterRelevantErrors`, `replaceEvent`, edit round-trips, invalid-retime rejection, batch edits), and cross-job overlap warnings.

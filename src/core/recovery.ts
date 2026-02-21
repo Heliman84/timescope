@@ -1,52 +1,49 @@
 import * as vscode from "vscode";
-import { TimeScopePaths } from "./paths";
-import { load_event_collection_for_job, append_log_record } from "./logs";
-import { state, reset_state_after_stop } from "./state";
-import { start_timer_interval, stop_timer_interval, update_status_bar } from "./timer";
+import { EventRepository } from "./event_repository";
+import { Session } from "./session";
 
 /**
  * Detect an open session at startup and prompt the user to recover.
  */
-export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
+function ensureAfter(lastTimestamp: number, requested: number): number {
+    return requested <= lastTimestamp ? lastTimestamp + 1 : requested;
+}
+
+export async function checkAndRecover(repo: EventRepository): Promise<Session | null> {
     try {
-        const col = load_event_collection_for_job(paths);
-        const sorted = col.sorted();
-        if (sorted.length === 0) return;
+        const session = repo.loadLastSession("global");
+        if (!session || !session.isOpen) return null;
 
-        const last = sorted[sorted.length - 1];
-        if (last.event === "stop") return; // cleanly stopped
-
-        const lastEvent = last.event; // start | pause | resume
+        const last = session.lastEvent;
+        if (!last) return null;
+        const lastEvent = last.type;
         const lastTimestamp = last.timestamp;
-        const job = last.job;
-
+        const job_title = session.currentJobTitle;
         const accumulating = lastEvent === "start" || lastEvent === "resume";
 
-        // Build choices per user story
         let choices: string[] = [];
         if (accumulating) {
             choices = [
-                `Close session at shutdown (stop when VSCode closed)`, // default on escape
-                `Close session now (stop @ now)`,
-                `Pause session at shutdown (pause when VSCode closed)`,
-                `Pause session now (pause @ now)`,
-                `Resume timer with break (pause when VSCode closed, resume @ now)`,
-                `Resume timer with no break (resume @ last recorded time)`
+                "Close session at shutdown (stop when VSCode closed)",
+                "Close session now (stop @ now)",
+                "Pause session at shutdown (pause when VSCode closed)",
+                "Pause session now (pause @ now)",
+                "Resume timer with break (pause when VSCode closed, resume @ now)",
+                "Resume timer with no break (resume @ last recorded time)"
             ];
         } else {
             choices = [
-                `Close session at shutdown (stop when VSCode closed)`,
-                `Close session now (stop @ now)`,
-                `Stay in paused state (no change)` // default on escape
+                "Close session at shutdown (stop when VSCode closed)",
+                "Close session now (stop @ now)",
+                "Stay in paused state (no change)"
             ];
         }
 
         const picked = await vscode.window.showQuickPick(choices, {
-            placeHolder: `Detected open session for '${job}' (last event: ${lastEvent}). Choose recovery action:`,
+            placeHolder: `Detected open session for '${job_title}' (last event: ${lastEvent}). Choose recovery action:`,
             canPickMany: false
         });
 
-        // Default behaviors when user dismisses prompt
         let selection = picked;
         if (!selection) {
             selection = accumulating ? choices[0] : choices[2];
@@ -54,93 +51,55 @@ export async function checkAndRecover(paths: TimeScopePaths): Promise<void> {
 
         const now = Date.now();
 
-        // Map selection to actions
         if (selection.startsWith("Close session")) {
             const atNow = selection.includes("now");
-            const ts = atNow ? now : lastTimestamp;
-            append_log_record(paths, { event: "stop", job, timestamp: ts, task: "recovered" });
-            stop_timer_interval();
-            reset_state_after_stop();
-            update_status_bar();
-            vscode.window.showInformationMessage(`Recovered: stopped job '${job}'.`);
-            return;
+            const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
+                const stopEvent = session.stop("recovered", ts);
+            repo.appendValidated(stopEvent);
+                vscode.window.showInformationMessage(`Recovered: stopped job '${job_title}'.`);
+            return null;
         }
 
         if (selection.startsWith("Pause session")) {
             const atNow = selection.includes("now");
-            const ts = atNow ? now : lastTimestamp;
-            append_log_record(paths, { event: "pause", job, timestamp: ts });
-            // set runtime state to paused
-            state.is_running = true;
-            state.is_paused = true;
-            state.current_job = job;
-            state.pause_time = new Date(ts);
-            state.start_time = new Date(lastTimestamp);
-            update_status_bar();
-            vscode.window.showInformationMessage(`Recovered: paused job '${job}'.`);
-            return;
+            const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
+            const pauseEvent = session.pause(ts);
+            repo.appendValidated(pauseEvent);
+            vscode.window.showInformationMessage(`Recovered: paused job '${job_title}'.`);
+            return repo.loadLastSession("global");
         }
 
-        if (selection.startsWith("Resume")) {
-            const noBreak = selection.includes("no break");
-
-            if (noBreak) {
-                // No-break: do not add events if session was already accumulating.
-                // If last event was 'start' or 'resume' there's nothing to append;
-                // just initialize runtime to running. If it was 'pause', append
-                // a resume at the last timestamp.
-                if (lastEvent === "start" || lastEvent === "resume") {
-                    // initialize runtime state to running without appending
-                    state.is_running = true;
-                    state.is_paused = false;
-                    state.current_job = job;
-                    state.start_time = new Date(lastTimestamp);
-                    state.pause_time = null;
-                    state.elapsed_ms_before_pause = 0;
-                    start_timer_interval();
-                    update_status_bar();
-                    vscode.window.showInformationMessage(`Recovered: resumed job '${job}' (no new events).`);
-                    return;
-                } else {
-                    // lastEvent === 'pause' -> append resume at lastTimestamp
-                    append_log_record(paths, { event: "resume", job, timestamp: lastTimestamp });
-                    state.is_running = true;
-                    state.is_paused = false;
-                    state.current_job = job;
-                    state.start_time = new Date(lastTimestamp);
-                    state.pause_time = null;
-                    state.elapsed_ms_before_pause = 0;
-                    start_timer_interval();
-                    update_status_bar();
-                    vscode.window.showInformationMessage(`Recovered: resumed job '${job}'.`);
-                    return;
-                }
+        if (selection.startsWith("Resume timer with break")) {
+            if (session.isRunning) {
+                const pauseTs = ensureAfter(lastTimestamp, lastTimestamp + 1);
+                const pauseEvent = session.pause(pauseTs);
+                repo.appendValidated(pauseEvent);
+                const resumeTs = ensureAfter(pauseTs, now);
+                const resumeEvent = session.resume(resumeTs);
+                repo.appendValidated(resumeEvent);
+            } else if (session.isPaused) {
+                const resumeTs = ensureAfter(lastTimestamp, now);
+                const resumeEvent = session.resume(resumeTs);
+                repo.appendValidated(resumeEvent);
             }
-
-            // Break case: ensure there's a pause at shutdown (unless already paused)
-            // and a resume now.
-            if (lastEvent === "start" || lastEvent === "resume") {
-                // insert a pause at the last timestamp to mark the break
-                append_log_record(paths, { event: "pause", job, timestamp: lastTimestamp });
-            }
-
-            // resume now
-            append_log_record(paths, { event: "resume", job, timestamp: now });
-            state.is_running = true;
-            state.is_paused = false;
-            state.current_job = job;
-            state.start_time = new Date(now);
-            state.pause_time = null;
-            state.elapsed_ms_before_pause = 0;
-            start_timer_interval();
-            update_status_bar();
-            vscode.window.showInformationMessage(`Recovered: resumed job '${job}' (break inserted).`);
-            return;
+            vscode.window.showInformationMessage(`Recovered: resumed job '${job_title}' (break inserted).`);
+            return repo.loadLastSession("global");
         }
 
+        if (selection.startsWith("Resume timer with no break")) {
+            if (session.isPaused) {
+                const resumeTs = ensureAfter(lastTimestamp, lastTimestamp);
+                const resumeEvent = session.resume(resumeTs);
+                repo.appendValidated(resumeEvent);
+            }
+            vscode.window.showInformationMessage(`Recovered: resumed job '${job_title}'.`);
+            return repo.loadLastSession("global");
+        }
+
+        return repo.loadLastSession("global");
     } catch (ex) {
-        // quietly ignore recovery errors but log to console for debugging
         console.error("Recovery check failed:", ex);
+        return null;
     }
 }
 

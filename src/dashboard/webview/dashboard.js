@@ -30,8 +30,9 @@ window.addEventListener("message", (event) => {
         // payload is an array of grouped events { event, job, timestamp, task, occurrences }
 
         // Build canonical events array (ascending order) for session construction
+        // Preserve id, job_id, time_seed so edits can send a complete DTO back
         const eventsAsc = payload
-            .map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp }))
+            .map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp, id: e.id, job_id: e.job_id, time_seed: e.time_seed }))
             .sort((a, b) => a.timestamp - b.timestamp);
 
         // keep all_events for pause/resume counts and session edit mapping
@@ -62,6 +63,20 @@ window.addEventListener("message", (event) => {
         const save = document.getElementById('session_edit_save');
         if (save) { save.disabled = false; save.textContent = 'Save'; }
 
+        // --- Show warnings (informational, cross-job overlap) ---
+        const warningBox = document.getElementById('session_warning');
+        if (warningBox) {
+            if (result && result.warnings && result.warnings.length > 0) {
+                warningBox.style.display = '';
+                const wMsgs = result.warnings.map(w => (typeof w === 'string' ? w : (w.message || JSON.stringify(w))));
+                warningBox.textContent = '\u26A0 ' + wMsgs.join('\n\u26A0 ');
+            } else {
+                warningBox.style.display = 'none';
+                warningBox.textContent = '';
+            }
+        }
+
+        // --- Show errors (blocking, same-job sequence violation) ---
         if (result && result.errors && result.errors.length > 0) {
             // Show inline errors in the session modal
             const errorBox = document.getElementById('session_error');
@@ -78,9 +93,14 @@ window.addEventListener("message", (event) => {
         }
 
         // success — refresh UI with new payload
-        const eventsAsc = payload.map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp })).sort((a, b) => a.timestamp - b.timestamp);
+        const eventsAsc = payload.map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp, id: e.id, job_id: e.job_id, time_seed: e.time_seed })).sort((a, b) => a.timestamp - b.timestamp);
         all_sessions = build_sessions_from_events(eventsAsc);
         render_dashboard(all_sessions);
+
+        // If there are warnings but no errors, keep the modal open so the user sees them
+        if (result && result.warnings && result.warnings.length > 0) {
+            return;
+        }
         // Close session edit modal if open
         close_session_modal();
     }
@@ -621,6 +641,8 @@ function open_session_edit_modal(session) {
     const container = document.getElementById('session_events_container');
     const errorBox = document.getElementById('session_error');
     if (errorBox) { errorBox.style.display = 'none'; errorBox.textContent = ''; }
+    const warningBox = document.getElementById('session_warning');
+    if (warningBox) { warningBox.style.display = 'none'; warningBox.textContent = ''; }
 
     container.innerHTML = '';
 
@@ -672,7 +694,15 @@ function open_session_edit_modal(session) {
                 const taskInput = r.querySelector('.e-task input');
                 const newTs = new Date(tsInput.value).getTime();
                 const e = meta.e;
-                const newRec = { event: e.event, job: e.job, timestamp: newTs };
+                // Build a complete EventDTO-compatible record for the backend
+                const newRec = {
+                    id: e.id,
+                    event: e.event,
+                    job_title: e.job,
+                    timestamp: newTs,
+                    job_id: e.job_id,
+                    time_seed: e.time_seed
+                };
                 if (e.event === 'stop') newRec.task = taskInput.value || '';
 
                 // Compare down to the second to avoid accidental minute-rounding edits
@@ -681,7 +711,7 @@ function open_session_edit_modal(session) {
 
                 // Only push if changed (seconds differ) or stop-task changed
                 if (newTsSec !== oldTsSec || (e.event === 'stop' && (newRec.task || '') !== (e.task || ''))) {
-                    edits.push({ occurrences: meta.occurrences, new_record: newRec });
+                    edits.push({ id: e.id, new_record: newRec });
                 }
             }
 
