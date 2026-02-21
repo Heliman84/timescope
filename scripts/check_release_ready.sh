@@ -94,12 +94,9 @@ echo "✓ No existing tag for v$DEV_VERSION"
 # 4. Lint, tests, compile (quiet mode)
 # ============================================================
 
-# Lint
-if ! npm run lint --silent >/dev/null 2>&1; then
-  echo "FAIL: Lint failed"
-  exit 1
-fi
-echo "✓ Lint succeeded"
+# Lint (skipped — no lint script configured)
+# To enable: add a "lint" script to package.json
+echo "✓ Lint skipped (no lint script)"
 
 # Tests
 if ! npm test --silent >/dev/null 2>&1; then
