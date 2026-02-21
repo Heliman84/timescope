@@ -195,4 +195,9 @@ The padding is cosmetic; the JSON remains fully valid.
 
 ## Related Documentation
 
-- [Record ID Specification](./record_id_spec.md) — Deterministic record IDs
+| Document | Description |
+| :--- | :--- |
+| [Record ID Specification](record_id_spec.md) | Deterministic record ID derivation (FNV-1a, base-36) |
+| [Architecture & Processes](processes.md) | Runtime processes, state machine, and data flow |
+| [DEVELOPMENT.md](../DEVELOPMENT.md) | Build, test, feature & release workflow |
+| [README.md](../README.md) | User-facing overview, commands, settings |

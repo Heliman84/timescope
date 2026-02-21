@@ -229,3 +229,14 @@ job_id = a9f12
 - Collision‑resistant for all practical purposes  
 - Minimal identity semantics (title‑only)  
 - Future‑proof — additional identity inputs may be added later without breaking existing IDs
+
+---
+
+## Related Documentation
+
+| Document | Description |
+| :--- | :--- |
+| [Record Format Specification](record_format_spec.md) | On-disk format for `jobs.json` and `logs.jsonl` |
+| [Architecture & Processes](processes.md) | Runtime processes, state machine, and data flow |
+| [DEVELOPMENT.md](../DEVELOPMENT.md) | Build, test, feature & release workflow |
+| [README.md](../README.md) | User-facing overview, commands, settings |

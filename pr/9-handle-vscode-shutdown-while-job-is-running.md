@@ -1,21 +1,69 @@
 ---
 feature: Issue 9 - Handle-vscode-shutdown-while-job-is-running
 files_to_modify:
-  - src/extension.ts
-  - src/core/logs.ts
-  - src/core/state.ts
   - src/core/timer.ts
-  - src/core/types.ts
   - src/dashboard/controller/dashboard.ts
   - src/dashboard/webview/dashboard.js
   - src/dashboard/webview/index.html
+  - src/extension.ts
+  - src/test/run_tests.ts
+  - src/test/test_jobs.ts
+  - src/utils/fs_utils.ts
+  - test-workspace/.timescope/logs.jsonl
+  - test-workspace/logs.jsonl
+  - tsconfig.json
 tests_to_update:
+  - src/test/test_dashboard.ts
+  - src/test/test_event.ts
+  - src/test/test_event_collection.ts
+  - src/test/test_event_collection_extended.ts
+  - src/test/test_event_repository.ts
+  - src/test/test_job.ts
+  - src/test/test_job_collection.ts
+  - src/test/test_session.ts
+  - src/test/test_jobs.ts
+  - src/test/run_tests.ts
+new_files:
+  - docs/processes.md
+  - docs/record_format_spec.md
+  - docs/record_id_spec.md
+  - pr/9-handle-vscode-shutdown-while-job-is-running.md
+  - scripts/repair_orphaned_sessions.ts
+  - scripts/upgrade_jobs.ts
+  - scripts/upgrade_log_to_v2.ts
+  - scripts/validate_jobs.ts
+  - scripts/validate_upgraded.ts
+  - src/core/event.ts
+  - src/core/event_collection.ts
+  - src/core/event_dto.ts
+  - src/core/event_repository.ts
+  - src/core/job.ts
+  - src/core/job_collection.ts
+  - src/core/job_dto.ts
+  - src/core/job_repository.ts
+  - src/core/recovery.ts
+  - src/core/runtime.ts
+  - src/core/session.ts
+  - src/dashboard/controller/dashboard_utils.ts
+  - src/test/test_dashboard.ts
+  - src/test/test_event.ts
+  - src/test/test_event_collection.ts
+  - src/test/test_event_collection_extended.ts
+  - src/test/test_event_repository.ts
+  - src/test/test_job.ts
+  - src/test/test_job_collection.ts
+  - src/test/test_session.ts
+  - src/ui/pick_job.ts
+  - test-workspace/.timescope/orphan_repair_report_20260220_162208.md
+  - test-workspace/test_jobs.json
+deleted_files:
+  - src/core/jobs.ts
+  - src/core/logs.ts
+  - src/core/state.ts
+  - src/core/types.ts
   - src/test/test_logs.ts
   - src/test/test_update_log.ts
   - src/test/test_update_session.ts
-new_files:
-  - src/test/test_recovery.ts
-deleted_files: []
 ---
 
 # PR: Issue 9 - Handle-vscode-shutdown-while-job-is-running
@@ -29,15 +77,20 @@ Issue: [#9](https://github.com/Heliman84/timescope/issues/9)
 Currently, if VSCode is shut down while a job is running, the job is not terminated leaving a `start` event without a corresponding `stop`. When VSCode is restarted there is only the option to `start` again. This leads to data corruption or incomplete processing.
 
 ### What the feature is
-* When VS Code closes detect if a job is still running and fire a stop event to close it out.
 * Detect when VS Code was previously closed while a job was still running.
 * If the last event was `start` or `resume`, ask whether to add a `stop` or `pause` event and whether it should be timestamped at shutdown or at next launch.
+* If the last event was `pause` then ask the use how to resolve.
 * Move into the appropriate state based on the chosen event (stop or pause).
 * Restore TimeScope to a consistent state so the user can continue tracking time without manual cleanup.
 * Ensure the UI reflects the correct state (e.g., prevents showing “Start” when a job is technically still open).
 * Provide a deterministic, corruption‑free recovery path for incomplete sessions.
 * Provide a script to validate and clean up the local and global log files
 * If the previous closing state was paused, resume tracking on launch and show a banner indicating the job and that it is paused.
+* Convert procedural code to object-oriented design to improve maintainability and robustness of the recovery implementation.This includes:
+  * Domain objects: `Session` (represents a single start→(pause/resume)*→stop timeline), `Event` (represents a single start, pause, resume, or stop event, carying metadata to align it with the workspace and global logs), `Job` (represents a single job), and `Runtime` (centralized state container for active session, repositories, and UI).
+  * Domain object collections: `EventCollection` (immutable collection of events with validation and transformation methods) and `JobCollection` (manages multiple jobs and their sessions).
+  * Centralized repositories: `EventRepository` (handles all JSONL I/O, append deduplication, and tail queries for events) and `JobRepository` (manages job-level operations and migrations).
+  * Refactored activation and command handlers to utilize the new domain model and repositories, eliminating redundant disk reads and ensuring the in-memory session is the single source of truth during active use.
 
 ### Why the feature exists
 * A running job that never receives a stop event leaves the log in an invalid or ambiguous state.
@@ -52,52 +105,17 @@ Currently, if VSCode is shut down while a job is running, the job is not termina
 ## User-Facing Behavior
 
 * Command pallet updates
-  * A single user-facing command is exposed in the Command Palette to resolve orphaned sessions.
-  * Running the command validates logs and auto-repairs any missing stop events from an interrupted session.
+  * No user-facing command is exposed in the Command Palette to resolve orphaned sessions - scripts must be manually run from the terminal.
+    * The recovery flow requires no manual log edits or additional configuration.
+    * The scrub operation scans and validates the entire log history (not just the latest event).
   * If the last event was `start` or `resume`, the command prompts for `stop` vs `pause` and the timestamp choice.
-  * The command provides feedback on the number of sessions recovered and any issues found during validation.
   * No other recovery or validation commands are exposed to users; internal steps run under the hood.
   * The UI reflects the corrected state after recovery so tracking can resume normally.
-  * The recovery flow requires no manual log edits or additional configuration.
-  * The scrub operation scans and validates the entire log history (not just the latest event).
-  * Each detected issue prompts an interactive resolution dialog until all issues are resolved or the user cancels.
 * UI Updates
-  * Dashboard action: “Scrub Logs” button that runs the validate step and shows a summary panel.
-  * Recovery banner on startup when an orphaned session is auto-fixed, with a “View details” link.
   * Recovery banner on startup when resuming from a paused state, including the job name.
-  * Small status bar hint when a recovery occurs (e.g., “Recovered 1 session”).
-  * Dashboard section listing “Recovered Sessions” with timestamps and job names (read-only).
-
-
-## Technical Requirements (filled in by Copilot Agent)
-
-* Ensure recovery logic runs at startup before any new tracking starts.
-* Detect orphaned start events in both global and workspace logs.
-* If the last event is `start` or `resume`, prompt for `stop` vs `pause` and timestamp choice (shutdown vs next launch).
-* Apply the selected event and timestamp consistently in global and workspace logs.
-* Keep log format unchanged; only append stop events.
-* Update state consistently across in-memory state and persisted logs.
-* Preserve existing behavior for normal start/pause/resume/stop flows.
-* Provide a user-facing recovery command that runs validation + repair.
-* Keep recovery idempotent (multiple runs do not create duplicate stops).
-* If the last event is `pause`, start in the `pause` state (showing the resume session) on launch and surface a banner with the job name.
-* The recovery command validates the entire log history and prompts for each detected issue until resolved or canceled.
-
-
-## State Machine Impact (filled in by Copilot Agent)
-
-* Add a recovery step on activation to handle `start` or `resume` as the last event by prompting for `stop` vs `pause`.
-* If the last event is `pause`, start in the `pause` state (showing the resume session) on launch and keep the session open.
-* Ensure recovery does not alter valid stopped states.
-* Handle edge cases where logs end with `pause` or `resume` without a following stop.
-* Avoid creating multiple stop events for the same start.
-
-
-## Dashboard / Webview Impact (filled in by Copilot Agent)
-
-* Add a dashboard action for the recovery command ("Scrub Logs") and show summary results.
-* Surface recovery results in the dashboard (read-only list of recovered sessions).
-* Ensure the dashboard reloads after recovery to reflect corrected totals.
+* Dashboard updates
+  * Enhanced feedback to user in event edit if validation of changes fail
+  * Increase timestamp precision to the second
 
 
 ## Test Requirements (filled in by Copilot Agent)
@@ -112,9 +130,7 @@ Currently, if VSCode is shut down while a job is running, the job is not termina
 
 ## Non-Goals / Out of Scope (filled in by Copilot Agent)
 
-* No changes to the log format or event schema.
-* No new settings or configuration for recovery behavior.
-* No new dependencies.
+* Exposing a user-facing command to trigger recovery (recovery runs automatically on startup if needed).
 
 
 ## Acceptance Criteria (filled in by Copilot Agent)
@@ -123,22 +139,23 @@ Currently, if VSCode is shut down while a job is running, the job is not termina
 * On startup, a paused session resumes and displays a banner with the job name.
 * Recovery does not change valid sessions.
 * The UI reflects the corrected state after recovery.
-* The recovery command validates and repairs logs without manual edits.
+* If job.json or logs.jsonl are corrupted or contain invalid records, the user is informed with clear error messages and guided to run the validation/repair script.
 * All required tests pass and the extension activates normally.
 
 
-## Implementation Plan (filled in by Copilot Agent)
+## Implementation Plan
 
-1. Identify where startup/activation loads logs and current state.
-2. Add recovery logic that detects last event as `start` or `resume` and prompts for stop vs pause.
-3. Apply the selected event with shutdown vs launch timestamp as chosen.
-4. If the last event is `pause`, resume the session and show a banner with the job name.
-5. Apply recovery to both global and workspace logs.
-6. Ensure recovery updates in-memory state before any new session starts.
-7. Add a single user-facing command that runs validation + recovery and reports results.
-8. Add dashboard UI action to trigger the command and show a summary.
-9. Add tests for stop/pause prompt flow, paused resume, and idempotency.
-10. Verify no changes to log format and no new dependencies.
+1. Update feature development process to sync with GitHub PR extension workflow.
+2. Refactor codebase to implement object-oriented design with domain objects (`Session`, `Event`, `Job`, `Runtime`) and repositories (`EventRepository`, `JobRepository`).
+3. Implement recovery logic in `src/core/recovery.ts` to detect orphaned sessions on startup and prompt the user for resolution.
+   1. Update `src/extension.ts` to invoke recovery logic during activation.
+4. Implement new log format according to the v2 format spec, including a file header with `_format_version` and structured event records. [See spec](../docs/record_format_spec.md).
+   1. Update record validation to enforce the new format and reject invalid records with structured error messages.
+5. Implement log migration script (`scripts/upgrade_log_to_v2.ts`) to convert existing logs to the new format, including validation and backup creation.
+6. Implement `jobs.json` migration script (`scripts/upgrade_jobs.ts`) to convert existing job files to the new format and structure, including validation and backup creation.
+7. Implement log validation and repair script (`scripts/validate_and_repair_logs.ts`) to scan logs for common issues (orphaned starts, missing stops, invalid records) and either automatically repair or generate a report with instructions for manual fixes.
+8. Update the dashboard controller and webview to handle the new event structure and provide user feedback on validation errors during event edits.
+9. Update and expand the test suite to cover the new recovery logic, log format, and validation rules, ensuring all tests pass and the extension activates without errors.
 
 
 ## Execute notes
@@ -206,22 +223,22 @@ This refactor improves testability, reduces coupling, eliminates wasteful disk I
 
 ### Summary of changes `1d705ff`–`fecd9bd`
 
-**Architecture & domain model**
+#### Architecture & domain model
 * Replaced `LogRepository` and procedural `logs.ts`/`jobs.ts` with `EventRepository` (JSONL I/O, append-dedup, line-index tracking) and immutable `Event`/`EventCollection`/`Job`/`JobCollection` domain objects.
 * `Event` is now fully immutable with deterministic record IDs (FNV-1a), DTO round-trip fidelity, padded JSONL serialization, and built-in transition validation.
 * `EventCollection` owns filtering, sorting, immutable transforms (`replaceEvent`, `retimeEvent`, `mapEvents`, `rewrite`, `withUpdatedJob`), and pre-save validation (`validateReplacement`/`validateReplacements`) that blocks same-job ordering violations and warns on cross-job session overlaps.
 * `Runtime` caches the loaded `EventCollection`, eliminating redundant disk reads during active use.
 * Extracted `fs_utils.ts` for shared file-system helpers; extracted `dashboard_utils.ts` for vscode-free pure functions (`buildPayload`, `filterRelevantErrors`).
 
-**Dashboard edit flow**
+#### Dashboard edit flow
 * Fixed silent-failure bug: webview now preserves `id`/`job_id`/`time_seed` on events and sends complete DTOs on save.
 * Controller reconstructs events via `Event.fromDTO`, looks up by ID, and runs `validateReplacement` before writing—invalid retimes are rejected with user-facing error messages; cross-job overlaps surface as warnings (yellow banner, save still proceeds).
 * `replaceEvent` filters header lines before rewriting to prevent header duplication.
 
-**Log format & migration tooling**
+#### Log format & migration tooling
 * Introduced `_format_version: 2` file header and `upgrade_log_to_v2.ts` migration script.
 * Added `repair_orphaned_sessions.ts` for interactive orphan detection and repair with markdown report output.
 * Added `validate_jobs.ts` / `validate_upgraded.ts` developer validation scripts.
 
-**Test suite**
+#### Test suite
 * Grew from ~5 test files / ~22 functions to 11 test files / ~50+ functions covering: `Event`, `Job`, `JobCollection`, `EventCollection` (extended), `EventRepository`, `Session`, dashboard (`buildPayload`, `filterRelevantErrors`, `replaceEvent`, edit round-trips, invalid-retime rejection, batch edits), and cross-job overlap warnings.

@@ -48,3 +48,5 @@
 {"id":  "as0dn-j-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771622123490, "task":"went to pick up child", "job_id":"16lor", "time_seed":1771622123490}
 {"id":  "as0gh-g-4fr",  "event":"start"   , "job":"test-issue9"                   , "timestamp":1771622225527,             "job_id":"16lor", "time_seed":1771622225527}
 {"id":  "as0gz-f-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771622243442, "task":"checkout complete, now going to scrub out orphan sessions", "job_id":"16lor", "time_seed":1771622243442}
+{"id":  "asm7o-0-4fr",  "event":"start"   , "job":"test-issue9"                   , "timestamp":1771650420026,             "job_id":"16lor", "time_seed":1771650420026}
+{"id":  "asmpm-v-4fr",  "event":"stop"    , "job":"test-issue9"                   , "timestamp":1771651066790, "task":"recovered", "job_id":"16lor", "time_seed":1771651066790}

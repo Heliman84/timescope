@@ -9,9 +9,15 @@ import { Session } from "./core/session";
 import { Job } from "./core/job";
 
 let _runtime: Runtime | null = null;
+let _context: vscode.ExtensionContext | null = null;
+let _heartbeatInterval: NodeJS.Timeout | null = null;
 
+const HEARTBEAT_INTERVAL_MS = 30_000;
+const STATE_KEY_LAST_SEEN = "timescope.lastSeen";
+const STATE_KEY_LAST_SHUTDOWN = "timescope.lastShutdown";
 
 export async function activate(context: vscode.ExtensionContext) {
+    _context = context;
     const config = vscode.workspace.getConfiguration("timescope");
 
     // Initialize runtime and load jobs
@@ -34,9 +40,22 @@ export async function activate(context: vscode.ExtensionContext) {
         runtime.ui!.summary_button
     );
 
+    // Resolve approximate shutdown timestamp from heartbeat / deactivate records
+    const lastSeen = context.globalState.get<number>(STATE_KEY_LAST_SEEN) ?? 0;
+    const lastShutdown = context.globalState.get<number>(STATE_KEY_LAST_SHUTDOWN) ?? 0;
+    const shutdownTimestamp = Math.max(lastSeen, lastShutdown) || undefined;
+
     // Check for orphaned session from previous VSCode shutdown and offer recovery
-    const recoveredSession = await checkAndRecover(runtime.logRepo);
+    const recoveredSession = await checkAndRecover(runtime.logRepo, shutdownTimestamp);
     runtime.setActiveSession(recoveredSession && recoveredSession.isOpen ? recoveredSession : null);
+
+    // Start heartbeat: periodically persist a "last seen" timestamp so that
+    // crash-recovery can approximate when VSCode was last alive.
+    _heartbeatInterval = setInterval(() => {
+        context.globalState.update(STATE_KEY_LAST_SEEN, Date.now());
+    }, HEARTBEAT_INTERVAL_MS);
+    // Write an initial heartbeat immediately so the value is current from activation.
+    context.globalState.update(STATE_KEY_LAST_SEEN, Date.now());
 
     //
     // ────────────────────────────────────────────────────────────────
@@ -201,6 +220,17 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+    // Persist exact shutdown timestamp for graceful-shutdown recovery.
+    if (_context) {
+        _context.globalState.update(STATE_KEY_LAST_SHUTDOWN, Date.now());
+    }
+
+    // Stop heartbeat interval
+    if (_heartbeatInterval) {
+        clearInterval(_heartbeatInterval);
+        _heartbeatInterval = null;
+    }
+
     // Ensure any running interval is stopped and session cleared
     _runtime?.setActiveSession(null);
 }

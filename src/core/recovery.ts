@@ -4,12 +4,17 @@ import { Session } from "./session";
 
 /**
  * Detect an open session at startup and prompt the user to recover.
+ *
+ * @param repo          The event repository to load/persist events.
+ * @param shutdownTs    Approximate timestamp of the last VS Code shutdown,
+ *                      derived from the heartbeat / deactivate records.
+ *                      Falls back to `lastTimestamp + 1` when unavailable.
  */
 function ensureAfter(lastTimestamp: number, requested: number): number {
     return requested <= lastTimestamp ? lastTimestamp + 1 : requested;
 }
 
-export async function checkAndRecover(repo: EventRepository): Promise<Session | null> {
+export async function checkAndRecover(repo: EventRepository, shutdownTs?: number): Promise<Session | null> {
     try {
         const session = repo.loadLastSession("global");
         if (!session || !session.isOpen) return null;
@@ -20,6 +25,12 @@ export async function checkAndRecover(repo: EventRepository): Promise<Session | 
         const lastTimestamp = last.timestamp;
         const job_title = session.currentJobTitle;
         const accumulating = lastEvent === "start" || lastEvent === "resume";
+
+        // Use the recorded shutdown timestamp when available; otherwise fall back
+        // to lastTimestamp + 1 ("unknown shutdown time" heuristic).
+        const atShutdown = shutdownTs !== undefined
+            ? ensureAfter(lastTimestamp, shutdownTs)
+            : lastTimestamp + 1;
 
         let choices: string[] = [];
         if (accumulating) {
@@ -53,16 +64,16 @@ export async function checkAndRecover(repo: EventRepository): Promise<Session | 
 
         if (selection.startsWith("Close session")) {
             const atNow = selection.includes("now");
-            const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
-                const stopEvent = session.stop("recovered", ts);
+            const ts = atNow ? ensureAfter(lastTimestamp, now) : atShutdown;
+            const stopEvent = session.stop("recovered", ts);
             repo.appendValidated(stopEvent);
-                vscode.window.showInformationMessage(`Recovered: stopped job '${job_title}'.`);
+            vscode.window.showInformationMessage(`Recovered: stopped job '${job_title}'.`);
             return null;
         }
 
         if (selection.startsWith("Pause session")) {
             const atNow = selection.includes("now");
-            const ts = ensureAfter(lastTimestamp, atNow ? now : lastTimestamp + 1);
+            const ts = atNow ? ensureAfter(lastTimestamp, now) : atShutdown;
             const pauseEvent = session.pause(ts);
             repo.appendValidated(pauseEvent);
             vscode.window.showInformationMessage(`Recovered: paused job '${job_title}'.`);
@@ -71,7 +82,7 @@ export async function checkAndRecover(repo: EventRepository): Promise<Session | 
 
         if (selection.startsWith("Resume timer with break")) {
             if (session.isRunning) {
-                const pauseTs = ensureAfter(lastTimestamp, lastTimestamp + 1);
+                const pauseTs = atShutdown;
                 const pauseEvent = session.pause(pauseTs);
                 repo.appendValidated(pauseEvent);
                 const resumeTs = ensureAfter(pauseTs, now);

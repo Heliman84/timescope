@@ -40,28 +40,9 @@ Issue: <ISSUE_LINK>
 * Dashboard or status bar impact.
 * Any new interactions or flows.
 
-
-## Technical Requirements (filled in by Copilot Agent)
-
-* Architecture constraints.
-* Data model or log format changes.
-* Files to modify.
-* Files to avoid.
-* Performance or reliability considerations.
-
-
-## State Machine Impact (filled in by Copilot Agent)
-
-* New states, transitions, or events.
-* States that must remain unchanged.
-* Error or edge-state handling.
-
-
-## Dashboard / Webview Impact (filled in by Copilot Agent)
-
-* UI elements added, removed, or changed.
-* Data displayed or refreshed.
-* Interaction behavior or lifecycle notes.
+* Command Pallet Udpates
+* UI Updates
+* Dashboard Updates
 
 
 ## Test Requirements (filled in by Copilot Agent)
@@ -93,3 +74,15 @@ Issue: <ISSUE_LINK>
 
 * Leave this empty.
 * Copilot Agent generates the plan after reading the spec.
+
+
+## Implemenation Details
+
+### 1. Sub branch from feature branch Title
+<SUB_BRANCH_NAME>
+<git_commit_id_start> - <git_commit_id_end>
+
+* High level description of the implementation.
+* Key files modified or created.
+* Any important details or decisions made during implementation.
+* Key objects, functions, or classes involved.
