@@ -203,3 +203,25 @@ This refactor improves testability, reduces coupling, eliminates wasteful disk I
 * Added `scripts/upgrade_jobs.ts` — an idempotent, atomic developer tool to upgrade legacy job files.
 * Completed the OOP migration across activation, commands, and repositories; tests and TypeScript checks were updated accordingly.
 * This commit finalizes the object‑oriented refactor and prepares the codebase for safer feature development.
+
+### Summary of changes `1d705ff`–`fecd9bd`
+
+**Architecture & domain model**
+* Replaced `LogRepository` and procedural `logs.ts`/`jobs.ts` with `EventRepository` (JSONL I/O, append-dedup, line-index tracking) and immutable `Event`/`EventCollection`/`Job`/`JobCollection` domain objects.
+* `Event` is now fully immutable with deterministic record IDs (FNV-1a), DTO round-trip fidelity, padded JSONL serialization, and built-in transition validation.
+* `EventCollection` owns filtering, sorting, immutable transforms (`replaceEvent`, `retimeEvent`, `mapEvents`, `rewrite`, `withUpdatedJob`), and pre-save validation (`validateReplacement`/`validateReplacements`) that blocks same-job ordering violations and warns on cross-job session overlaps.
+* `Runtime` caches the loaded `EventCollection`, eliminating redundant disk reads during active use.
+* Extracted `fs_utils.ts` for shared file-system helpers; extracted `dashboard_utils.ts` for vscode-free pure functions (`buildPayload`, `filterRelevantErrors`).
+
+**Dashboard edit flow**
+* Fixed silent-failure bug: webview now preserves `id`/`job_id`/`time_seed` on events and sends complete DTOs on save.
+* Controller reconstructs events via `Event.fromDTO`, looks up by ID, and runs `validateReplacement` before writing—invalid retimes are rejected with user-facing error messages; cross-job overlaps surface as warnings (yellow banner, save still proceeds).
+* `replaceEvent` filters header lines before rewriting to prevent header duplication.
+
+**Log format & migration tooling**
+* Introduced `_format_version: 2` file header and `upgrade_log_to_v2.ts` migration script.
+* Added `repair_orphaned_sessions.ts` for interactive orphan detection and repair with markdown report output.
+* Added `validate_jobs.ts` / `validate_upgraded.ts` developer validation scripts.
+
+**Test suite**
+* Grew from ~5 test files / ~22 functions to 11 test files / ~50+ functions covering: `Event`, `Job`, `JobCollection`, `EventCollection` (extended), `EventRepository`, `Session`, dashboard (`buildPayload`, `filterRelevantErrors`, `replaceEvent`, edit round-trips, invalid-retime rejection, batch edits), and cross-job overlap warnings.
