@@ -107,7 +107,7 @@ Write-Host ([char]0x2713 + " Prepublish build succeeded")
 Remove-Item -Path *.vsix -Force -ErrorAction SilentlyContinue
 Write-Host ([char]0x2713 + " Removed old .vsix files")
 
-$null = & npx vsce package --no-dependencies --silent 2>&1
+$null = & npx vsce package --no-dependencies 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Host "FAIL: vsce package failed"
     exit 1
