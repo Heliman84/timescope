@@ -3,7 +3,7 @@
     "displayName": "TimeScope",
     "description": "A VS Code extension for tracking work sessions with analytics and a dashboard.",
     "publisher": "davidclass",
-    "version": "0.0.1",
+    "version": "0.2.0",
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -64,8 +64,15 @@
         "watch": "tsc -watch -p ./",
         "copy-dashboard": "mkdir out\\dashboard\\webview 2>nul & copy src\\dashboard\\webview\\* out\\dashboard\\webview\\",
         "vscode:prepublish": "npm run compile && npm run copy-dashboard",
-        "release:visx": "node ./scripts/release-visx.js",
-        "test": "npm run compile && node ./out/test/run_tests.js"
+        "test": "npm run compile && node ./out/test/run_tests.js",
+        "check:pr": "bash scripts/check_pr_ready.sh",
+        "feature:finish": "bash scripts/feature_finish.sh",
+        "feature:start": "bash scripts/feature_start.sh",
+        "feature:start-gh": "node scripts/feature_start_gh.js",
+        "check:release": "node scripts/run.js check_release_ready",
+        "release:start": "node scripts/run.js release_start",
+        "release:publish": "node scripts/run.js release_publish"
+
     },
     "devDependencies": {
         "@types/node": "^20.0.0",

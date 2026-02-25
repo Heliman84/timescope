@@ -1,92 +1,158 @@
 # Developer Guide — TimeScope
 
-This document contains developer-facing instructions: building, testing, release automation, and how to configure repository secrets.
+> Build, test, and release instructions for TimeScope.
+> For runtime architecture and process diagrams see [docs/processes.md](docs/processes.md).
+> For the project README see [README.md](README.md).
+
+---
+
+
+## Feature + Release Workflow
+
+```mermaid
+flowchart TD
+    A["1 · Start on develop<br>• Pull latest<br>• Discuss feature with AI"] --> B
+
+    B["2 · Definition Phase"] --> B1{"GH PR extension?"}
+    B1 -- Yes --> B2["In GH PR Extension<br>Click 'Start working on issue'<br>• Creates feature/issue-title branch<br>npm run feature:start-gh<br>  → spec in /pr, inject issue link,<br> set global dir → \\\test"]
+    B1 -- No --> B3["• npm run feature:start<br>  → feature/slug branch,<br>    spec in /pr, global dir → \\\test"]
+    B2 --> C
+    B3 --> C
+
+    C["3 · Consultation Phase<br>Copilot · Planning mode<br>• Review spec, identify gaps<br>• No code changes"] --> D
+
+    D["4 · Implementation Planning<br>Copilot · Planning mode<br>• Deterministic plan<br>• List exact files/tests<br>• No code changes"] --> E
+
+    E["5 · Execution Phase<br>Copilot · Agent mode<br>• Apply plan, show diffs<br>• Developer tests locally"] --> F
+
+    F["6 · PR → develop<br>• npm run check:pr<br>• Create PR via GH extension<br>  or npm run feature:finish"] --> G["Merge PR: feature → develop"]
+
+    G --> H["7 · Release<br>• Bump version in package.json<br>• npm run release:start<br>  → build .vsix, PR develop → main,<br>    remove \\\test global dir"]
+
+    H --> I["Merge PR: develop → main"]
+
+    I --> J["8 · Publish<br>• npm run release:publish<br>  → tag vX.Y.Z, push tag,<br>    open GH Release page<br>• Upload .vsix"]
+
+    J --> K["9 · Cleanup<br>• Delete feature branch<br>• git branch -d feature/FEATURE"]
+```
+
+---
+
+
+## Script Reference
+
+Scripts are defined in `package.json`. Run with `npm run <name>`.
+
+### Core Development
+
+| Script | Purpose |
+| :--- | :--- |
+| `compile` | Compile TypeScript into `out/` |
+| `watch` | Watch-mode recompile on file changes |
+| `copy-dashboard` | Copy `src/dashboard/webview/*` → `out/dashboard/webview/` |
+| `vscode:prepublish` | `compile` + `copy-dashboard` (used before packaging) |
+| `test` | Compile then run the test suite (`out/test/run_tests.js`) |
+
+### Feature Workflow
+
+| Script | Purpose |
+| :--- | :--- |
+| `feature:start-gh` | Create spec in `/pr`, inject issue link, switch global dir → `\test` (no branch creation) |
+| `feature:start` | Create `feature/<slug>` branch + spec in `/pr`, switch global dir → `\test` |
+| `feature:finish` | Run PR readiness checks, open PR feature → develop |
+| `check:pr` | PR readiness checks only (no PR creation) |
+
+### Release Workflow
+
+| Script | Purpose |
+| :--- | :--- |
+| `release:start` | Verify version bump, build `.vsix`, open PR develop → main |
+| `release:publish` | Tag `vX.Y.Z`, push tag, open GitHub Release page |
+| `check:release` | Release readiness checks only |
+
+### Developer Utility Scripts
+
+Scripts under `scripts/` are run directly (e.g. `npx ts-node scripts/<name>.ts`):
+
+| Script | Purpose |
+| :--- | :--- |
+| `upgrade_log_to_v2.ts` | Migrate logs from v1 → v2 format (idempotent, creates backup) |
+| `upgrade_jobs.ts` | Migrate legacy `jobs.json` to new `JobDTO` format |
+| `validate_jobs.ts` | Validate `jobs.json` structure and report issues |
+| `validate_upgraded.ts` | Validate that a log migration completed correctly |
+| `repair_orphaned_sessions.ts` | Scan logs for orphaned sessions; interactive repair with markdown report |
+
+---
+
 
 ## Building & Testing
 
-- Install dependencies: `npm install`
-- Compile: `npm run compile`
-- Run tests: `npm test`
-- Run extension in dev: Press F5 in VS Code (launches an Extension Development Host)
-
-## File structure
-
-- `src/` — TypeScript source
-- `src/dashboard/webview` — dashboard UI files included in the extension package
-- `out/` — compiled JS output (packaged into the VSIX)
-
-## Release flow (local + GitHub Actions)
-
-We provide a one-command local helper to dispatch the release workflow and create a draft GitHub Release with an attached `.vsix` file.
-
-- Local trigger: `npm run release:visx` (runs `scripts/release-visx.js`)
-
-What `release:visx` enforces locally before dispatching the workflow:
-
-- Your working tree must be clean (no uncommitted changes). The script will fail if `git status --porcelain` returns any output.
-- Your branch must have an upstream and be up-to-date (push any local commits first).
-
-The workflow will:
-
-1. Run the test suite (`npm test`).
-2. Build the extension (`npm run vscode:prepublish`).
-3. Verify `README.md` was updated to reflect the feature/roadmap changes.
-4. Merge the specified branch into `main`.
-5. Bump the `package.json` version using `npm version` and create a `vX.Y.Z` tag.
-6. Package a `.vsix` with `vsce` and create a draft GitHub Release with the VSIX attached.
-
-> The release is created as a *draft* so you can install it locally and test across machines before publishing to the Marketplace.
-
-### Semver bump selection
-
-When dispatching the workflow you will be asked to pick one of: `major`, `minor`, or `patch`. This determines how `npm version` increments `package.json`.
-
-### Single source of truth for version
-
-`package.json` is the authoritative version for the extension and is the only file we update during releases. Avoid hard-coding version strings elsewhere in the repo so the workflow only needs to update one place.
-
-## Repository secrets & tokens
-
-You will need to create a Personal Access Token (PAT) with `repo` scope to allow the workflow to push and tag the repository when branch protection is enabled. We recommend storing the PAT as a repository secret called `GH_PAT`.
-
-How to add a secret in GitHub:
-
-1. Open your repository on GitHub.
-2. Click `Settings` → `Secrets and variables` → `Actions` → `New repository secret`.
-3. Name the secret `GH_PAT` and paste the token value.
-
-OR
-
-Use the GitHub CLI to login. Then run
-
 ```bash
-$env:GITHUB_TOKEN = (gh auth token)
+npm install          # install dependencies
+npm run compile      # compile TypeScript
+npm test             # compile + run test suite
 ```
 
-Security notes:
+Press **F5** in VS Code to launch the Extension Development Host.
 
-- Secrets are encrypted and stored by GitHub; their *values are not visible* to people viewing the repository. Only users with repo admin permissions can add or remove secrets; even they cannot read the secret value after it is saved.
-- In Actions logs, secrets are masked and will not be printed. Avoid echoing secrets in workflow steps.
-- Locally, the release script uses `GITHUB_TOKEN` or `GH_TOKEN` environment variables when calling the Actions dispatch API. When running workflows in Actions, the `GH_PAT` repo secret will be preferred by the workflow for operations that require elevated permissions.
+---
 
-## Notes & troubleshooting
+## Project Structure
 
-- If your repo enforces branch protection rules (e.g., required reviews), automated merges may fail; in that case use a manual PR flow or add a PAT with the required permission and make sure branch protection allows the automation to merge.
-- If the workflow fails during the README check, update `README.md` on the branch to include the user-facing changes and re-run the workflow.
-- Status bar ordering: task-button extensions may add buttons at priority ~100. To keep TimeScope buttons to the left, edit the numeric priorities in `src/extension.ts` (they start at 300 and decrement).
+`
+src/
+  extension.ts                  — activation, command registration, deactivation
+  core/
+    runtime.ts                  — Runtime class (single source of truth)
+    event.ts                    — Event domain object (immutable)
+    event_collection.ts         — EventCollection (immutable aggregate)
+    event_dto.ts                — EventDTO (serialization boundary)
+    event_repository.ts         — EventRepository (JSONL I/O, dedup, session queries)
+    job.ts                      — Job domain object (immutable, FNV-1a ID)
+    job_collection.ts           — JobCollection (immutable aggregate)
+    job_dto.ts                  — JobDTO (serialization boundary)
+    job_repository.ts           — JobRepository (JSON I/O, legacy detection)
+    session.ts                  — Session (start→stop state machine)
+    recovery.ts                 — Orphaned-session detection & recovery prompts
+    timer.ts                    — Status bar timer helpers (pure functions)
+    paths.ts                    — Path resolution & directory creation
+  dashboard/
+    controller/
+      dashboard.ts              — Webview panel lifecycle & message handling
+      dashboard_utils.ts        — Pure helpers (buildPayload, filterRelevantErrors)
+    webview/
+      index.html                — Dashboard HTML
+      dashboard.js              — Dashboard client-side JS
+  ui/
+    pick_job.ts                 — Job QuickPick helper
+  utils/
+    fs_utils.ts                 — File-system helpers (ensureDir, readJSONL, readJSON)
+  test/
+    run_tests.ts                — Test runner entry point
+    test_event.ts               — Event unit tests
+    test_event_collection.ts    — EventCollection tests
+    test_event_collection_extended.ts — Extended collection tests
+    test_event_repository.ts    — EventRepository tests
+    test_job.ts                 — Job unit tests
+    test_job_collection.ts      — JobCollection tests
+    test_jobs.ts                — Legacy job compat tests
+    test_session.ts             — Session unit tests
+    test_dashboard.ts           — Dashboard controller tests
+out/                            — Compiled JS (packaged into .vsix)
+pr/                             — Feature specifications
+scripts/                        — Workflow automation & migration scripts
+docs/                           — Architecture & format specifications
+`
 
-## Workspace button (quick-access)
+---
 
-To add a persistent, visible **Release** button in the status bar for this workspace only, use the **Task Buttons** extension (`spencerwmiles.vscode-task-buttons`). This approach is workspace-local when you enable the extension for this repository.
 
-Steps:
+## Related Documentation
 
-1. Install **Task Buttons** (`spencerwmiles.vscode-task-buttons`) and **Enable (Workspace)** from the Extensions view so the button only appears for this repo.
-2. Open the Task Buttons view (or its extension UI) and locate the task named exactly `Release VSIX (Save All + Dispatch)`.
-3. Use the Task Buttons UI to **add/pin** the `Release VSIX (Save All + Dispatch)` task as a status-bar button.
-
-Notes & troubleshooting:
-
-- The task label must match the label in `.vscode/tasks.json` exactly.
-- If the button does not appear, reload the window (Developer: Reload Window) or open the Task Buttons UI and re-add the task.
-- If you prefer, you can also add a workspace keybinding as a fallback.
+| Document | Description |
+| :--- | :--- |
+| [README.md](README.md) | User-facing overview, commands, settings, data format |
+| [docs/processes.md](docs/processes.md) | Runtime architecture, state machine, and Mermaid process diagrams |
+| [docs/record_format_spec.md](docs/record_format_spec.md) | On-disk format for `jobs.json` and `logs.jsonl` |
+| [docs/record_id_spec.md](docs/record_id_spec.md) | Deterministic record ID derivation (FNV-1a, base-36) |
+| [coding_standards.md](coding_standards.md) | Project coding conventions |
