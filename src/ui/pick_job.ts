@@ -11,6 +11,10 @@ export async function pickJob(
 ): Promise<Job | null> {
   const arr = jobs.toArray();
 
+  if (opts?.includeNewJob && !opts.jobRepo) {
+    throw new Error("pickJob: jobRepo is required when includeNewJob is true");
+  }
+
   if (arr.length === 0 && !opts?.includeNewJob) return null;
 
   const items: vscode.QuickPickItem[] = [];

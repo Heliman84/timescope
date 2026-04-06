@@ -53,7 +53,7 @@
                 "category": "TimeScope"
             },
             {
-                "command": "timescope.rename_job",
+                "command": "timescope.renameJob",
                 "title": "Rename Job",
                 "category": "TimeScope"
             }

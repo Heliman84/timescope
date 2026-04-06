@@ -176,7 +176,7 @@ export async function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand("timescope.rename_job", async () => {
+        vscode.commands.registerCommand("timescope.renameJob", async () => {
             const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to rename" });
             if (!job) return vscode.window.showInformationMessage("No job selected");
 
