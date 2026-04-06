@@ -35,7 +35,7 @@ export async function pickJob(
     const name = await vscode.window.showInputBox({ prompt: "Enter job name" });
     if (!name) return null;
     const created = Job.create({ title: name });
-    await opts?.jobRepo?.save(created);
+    await opts!.jobRepo!.save(created);
     return created;
   }
 
