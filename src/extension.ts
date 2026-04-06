@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 
 import { Runtime } from "./core/runtime";
+import { JobCollection } from "./core/job_collection";
 import { pickJob } from "./ui/pick_job";
 import { handle_dashboard } from "./dashboard/controller/dashboard";
 import { checkAndRecover } from "./core/recovery";
@@ -64,27 +65,12 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.start", async () => {
-            // If no jobs exist, prompt to create and start
-            if (runtime.jobs.isEmpty()) {
-                const name = await vscode.window.showInputBox({ prompt: "Enter job name" });
-                if (!name) return;
-                const created = Job.create({ title: name });
-                await runtime.jobRepo.save(created);
-                runtime.jobs = runtime.jobs.add(created);
-
-                const session = Session.start(created);
-                const startEvent = session.startEvent;
-                if (!startEvent) throw new Error("Failed to create start event");
-                runtime.logRepo.appendValidated(startEvent);
-                runtime.appendToCache(startEvent);
-                runtime.setActiveSession(session);
-                // job complete exit without running job picker since we just created a job to start
-                return;
-            }
-
-            // Otherwise, show job picker
-            const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to start" });
+            const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
             if (!job) return;
+
+            if (!runtime.jobs.findById(job.id)) {
+                runtime.jobs = runtime.jobs.add(job);
+            }
 
             const session = Session.start(job);
             const startEvent = session.startEvent;
@@ -178,19 +164,19 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.addJob", async () => {
-            const name = await vscode.window.showInputBox({ prompt: "Enter job name" });
-            if (!name) return;
+            const job = await pickJob(JobCollection.fromArray([]), { includeNewJob: true, jobRepo: runtime.jobRepo, placeHolder: "Create a new job" });
+            if (!job) return;
 
-            const created = Job.create({ title: name });
-            await runtime.jobRepo.save(created);
-            runtime.jobs = runtime.jobs.add(created);
+            if (!runtime.jobs.findById(job.id)) {
+                runtime.jobs = runtime.jobs.add(job);
+            }
 
-            vscode.window.showInformationMessage(`Job added: ${name}`);
+            vscode.window.showInformationMessage(`Job added: ${job.title}`);
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand("timescope.renameJob", async () => {
+        vscode.commands.registerCommand("timescope.rename_job", async () => {
             const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to rename" });
             if (!job) return vscode.window.showInformationMessage("No job selected");
 
