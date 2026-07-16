@@ -36,7 +36,7 @@ Plan in conversation (use plan mode for non-trivial changes). Identify exact fil
 
 - [ ] `npm test` green, `npm run compile` clean
 - [ ] Working tree committed, no stray file changes
-- [ ] No new dependencies; `package.json` untouched unless approved — verify mechanically: `git diff origin/develop...HEAD -- package.json package-lock.json` is empty or its changes were explicitly approved
+- [ ] No new dependencies; `package.json` untouched beyond the confirmed version bump and any explicitly approved changes (e.g. new command contributions) — verify mechanically: `git diff origin/develop...HEAD -- package.json package-lock.json` shows only the confirmed bump and/or explicitly approved changes
 - [ ] Review `git diff --stat origin/develop...HEAD` for stray files that don't belong to this feature
 - [ ] `docs/processes.md` diagrams updated if architecture/state machine/data format changed
 - [ ] `/code-review` run on the diff; findings fixed or explicitly waived by the user. Beyond generic review, verify the TimeScope domain invariants:
@@ -45,6 +45,7 @@ Plan in conversation (use plan mode for non-trivial changes). Identify exact fil
   - Event dedup by ID is preserved (no path writes an event twice across global/workspace logs)
   - Session state machine transitions stay legal (start→pause/stop, pause→resume/stop; validated, not assumed)
   - JSONL canonical field order and format version header untouched unless the spec docs change too
+- [ ] Propose a version bump (patch/minor per [coding_standards.md](../../../coding_standards.md) Versioning rules) with the explicit `from → to`; on user confirmation, edit `package.json`'s `version` and include it in the PR. Never bump silently.
 - [ ] One line added to `CHANGELOG.md` under **Unreleased**
 
 ## 6. Hand off for F5
