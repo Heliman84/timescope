@@ -13,6 +13,8 @@
     "exclude": [
         "scripts",
         "out",
-        "test-output"
+        "test-output",
+        "tests",
+        "playwright.config.ts"
     ]
 }

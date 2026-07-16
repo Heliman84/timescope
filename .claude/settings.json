@@ -1,0 +1,42 @@
+{
+    "permissions": {
+        "allow": [
+            "Bash(npm test)",
+            "Bash(npm run compile)",
+            "Bash(npm run watch)",
+            "Bash(npm run package)",
+            "Bash(npm run vscode:prepublish)",
+            "Bash(npm install)",
+            "Bash(npx tsc:*)",
+            "Bash(npx vsce package:*)",
+            "Bash(git status:*)",
+            "Bash(git diff:*)",
+            "Bash(git log:*)",
+            "Bash(git show:*)",
+            "Bash(git branch)",
+            "Bash(git branch --list:*)",
+            "Bash(git fetch:*)",
+            "Bash(git pull)",
+            "Bash(git add:*)",
+            "Bash(git commit:*)",
+            "Bash(git checkout:*)",
+            "Bash(git push)",
+            "Bash(git push -u origin feature/:*)",
+            "Bash(gh issue view:*)",
+            "Bash(gh issue list:*)",
+            "Bash(gh pr view:*)",
+            "Bash(gh pr list:*)",
+            "Bash(gh pr diff:*)",
+            "Bash(gh pr checks:*)"
+        ],
+        "ask": [
+            "Bash(git push --force:*)",
+            "Bash(git push -f:*)",
+            "Bash(git branch -D:*)",
+            "Bash(git reset --hard:*)",
+            "Bash(gh release create:*)",
+            "Bash(gh pr merge:*)",
+            "Bash(code --install-extension:*)"
+        ]
+    }
+}

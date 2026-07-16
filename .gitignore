@@ -4,6 +4,8 @@ out/
 
 # Local test artifacts
 /test-output/
+/test-results/
+/playwright-report/
 
 # Node / build artifacts
 dist/
@@ -26,3 +28,10 @@ npm-debug.log*
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Test-workspace: track the settings that pin TimeScope storage,
+# but never commit the test tracking data itself
+!test-workspace/.vscode/settings.json
+test-workspace/global-storage/*
+!test-workspace/global-storage/.gitkeep
+test-workspace/.timescope/
