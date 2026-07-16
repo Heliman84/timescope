@@ -115,7 +115,8 @@ Edits go through `validateReplacement` / `validateReplacements` and surface erro
 
 | Document | Description |
 | :--- | :--- |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Build, test, feature workflow, release workflow, and script reference |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Build, test, development workflow, and script reference |
+| [CHANGELOG.md](CHANGELOG.md) | One line per PR; source of release notes |
 | [docs/processes.md](docs/processes.md) | Runtime architecture, state machine, and process diagrams (Mermaid) |
 | [docs/record_format_spec.md](docs/record_format_spec.md) | On-disk format for `jobs.json` and `logs.jsonl` |
 | [docs/record_id_spec.md](docs/record_id_spec.md) | Deterministic record ID derivation (FNV-1a, base-36) |
