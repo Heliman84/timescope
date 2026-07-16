@@ -34,3 +34,4 @@ npm-debug.log*
 !test-workspace/.vscode/settings.json
 test-workspace/global-storage/*
 !test-workspace/global-storage/.gitkeep
+test-workspace/.timescope/
