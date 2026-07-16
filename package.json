@@ -62,7 +62,7 @@
     "scripts": {
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "copy-dashboard": "mkdir out\\dashboard\\webview 2>nul & copy src\\dashboard\\webview\\* out\\dashboard\\webview\\",
+        "copy-dashboard": "node -e \"const fs=require('fs');fs.mkdirSync('out/dashboard/webview',{recursive:true});fs.cpSync('src/dashboard/webview','out/dashboard/webview',{recursive:true});\"",
         "vscode:prepublish": "npm run compile && npm run copy-dashboard",
         "test": "npm run compile && node ./out/test/run_tests.js",
         "test:ui": "playwright test",

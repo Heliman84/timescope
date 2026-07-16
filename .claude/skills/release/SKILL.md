@@ -34,12 +34,20 @@ Offer to install the release-candidate vsix locally first (install skill) so the
 
 ## 5. Publish (after merge, on request)
 
+Before tagging, verify version/tag consistency (the old CI did this atomically; now it's on you):
+
+- `node -p "require('./package.json').version"` on main MUST equal the X.Y.Z you are about to tag
+- `git tag -l vX.Y.Z` MUST be empty (no duplicate tag)
+- If either check fails, STOP and fix the version on develop via a new release PR — never tag a mismatched version
+
 ```
 git checkout main && git pull
 git tag vX.Y.Z && git push origin vX.Y.Z
 npm run package
 gh release create vX.Y.Z timescope-X.Y.Z.vsix --title "vX.Y.Z" --notes "<changelog entries>"
 ```
+
+The packaged filename comes from package.json's version — if it doesn't match the tag, the consistency check above was skipped.
 
 The `.vsix` attached to the GitHub Release is the official distribution artifact — it is never committed.
 

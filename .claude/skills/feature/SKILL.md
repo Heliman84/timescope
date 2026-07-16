@@ -36,7 +36,8 @@ Plan in conversation (use plan mode for non-trivial changes). Identify exact fil
 
 - [ ] `npm test` green, `npm run compile` clean
 - [ ] Working tree committed, no stray file changes
-- [ ] No new dependencies; `package.json` untouched unless approved
+- [ ] No new dependencies; `package.json` untouched unless approved — verify mechanically: `git diff origin/develop...HEAD -- package.json package-lock.json` is empty or its changes were explicitly approved
+- [ ] Review `git diff --stat origin/develop...HEAD` for stray files that don't belong to this feature
 - [ ] `docs/processes.md` diagrams updated if architecture/state machine/data format changed
 - [ ] `/code-review` run on the diff; findings fixed or explicitly waived by the user. Beyond generic review, verify the TimeScope domain invariants:
   - Domain objects stay immutable (mutations return new instances; only `Runtime` mutates)

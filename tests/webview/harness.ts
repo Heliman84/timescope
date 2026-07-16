@@ -23,11 +23,18 @@ import { FixtureEvent } from "./fixtures";
 const WEBVIEW_DIR = path.resolve(__dirname, "../../src/dashboard/webview");
 const VENDOR_DIR = path.resolve(__dirname, "vendor");
 
-export const DASHBOARD_URL = "https://timescope.test/index.html";
+const DASHBOARD_URL = "https://timescope.test/index.html";
+
+/** A message the webview posted to the (stubbed) extension host. */
+export interface PostedMessage {
+    type: string;
+    payload?: unknown;
+}
 
 function harness_html(): string {
     let html = fs.readFileSync(path.join(WEBVIEW_DIR, "index.html"), "utf8");
-    html = html.replace(/<meta http-equiv="Content-Security-Policy"[\s\S]*?">/, "");
+    // Meta tags contain no ">" inside attribute values, so match to the tag end
+    html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, "");
     html = html.replace(/\$\{cssUri\}/g, "dashboard.css");
     html = html.replace(/\$\{jsUri\}/g, "dashboard.js");
     html = html.replace(/ nonce="\$\{nonce\}"/g, "");
@@ -73,7 +80,7 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[]): Promi
         w.__posted = [];
         w.__reply = (msg: unknown) => window.postMessage(msg, "*");
         w.acquireVsCodeApi = () => ({
-            postMessage: (msg: any) => {
+            postMessage: (msg: { type?: string }) => {
                 w.__posted.push(msg);
                 if (msg && msg.type === "request_data") {
                     setTimeout(() => window.postMessage({ type: "summary_data", payload: fixturePayload }, "*"), 0);
@@ -90,11 +97,20 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[]): Promi
 }
 
 /** Messages the webview posted to the (stubbed) extension host. */
-export function posted_messages(page: Page): Promise<any[]> {
+export function posted_messages(page: Page): Promise<PostedMessage[]> {
     return page.evaluate(() => (window as any).__posted);
 }
 
 /** Inject a controller → webview message (e.g. an edit_result). */
 export function reply(page: Page, msg: unknown): Promise<void> {
     return page.evaluate((m) => (window as any).__reply(m), msg);
+}
+
+/**
+ * Format a timestamp for filling a datetime-local input, minute precision —
+ * the modal's inputs have no step attribute, so seconds are rejected (#32).
+ */
+export function to_datetime_input_value(timestamp: number): string {
+    const d = new Date(timestamp);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 }

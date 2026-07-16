@@ -22,7 +22,7 @@ export interface FixtureEvent {
 }
 
 /** Same local-day formatting the dashboard uses (get_local_day). */
-export function local_day(timestamp: number): string {
+function local_day(timestamp: number): string {
     const d = new Date(timestamp);
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, "0");
@@ -51,6 +51,9 @@ export interface FixtureData {
  * - Alpha, 40 days ago 10:00–11:00 (inside "last 3 months", outside "this month" and "today")
  */
 export function build_fixture(): FixtureData {
+    // Known flake window: "today" is stamped here, but the dashboard recomputes
+    // its own "today" at filter time — a run straddling local midnight can
+    // disagree. Accepted: the window is one page-load wide.
     const now = new Date();
     const old = new Date(now.getTime() - 40 * 24 * 3600 * 1000);
 
