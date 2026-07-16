@@ -79,6 +79,8 @@ npm run package      # build the .vsix (prepublish + vsce)
 
 Press **F5** in VS Code to launch the Extension Development Host. It opens `test-workspace/`, whose settings pin TimeScope storage to `test-workspace/global-storage/` — F5 testing never touches your real tracking data.
 
+That storage is gitignored, so a fresh clone starts empty. Run `npm run seed-testdata` to generate 3 jobs and ~4 weeks of sessions (timestamps relative to now, so the dashboard presets always have data). Re-run any time to reset.
+
 ### Test layers
 
 | Layer | Where | What it covers |
@@ -111,6 +113,7 @@ Run directly (e.g. `npx ts-node scripts/<name>.ts`):
 | `validate_jobs.ts` | Validate `jobs.json` structure and report issues |
 | `validate_upgraded.ts` | Validate that a log migration completed correctly |
 | `repair_orphaned_sessions.ts` | Scan logs for orphaned sessions; interactive repair with markdown report |
+| `seed_test_data.js` | Generate fresh F5 test data (`npm run seed-testdata`) |
 
 ---
 

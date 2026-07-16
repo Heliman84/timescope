@@ -66,6 +66,7 @@
         "vscode:prepublish": "npm run compile && npm run copy-dashboard",
         "test": "npm run compile && node ./out/test/run_tests.js",
         "test:ui": "playwright test",
+        "seed-testdata": "npm run compile && node scripts/seed_test_data.js",
         "package": "npm run vscode:prepublish && vsce package"
     },
     "devDependencies": {

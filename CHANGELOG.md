@@ -7,6 +7,7 @@ One line per merged PR, added at PR time under **Unreleased**. At release, entri
 
 - Claude-driven development process: three chat-driven workflow skills (feature / install / release), CLAUDE.md, PR CI, isolated F5 test storage; retired the legacy script-based workflow
 - Playwright UI test suite for the dashboard webview (`npm run test:ui`): renders the real dashboard against fixture data, covering charts, filters, session table, and the edit-modal round-trip
+- `npm run seed-testdata`: generate fresh multi-week F5 test data into the isolated test-workspace storage
 
 
 ## v0.2.0 — 2026-02-25
