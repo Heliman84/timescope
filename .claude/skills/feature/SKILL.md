@@ -28,7 +28,8 @@ Plan in conversation (use plan mode for non-trivial changes). Identify exact fil
 ## 4. Implement
 
 - TDD: write/extend tests in `src/test/` first (plain throwing functions, registered in `run_tests.ts`), then implement.
-- Iterate until `npm test` is green and `npm run compile` is clean.
+- Dashboard/webview changes: extend the Playwright suite in `tests/webview/` (harness stubs `acquireVsCodeApi`; fixtures mirror `buildPayload`). While iterating on UI you can also drive the harness live with the Playwright MCP tools and show the user screenshots instead of requiring F5 for every tweak.
+- Iterate until `npm test` is green and `npm run compile` is clean; `npm run test:ui` green whenever `src/dashboard/webview/` or `tests/webview/` changed.
 - Follow CLAUDE.md conventions; no new dependencies without approval.
 
 ## 5. Pre-PR checklist (all must pass before handoff)
@@ -37,7 +38,12 @@ Plan in conversation (use plan mode for non-trivial changes). Identify exact fil
 - [ ] Working tree committed, no stray file changes
 - [ ] No new dependencies; `package.json` untouched unless approved
 - [ ] `docs/processes.md` diagrams updated if architecture/state machine/data format changed
-- [ ] `/code-review` run on the diff; findings fixed or explicitly waived by the user
+- [ ] `/code-review` run on the diff; findings fixed or explicitly waived by the user. Beyond generic review, verify the TimeScope domain invariants:
+  - Domain objects stay immutable (mutations return new instances; only `Runtime` mutates)
+  - Timestamps remain monotonic per job log (`ensureAfter` on any appended/retimed event)
+  - Event dedup by ID is preserved (no path writes an event twice across global/workspace logs)
+  - Session state machine transitions stay legal (start→pause/stop, pause→resume/stop; validated, not assumed)
+  - JSONL canonical field order and format version header untouched unless the spec docs change too
 - [ ] One line added to `CHANGELOG.md` under **Unreleased**
 
 ## 6. Hand off for F5

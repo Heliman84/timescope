@@ -4,6 +4,8 @@ out/
 
 # Local test artifacts
 /test-output/
+/test-results/
+/playwright-report/
 
 # Node / build artifacts
 dist/

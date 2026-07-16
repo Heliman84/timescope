@@ -72,11 +72,22 @@ flowchart TD
 ```bash
 npm install          # install dependencies
 npm run compile      # compile TypeScript
-npm test             # compile + run test suite (pure Node, no VS Code host)
+npm test             # compile + run unit test suite (pure Node, no VS Code host)
+npm run test:ui      # Playwright dashboard webview tests (headless Chromium)
 npm run package      # build the .vsix (prepublish + vsce)
 ```
 
 Press **F5** in VS Code to launch the Extension Development Host. It opens `test-workspace/`, whose settings pin TimeScope storage to `test-workspace/global-storage/` — F5 testing never touches your real tracking data.
+
+### Test layers
+
+| Layer | Where | What it covers |
+| :--- | :--- | :--- |
+| Unit (`npm test`) | `src/test/` | Domain objects, collections, repositories, dashboard payload helpers |
+| Dashboard UI (`npm run test:ui`) | `tests/webview/` | The real `dashboard.js` in headless Chromium: charts, filters, session table, edit-modal round-trip. `acquireVsCodeApi` is stubbed, Chart.js served from `tests/webview/vendor/` — fully offline |
+| Manual F5 | Extension Dev Host | Activation, status bar, commands, recovery prompts — anything needing a live VS Code |
+
+First run of `test:ui` on a new machine: `npx playwright install chromium`.
 
 ### npm scripts
 
@@ -145,6 +156,7 @@ src/
     run_tests.ts                — Test runner entry point (all tests registered here)
     test_*.ts                   — Unit tests (plain functions that throw on failure)
 out/                            — Compiled JS (packaged into .vsix)
+tests/webview/                  — Playwright dashboard UI tests (harness, fixtures, vendored Chart.js)
 scripts/                        — Data & migration utilities
 docs/                           — Architecture & format specifications
 test-workspace/                 — Workspace opened by F5 (isolated TimeScope storage)

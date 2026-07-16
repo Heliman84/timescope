@@ -65,9 +65,11 @@
         "copy-dashboard": "mkdir out\\dashboard\\webview 2>nul & copy src\\dashboard\\webview\\* out\\dashboard\\webview\\",
         "vscode:prepublish": "npm run compile && npm run copy-dashboard",
         "test": "npm run compile && node ./out/test/run_tests.js",
+        "test:ui": "playwright test",
         "package": "npm run vscode:prepublish && vsce package"
     },
     "devDependencies": {
+        "@playwright/test": "^1.61.1",
         "@types/node": "^20.0.0",
         "@types/vscode": "^1.85.0",
         "@vscode/vsce": "^3.0.0",
@@ -85,7 +87,5 @@
     "repository": {
         "type": "git",
         "url": "https://github.com/Heliman84/timescope.git"
-        }
-    
-
+    }
 }
