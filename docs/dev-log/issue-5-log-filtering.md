@@ -81,4 +81,12 @@ Evaluating with real data (via `--from-real`) exposed gaps the short synthetic s
 
 ## Retrospective
 
-_To be finalized at PR time._
+Shipped substantially per plan, but the UX kept evolving through three F5 rounds with real feedback — the durable lesson of this branch:
+
+- **What shipped vs. planned**: the pure `filter_state.js` module, one-filter-state-drives-everything, native date inputs, synced legend, sorting, and the frozen-clock test approach all landed as planned. The *filter surface* did not survive contact with use: the planned table filter row became Excel-style column funnels (sort hint + funnel menu per column), range filters gained commit-on-Enter (replacing a debounce), and per-column Clear buttons appeared — none of which were in the original plan.
+- **The default preset moved twice** (Today → Last 14 Days → Last 4 Weeks) — the right value only became obvious against real data with real gaps.
+- **Real data was the best reviewer.** `--from-real` exposed legend truncation, the buried empty-state, and the narrow-panel column squeeze within minutes of use — after the synthetic seed had hidden all three. The seed generator now mirrors the real store's measured profile so this class of blindness doesn't recur.
+- **Palette**: replaced Tableau-10 with a colorblind/contrast-validated set; David dislikes the hues — revisit is #44, constraint intact.
+- **Code review paid rent**: HTML/attribute injection via job names (real XSS surface in a webview), plus the latent day-total label bug — both fixed and regression-tested.
+- **Spawned issues**: #42 (log hygiene/sanitizer/compaction), #43 (append-only amend events, kills the line-index plumbing), #44 (design pass), #45 (scale smoke test).
+- Final state: 39 Playwright tests + the Node suite (presets incl. DST boundaries, inclusive ranges, sync, palette stability, injection, chart data, real click-through highlighting), v0.4.0.
