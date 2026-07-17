@@ -5,7 +5,7 @@ description: TimeScope feature loop — use when discussing a GitHub issue, star
 
 # Feature Loop (issue → PR → develop)
 
-The durable record is the GitHub issue + the PR description. No spec files.
+The durable record is the GitHub issue + the PR description + a short `docs/dev-log/` decision log. No heavyweight up-front spec files.
 
 ## 1. Discuss
 
@@ -24,6 +24,8 @@ git checkout -b feature/issue-<N>-<short-slug>
 ## 3. Plan
 
 Plan in conversation (use plan mode for non-trivial changes). Identify exact files, tests, and any impact on: the session state machine, the dashboard/webview, data formats (`docs/record_format_spec.md`), or commands/settings in `package.json` (needs explicit approval).
+
+Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEMPLATE.md) to `docs/dev-log/issue-<N>-<short-slug>.md` and fill in the problem + the scope decisions and trade-offs as they're agreed. It's a living decision log through implementation, not a spec — keep it short.
 
 ## 4. Implement
 
@@ -47,6 +49,7 @@ Plan in conversation (use plan mode for non-trivial changes). Identify exact fil
   - JSONL canonical field order and format version header untouched unless the spec docs change too
 - [ ] Propose a version bump (patch/minor per [coding_standards.md](../../../coding_standards.md) Versioning rules) with the explicit `from → to`; on user confirmation, edit `package.json`'s `version` and include it in the PR. Never bump silently.
 - [ ] One line added to `CHANGELOG.md` under **Unreleased**
+- [ ] `docs/dev-log/issue-<N>-<slug>.md` finalized: retrospective filled in (what actually shipped, any changes from the plan), issue/PR links set
 
 ## 6. Hand off for F5
 
@@ -59,7 +62,7 @@ git push -u origin <branch>
 gh pr create --base develop --title "<concise title>" --body "<description>"
 ```
 
-Description: summary, user-facing behavior, technical changes, `Closes #<N>`. Include a small mermaid diagram when structure changed. Keep it short and readable — no boilerplate sections that don't apply.
+Description: summary, user-facing behavior, technical changes, `Closes #<N>`, and a link to the `docs/dev-log/` entry. Include a small mermaid diagram when structure changed. Keep it short and readable — no boilerplate sections that don't apply.
 
 ## 8. After merge (offer, don't assume)
 

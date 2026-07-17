@@ -53,3 +53,4 @@ Full list: [coding_standards.md](coding_standards.md). The load-bearing ones:
 - Keep docs short, human-readable, and diagram-first — a good mermaid block diagram beats pages of text
 - When a change alters architecture, the state machine, or data formats: update the relevant diagram in [docs/processes.md](docs/processes.md)
 - Every PR adds one line to `CHANGELOG.md` under "Unreleased"
+- Every feature branch keeps a short decision log in [docs/dev-log/](docs/dev-log/) (`issue-<N>-<slug>.md`, from `TEMPLATE.md`): started at plan time, finalized as a retrospective at PR time. It captures the *why* — decisions, trade-offs, rejected approaches — not a spec. This is the log the "no heavyweight spec files" rule leaves room for, not an exception to it.
