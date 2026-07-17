@@ -42,22 +42,23 @@ async function pie_colors(page: Page): Promise<Record<string, string>> {
 // Default preset applied on load
 // ═══════════════════════════════════════════════════════════════════════════
 
-test("default Last 14 Days preset is applied on load across table and charts", async ({ page }) => {
-    await expect(page.locator("#preset_range")).toHaveValue("last_14");
+test("default Last 4 Weeks preset is applied on load across table and charts", async ({ page }) => {
+    await expect(page.locator("#preset_range")).toHaveValue("last_4_weeks");
 
     // Start/end inputs are populated with the resolved default range
-    await expect(page.locator("#start_date")).toHaveValue("2026-07-02");
+    await expect(page.locator("#start_date")).toHaveValue("2026-06-18");
     await expect(page.locator("#end_date")).toHaveValue("2026-07-15");
 
-    // Ten of the twelve jobs fall inside the window; Wolf and Vega are excluded
+    // Eleven of the twelve jobs fall inside the window (Wolf sits exactly on
+    // the start boundary); only Vega is excluded
     const jobs = await table_jobs(page);
-    expect(jobs.sort()).toEqual(ff.jobs_in_last_14.slice().sort());
-    expect(jobs).not.toContain("Wolf");
+    expect(jobs.sort()).toEqual(ff.jobs_in_default_range.slice().sort());
+    expect(jobs).toContain("Wolf");
     expect(jobs).not.toContain("Vega");
 
     // Charts agree with the table
     const pie = await pie_data(page);
-    expect(Object.keys(pie).sort()).toEqual(ff.jobs_in_last_14.slice().sort());
+    expect(Object.keys(pie).sort()).toEqual(ff.jobs_in_default_range.slice().sort());
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -397,11 +398,51 @@ test("reset restores every filter to its default", async ({ page }) => {
 
     await page.click("#clear_filters_btn");
 
-    await expect(page.locator("#preset_range")).toHaveValue("last_14");
+    await expect(page.locator("#preset_range")).toHaveValue("last_4_weeks");
     await expect(page.locator("#job_all_checkbox")).toBeChecked();
     // Funnel indicators are all off again
     await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
     await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
     await expect(page.locator("#pause_filter_toggle")).not.toHaveClass(/filter-active/);
-    expect((await table_jobs(page)).sort()).toEqual(ff.jobs_in_last_14.slice().sort());
+    expect((await table_jobs(page)).sort()).toEqual(ff.jobs_in_default_range.slice().sort());
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Narrow-panel and legend affordances
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("legend names carry a tooltip with the full job name", async ({ page }) => {
+    const acme_text = page.locator("#job_legend .legend-row", { hasText: "Acme" }).locator(".legend-text");
+    await expect(acme_text).toHaveAttribute("title", "Acme");
+});
+
+test("empty result shows a prominent message in place of the pie chart", async ({ page }) => {
+    await expect(page.locator("#pie_empty")).toBeHidden();
+
+    // A range no session satisfies
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("100");
+    await page.locator("#dur_min").press("Enter");
+
+    await expect(page.locator("#pie_empty")).toBeVisible();
+    await expect(page.locator("#pie_empty")).toContainText("No data in the selected date range or filters");
+    await expect(page.locator("#pie_chart")).toBeHidden();
+
+    // Data back → chart back
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_filter_clear").click();
+    await expect(page.locator("#pie_empty")).toBeHidden();
+    await expect(page.locator("#pie_chart")).toBeVisible();
+});
+
+test("narrow panels abbreviate the Duration and Pause/Resume headers", async ({ page }) => {
+    // Wide: full titles
+    await expect(page.locator("th[data-sort='duration'] .th-full")).toBeVisible();
+    await expect(page.locator("th[data-sort='pauses'] .th-short")).toBeHidden();
+
+    // Narrow (half-screen-ish): abbreviations take over
+    await page.setViewportSize({ width: 700, height: 900 });
+    await expect(page.locator("th[data-sort='duration'] .th-full")).toBeHidden();
+    await expect(page.locator("th[data-sort='duration'] .th-short")).toBeVisible();
+    await expect(page.locator("th[data-sort='pauses'] .th-short")).toHaveText("P/R");
 });

@@ -68,6 +68,17 @@ Verdict: snappy, functions well. Changes agreed and implemented:
 - **`--from-real` honors `timescope.global_storage_dir`**: the script now reads the VS Code user settings.json and uses the configured storage folder (falls back to default globalStorage; relative values error with instructions to pass the folder explicitly).
 
 
+## F5 evaluation round 3 — real-data findings (2026-07-17)
+
+Evaluating with real data (via `--from-real`) exposed gaps the short synthetic seed had hidden:
+
+- **Default preset → Last 4 Weeks** (was Last 14 Days) — real usage has multi-week gaps, and a two-week default opened to an empty view.
+- **Prominent no-data message in place of the pie chart** ("No data in the selected date range or filters", with a hint that the range may be too narrow) — the old table-only note was too easy to miss.
+- **Legend widened 220→300px** and every name carries a tooltip with the full title — real job titles are hierarchical and long (avg 27 chars, e.g. "Project - Subsystem - Discipline") and truncated badly.
+- **Narrow-panel layout**: below 900px the Duration and Pause/Resume headers abbreviate to "Dur." / "P/R" (dual spans toggled by media query), freeing width for Job and Task.
+- **Seed realism** (measured against the real store): job titles now hierarchical 12–33 chars (real 11–35, avg 27 vs seed 26.6); tasks are generated free text, median 58 / max 372 chars (real 44 / 433) with rare terse and rare very-long entries; pauses on ~half of sessions. Previously: 8-char titles and four fixed short strings — which is exactly why the truncation bug went unseen.
+
+
 ## Retrospective
 
 _To be finalized at PR time._

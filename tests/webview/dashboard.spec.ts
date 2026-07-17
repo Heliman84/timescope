@@ -5,7 +5,7 @@ import { open_dashboard, posted_messages, reply, to_datetime_input_value } from 
 
 // Fixture: Alpha today 09:00–10:30 (1 pause/resume pair), Beta today
 // 13:00–14:00, Alpha 40 days ago 10:00–11:00. Time is frozen at FIXED_NOW,
-// and the default preset (Last 14 Days) is applied on load, so the 40-days-ago
+// and the default preset (Last 4 Weeks) is applied on load, so the 40-days-ago
 // session is filtered out until a wider preset is chosen.
 
 interface EditLogEntriesPayload {
@@ -39,8 +39,8 @@ test("loads, requests data, and renders charts, filters, and table", async ({ pa
     const posted = await posted_messages(page);
     expect(posted[0]).toEqual({ type: "request_data" });
 
-    // Default preset is Last 14 Days, applied on load (was bug #31)
-    await expect(page.locator("#preset_range")).toHaveValue("last_14");
+    // Default preset is Last 4 Weeks, applied on load (was bug #31)
+    await expect(page.locator("#preset_range")).toHaveValue("last_4_weeks");
 
     // Job legend: "All" + one checkbox per job, all checked initially
     await expect(page.locator("#job_all_checkbox")).toBeChecked();
@@ -104,13 +104,13 @@ test("job legend checkboxes filter sessions and sync the All checkbox", async ({
     await expect(page.locator("#session_table_body tr")).toHaveCount(2);
 });
 
-test("reset restores the default Last 14 Days preset with all jobs", async ({ page }) => {
+test("reset restores the default Last 4 Weeks preset with all jobs", async ({ page }) => {
     await page.selectOption("#preset_range", "last_3_months");
     await page.locator("#job_legend .legend-job-box[value='Beta']").uncheck();
 
     await page.click("#clear_filters_btn");
 
-    await expect(page.locator("#preset_range")).toHaveValue("last_14");
+    await expect(page.locator("#preset_range")).toHaveValue("last_4_weeks");
     await expect(page.locator("#job_all_checkbox")).toBeChecked();
     await expect(page.locator("#session_table_body tr")).toHaveCount(2);
 });

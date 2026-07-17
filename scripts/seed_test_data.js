@@ -8,7 +8,7 @@
  *
  * The workspace log deliberately re-emits the last week of global events with
  * their EXACT SAME IDs (record IDs are deterministic: f(timestamp, type, job.id)),
- * plus a few workspace-only events under a "Local Client" job. This exercises
+ * plus a few workspace-only events under a "Meridian" job. This exercises
  * the extension's cross-file merge — loadAllEntries dedupes by event ID, so the
  * duplicates must collapse (totals unchanged) while the unique events/job surface
  * once in the summary.
@@ -64,6 +64,43 @@ function push_session(events, job, dayOffset, startH, startM, stopH, stopM, task
         events.push(Event.create(job, "resume", at(dayOffset, startH + 1, 30)));
     }
     events.push(Event.create(job, "stop", at(dayOffset, stopH, stopM), task));
+}
+
+// ---------------------------------------------------------------------------
+// Task text generator, tuned to the real store's profile: free text, median
+// ~45 chars / avg ~55, almost every task distinct, occasional very long notes
+// (real data maxes out around 430 chars).
+// ---------------------------------------------------------------------------
+
+const TASK_ACTIONS = [
+    "review", "revise", "detail out", "model", "simulate", "document",
+    "debug", "measure and log", "assemble notes on", "follow up on",
+];
+const TASK_SUBJECTS = [
+    "gearbox housing tolerances", "sensor board layout rev C", "test fixture base plate",
+    "supplier drawings package", "BOM and sourcing options", "motor mount interface",
+    "wiring harness routing", "firmware flash sequence", "client feedback items",
+    "acceptance test procedure", "thermal sim boundary conditions", "cable strain relief",
+];
+const TASK_TAILS = [
+    "", "", "", " and send summary to client", " before Thursday design review",
+    " — still waiting on vendor response", " per last week's meeting notes",
+    " and push updates to the shared drive", " (second pass)",
+];
+const TASK_LONG_NOTE =
+    " Longer working notes: walked the whole assembly sequence with the shop, flagged two" +
+    " interference issues near the rear bracket, agreed on a revised tolerance stack for the" +
+    " mating flange, and captured open questions for the supplier call — needs a follow-up" +
+    " session to close out the drawing changes.";
+
+function make_task(seed) {
+    const action = TASK_ACTIONS[seed % TASK_ACTIONS.length];
+    const subject = TASK_SUBJECTS[(seed * 7 + 3) % TASK_SUBJECTS.length];
+    const tail = TASK_TAILS[(seed * 13 + 5) % TASK_TAILS.length];
+    let task = `${action} ${subject}${tail}`;
+    if (seed % 17 === 0) task += TASK_LONG_NOTE; // rare very-long note
+    if (seed % 23 === 0) task = "admin"; // rare terse entry (real min is 4 chars)
+    return task;
 }
 
 // Write a {jobs.json, logs.jsonl} store, matching the exact on-disk format the
@@ -155,22 +192,30 @@ function main() {
         return;
     }
 
+    // Titles mirror the real store's shape: hierarchical "Project - Subsystem -
+    // Discipline" names, 12–33 chars (real profile: 11–35, avg 27).
     const jobs = {
-        client_a: Job.create({ title: "Client A", created: at(190, 8, 0) }),
-        client_b: Job.create({ title: "Client B", created: at(170, 8, 0) }),
-        internal: Job.create({ title: "Internal", created: at(160, 8, 0) }),
+        gearbox: Job.create({ title: "Northwind - Gearbox - MechCAD", created: at(190, 8, 0) }),
+        controls: Job.create({ title: "Northwind - Controls - EE CAD", created: at(170, 8, 0) }),
+        fixture: Job.create({ title: "Halcyon - Fixture - Design Review", created: at(160, 8, 0) }),
+        firmware: Job.create({ title: "Halcyon - Sensor Bd - Firmware", created: at(150, 8, 0) }),
+        internal: Job.create({ title: "Internal R&D", created: at(140, 8, 0) }),
     };
 
     // ── Global store: ~4 weeks of dense weekday history, newest day = today ──
+    // Pauses on ~60% of sessions (real profile: ~0.9 pauses per session).
     const globalEvents = [];
     for (let day = 27; day >= 0; day--) {
         if (is_weekend(day)) continue;
-        push_session(globalEvents, jobs.client_a, day, 9, 0, 11, 30, "design review", day % 2 === 0);
+        push_session(globalEvents, jobs.gearbox, day, 9, 0, 11, 30, make_task(day * 3 + 1), day % 5 !== 0);
         if (day % 3 !== 0) {
-            push_session(globalEvents, jobs.client_b, day, 13, 0, 15, 45, "site inspection notes", false);
+            push_session(globalEvents, jobs.controls, day, 13, 0, 15, 45, make_task(day * 3 + 2), day % 2 === 0);
+        }
+        if (day % 2 === 0) {
+            push_session(globalEvents, jobs.firmware, day, 16, 0, 17, 30, make_task(day * 3 + 3), false);
         }
         if (day % 5 === 0) {
-            push_session(globalEvents, jobs.internal, day, 16, 0, 17, 0, "invoicing + admin", false);
+            push_session(globalEvents, jobs.internal, day, 8, 0, 8, 45, "invoicing + admin", false);
         }
     }
 
@@ -179,10 +224,10 @@ function main() {
     for (let day = 180; day > 27; day--) {
         if (is_weekend(day)) continue;
         if (day % 4 === 0) {
-            push_session(globalEvents, jobs.client_a, day, 9, 30, 12, 0, "archived design work", day % 8 === 0);
+            push_session(globalEvents, jobs.gearbox, day, 9, 30, 12, 0, make_task(day * 5 + 1), day % 8 === 0);
         }
         if (day % 6 === 0) {
-            push_session(globalEvents, jobs.client_b, day, 14, 0, 16, 30, "archived site visit", false);
+            push_session(globalEvents, jobs.fixture, day, 14, 0, 16, 30, make_task(day * 5 + 2), day % 12 === 0);
         }
         if (day % 20 === 0) {
             push_session(globalEvents, jobs.internal, day, 8, 0, 9, 0, "monthly bookkeeping", false);
@@ -197,12 +242,12 @@ function main() {
     const cutoff = Date.now() - WEEK_MS;
     const duplicates = globalEvents.filter((e) => e.timestamp >= cutoff);
 
-    // Unique: a workspace-only "Local Client" job + a novel-time Client A session,
+    // Unique: a workspace-only "Meridian" job + a novel-time Northwind session,
     // none of which exists in the global log (distinct job.id or timestamp → fresh IDs).
-    const localClient = Job.create({ title: "Local Client", created: at(6, 8, 0) });
+    const localClient = Job.create({ title: "Meridian - Onsite Commissioning", created: at(6, 8, 0) });
     const uniqueEvents = [];
-    push_session(uniqueEvents, localClient, 1, 10, 0, 12, 0, "workspace-only meeting", false);
-    push_session(uniqueEvents, jobs.client_a, 1, 19, 0, 20, 30, "after-hours workspace note", false);
+    push_session(uniqueEvents, localClient, 1, 10, 0, 12, 0, "walkthrough with site electrician, punch list captured", false);
+    push_session(uniqueEvents, jobs.gearbox, 1, 19, 0, 20, 30, "after-hours notes on the rear bracket interference fix", false);
 
     const workspaceJobs = [...Object.values(jobs), localClient];
     const workspaceEvents = [...duplicates, ...uniqueEvents];
@@ -211,7 +256,7 @@ function main() {
     console.log(`Global    → ${global.jobs} jobs, ${global.events} events  (${GLOBAL_DIR})`);
     console.log(`Workspace → ${workspace.jobs} jobs, ${workspace.events} events  (${WORKSPACE_DIR})`);
     console.log(`            ${duplicates.length} duplicate the last week of global (dedup on merge), ${uniqueEvents.length} unique.`);
-    console.log("Press F5 — totals should be unchanged by the duplicates; the 'Local Client' job and the unique sessions appear once.");
+    console.log("Press F5 — totals should be unchanged by the duplicates; the 'Meridian' job and the unique sessions appear once.");
 }
 
 main();

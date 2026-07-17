@@ -125,7 +125,7 @@ h2, h3 {
 }
 
 .job-legend {
-    flex: 0 0 220px;
+    flex: 0 0 300px;
     max-height: 350px;
     overflow-y: auto;
     border: 1px solid var(--hairline);
@@ -182,6 +182,29 @@ h2, h3 {
     flex: 1 1 auto;
     min-width: 0;
     max-height: 350px;
+}
+
+/* Prominent no-data message shown in place of the pie chart */
+.pie-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 220px;
+    border: 1px dashed var(--hairline);
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink-primary);
+    text-align: center;
+    padding: 16px;
+}
+
+.pie-empty-hint {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink-muted);
 }
 
 /* ---------- Column filter menus (funnel in the header) ---------- */
@@ -378,6 +401,34 @@ h2, h3 {
     padding: 24px;
     text-align: center;
     color: var(--ink-muted);
+}
+
+/* ---------- Narrow layout ---------- */
+
+/* Wide layout: full column titles */
+.th-short {
+    display: none;
+}
+
+/* Narrow panel: abbreviate Duration and Pause/Resume so Job and Task
+   get the freed width */
+@media (max-width: 900px) {
+    .th-full {
+        display: none;
+    }
+
+    .th-short {
+        display: inline;
+    }
+
+    #session_table th,
+    #session_table td {
+        padding: 6px 6px;
+    }
+
+    .job-legend {
+        flex: 0 0 240px;
+    }
 }
 
 /* Highlighted session row when clicking a bar segment: accent wash instead

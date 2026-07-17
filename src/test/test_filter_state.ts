@@ -101,8 +101,8 @@ function hours(h: number): number {
 export function run_default_filter_state_tests(): void {
     const state = fs_module.create_default_filter_state(fixed_now());
 
-    assert.strictEqual(state.preset, "last_14", "default preset is Last 14 Days");
-    assert.strictEqual(state.start_day, "2026-07-02", "start day resolved: 13 days before now");
+    assert.strictEqual(state.preset, "last_4_weeks", "default preset is Last 4 Weeks");
+    assert.strictEqual(state.start_day, "2026-06-18", "start day resolved: 27 days before now");
     assert.strictEqual(state.end_day, "2026-07-15", "end day resolved: today");
     assert.strictEqual(state.jobs, null, "null jobs = all jobs (new jobs stay included)");
     assert.strictEqual(state.duration_min_h, null);

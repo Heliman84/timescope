@@ -403,9 +403,11 @@ function job_picker_row(surface, job, checked, hours_label) {
         ? `<input type="checkbox" id="${surface.all_id}" ${checked ? "checked" : ""}>`
         : `<input type="checkbox" class="${surface.box_class}" value="${escape_html(job)}" ${checked ? "checked" : ""}>`;
     const text = job === null ? "All" : escape_html(job);
+    // Tooltip carries the full name in case the row truncates it
+    const tooltip = job === null ? "" : ` title="${escape_html(job)}"`;
     const hours = hours_label === undefined ? "" : `<span class="legend-hours">(${hours_label})</span>`;
     const row_class = job === null ? surface.all_row_class : surface.row_class;
-    return `<label class="${row_class}">${input}${swatch}<span class="legend-text">${text}</span>${hours}</label>`;
+    return `<label class="${row_class}">${input}${swatch}<span class="legend-text"${tooltip}>${text}</span>${hours}</label>`;
 }
 
 function render_job_picker(surface, totals) {
@@ -736,8 +738,15 @@ function render_sort_indicators() {
 // ---------------------------------------------------------------------
 
 function render_empty_state(sessions) {
+    const empty = sessions.length === 0;
     const el = document.getElementById("empty_state");
-    if (el) el.style.display = sessions.length === 0 ? "" : "none";
+    if (el) el.style.display = empty ? "" : "none";
+    // Prominent message in place of the pie chart — the likeliest cause is a
+    // too-narrow date range, so point the user there
+    const pie_msg = document.getElementById("pie_empty");
+    if (pie_msg) pie_msg.style.display = empty ? "" : "none";
+    const pie_canvas = document.getElementById("pie_chart");
+    if (pie_canvas) pie_canvas.style.display = empty ? "none" : "";
 }
 
 // ---------------------------------------------------------------------

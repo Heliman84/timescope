@@ -76,9 +76,9 @@
     }
 
     function create_default_filter_state(now) {
-        const range = resolve_preset_range("last_14", now);
+        const range = resolve_preset_range("last_4_weeks", now);
         return {
-            preset: "last_14",
+            preset: "last_4_weeks",
             start_day: range.start_day,
             end_day: range.end_day,
             jobs: null,

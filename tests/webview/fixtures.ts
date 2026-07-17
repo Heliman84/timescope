@@ -121,22 +121,22 @@ export interface FilterFixtureData {
     payload: FixtureEvent[];
     /** All job names, in creation order. */
     jobs: string[];
-    /** Jobs whose session falls inside the default Last-14-Days window. */
-    jobs_in_last_14: string[];
+    /** Jobs whose session falls inside the default Last-4-Weeks window. */
+    jobs_in_default_range: string[];
 }
 
 /**
  * A twelve-job fixture built for filter/sort coverage (relative to FIXED_NOW):
  *
  * - 12 jobs → exercises the scrollable legend and palette wrap (10-colour base).
- * - Sessions placed on preset boundaries: 07-02 (Last-14 start), 07-01 (this
- *   month, outside Last-14), 06-20 (Last-3-months only).
+ * - Sessions placed on preset boundaries: 06-18 (Last-4-Weeks start boundary,
+ *   Wolf), 06-10 (outside the default window, Vega).
  * - Duration spread 0.5h..8h with exact boundary values for the range filter.
  * - Pause spread 0..3 pairs (zero-length gaps keep durations exact).
  * - One global-only and one workspace-only session for the source seam.
  *
- * Ten of the twelve sessions fall inside the default Last-14-Days window;
- * Wolf (07-01) and Vega (06-20) fall outside it.
+ * Eleven of the twelve sessions fall inside the default Last-4-Weeks window;
+ * only Vega (06-10) falls outside it.
  */
 export function build_filter_fixture(now: Date = FIXED_NOW): FilterFixtureData {
     const plan: FilterFixtureSession[] = [
@@ -149,9 +149,9 @@ export function build_filter_fixture(now: Date = FIXED_NOW): FilterFixtureData {
         { job: "Gale", day: shift_day(now, -6), hours: 1.0, pauses: 0, source: "merged" },                       // 07-09
         { job: "Harbor", day: shift_day(now, -7), hours: 1.0, pauses: 1, source: "merged" },                     // 07-08
         { job: "Iris", day: shift_day(now, -8), hours: 1.0, pauses: 0, source: "merged" },                       // 07-07
-        { job: "Juno", day: shift_day(now, -13), hours: 4.0, pauses: 3, source: "merged" },                      // 07-02 Last-14 start boundary
-        { job: "Wolf", day: shift_day(now, -14), hours: 8.0, pauses: 0, source: "merged" },                      // 07-01 outside Last-14
-        { job: "Vega", day: shift_day(now, -25), hours: 1.0, pauses: 0, source: "merged" },                      // 06-20 Last-3-months only
+        { job: "Juno", day: shift_day(now, -13), hours: 4.0, pauses: 3, source: "merged" },                      // 07-02 inside default window
+        { job: "Wolf", day: shift_day(now, -27), hours: 8.0, pauses: 0, source: "merged" },                      // 06-18 Last-4-Weeks start boundary
+        { job: "Vega", day: shift_day(now, -35), hours: 1.0, pauses: 0, source: "merged" },                      // 06-10 outside the default window
     ];
 
     let line = 0;
@@ -199,7 +199,7 @@ export function build_filter_fixture(now: Date = FIXED_NOW): FilterFixtureData {
     return {
         payload: events.slice().sort((a, b) => b.timestamp - a.timestamp),
         jobs: plan.map(s => s.job),
-        jobs_in_last_14: plan.filter(s => s.day >= shift_day(now, -13)).map(s => s.job),
+        jobs_in_default_range: plan.filter(s => s.day >= shift_day(now, -27)).map(s => s.job),
     };
 }
 
