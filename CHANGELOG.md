@@ -5,6 +5,7 @@ One line per merged PR, added at PR time under **Unreleased**. At release, entri
 
 ## Unreleased
 
+- `npm run seed-testdata`: also seeds a workspace-local `.timescope/` store (last week of global events re-emitted with identical IDs + a few unique events under a "Local Client" job) so F5 exercises the cross-file dedup/merge path (#39)
 - `timescope.global_storage_dir`: a relative value now resolves against the first workspace folder (absolute values unchanged), so the isolated F5 test-storage setting is portable across clones and machines (#33)
 - Dev logs: each feature branch keeps a short decision log in `docs/dev-log/` (started at plan time, finalized as a retrospective at PR time) — captures the *why* behind a change, not a spec (#36)
 - Build info: `npm run package` writes `out/buildinfo.json`; visible via the new **TimeScope: Show Build Info** command, the status-bar tooltip, and a dashboard footer — plus a per-PR version-bump policy so the Extensions view version reflects real progress (#35)
