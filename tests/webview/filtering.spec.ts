@@ -127,14 +127,34 @@ test("funnels light up when their filter is actively limiting data", async ({ pa
     await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
     await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
 
-    // Duration filter active
+    // Duration filter active — values commit on Enter, not per keystroke
     await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("2");
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/); // not yet committed
+    await page.locator("#dur_min").press("Enter");
     await expect(page.locator("#dur_filter_toggle")).toHaveClass(/filter-active/);
 
     // Clearing the bound turns the funnel off again
+    await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("");
+    await page.locator("#dur_min").press("Enter");
     await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+});
+
+test("typing a partial range value does not filter until committed", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+    const before = (await table_jobs(page)).length;
+
+    // "0" typed but not committed: a max of 0h would hide everything if applied
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_max").pressSequentially("0");
+    await expect(page.locator("#session_table_body tr")).toHaveCount(before);
+
+    // Finishing the value and pressing Enter applies it and closes the menu
+    await page.locator("#dur_max").pressSequentially(".5");
+    await page.locator("#dur_max").press("Enter");
+    await expect.poll(async () => (await table_jobs(page)).sort()).toEqual(["Flint"]);
+    await expect(page.locator("#dur_max")).toBeHidden(); // menu closed by Enter
 });
 
 test("only one funnel menu is open at a time and Escape closes it", async ({ page }) => {
@@ -147,6 +167,31 @@ test("only one funnel menu is open at a time and Escape closes it", async ({ pag
 
     await page.keyboard.press("Escape");
     await expect(page.locator("#dur_min")).toBeHidden();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Legend hour totals
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("legend rows show per-job hours that track the date filter but not the job selection", async ({ page }) => {
+    const acme_row = page.locator("#job_legend .legend-row", { hasText: "Acme" });
+    const all_row = page.locator("#job_legend .legend-all");
+
+    // Acme worked 1h today; All shows the grand total of the visible window
+    await expect(acme_row.locator(".legend-hours")).toHaveText("(1.0h)");
+    await expect(all_row.locator(".legend-hours")).toContainText("h)");
+
+    // Narrowing the date range updates the numbers (Acme is outside "today"… it IS today)
+    await page.selectOption("#preset_range", "today");
+    await expect(acme_row.locator(".legend-hours")).toHaveText("(1.0h)");
+    await expect(all_row.locator(".legend-hours")).toHaveText("(1.0h)");
+
+    // Unchecking a job does NOT zero its own number — it still tells you
+    // what checking it would bring back
+    await page.selectOption("#preset_range", "last_14");
+    await acme_row.locator(".legend-job-box").uncheck();
+    await expect(page.locator("#job_legend .legend-row", { hasText: "Acme" }).locator(".legend-hours"))
+        .toHaveText("(1.0h)");
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -183,6 +228,7 @@ test("duration range filters inclusively and recalculates charts", async ({ page
     await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("2");
     await page.locator("#dur_max").fill("4");
+    await page.locator("#dur_max").press("Enter");
 
     // Range inputs are debounced — poll until the pipeline has re-run
     await expect.poll(async () => (await table_jobs(page)).sort())
@@ -197,6 +243,7 @@ test("an empty duration bound is unbounded", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
     await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("4"); // max left empty
+    await page.locator("#dur_min").press("Enter");
 
     // 4h and up: Juno 4h, Wolf 8h (debounced — poll)
     await expect.poll(async () => (await table_jobs(page)).sort()).toEqual(["Juno", "Wolf"]);
@@ -213,6 +260,7 @@ test("pause range filters inclusively", async ({ page }) => {
     await page.locator("#pause_filter_toggle").click();
     await page.locator("#pause_min").fill("1");
     await page.locator("#pause_max").fill("2");
+    await page.locator("#pause_max").press("Enter");
 
     // Range inputs are debounced — poll until the pipeline has re-run
     await expect.poll(async () => (await table_jobs(page)).sort())
@@ -265,12 +313,15 @@ test("empty state appears when no sessions match and hides when they do", async 
     await page.selectOption("#preset_range", "all");
     await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("100");
+    await page.locator("#dur_min").press("Enter");
 
     await expect(page.locator("#empty_state")).toBeVisible();
     await expect(page.locator("#session_table_body tr")).toHaveCount(0);
 
     // Clearing the impossible bound brings sessions back
+    await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("");
+    await page.locator("#dur_min").press("Enter");
     await expect(page.locator("#empty_state")).toBeHidden();
 });
 
@@ -313,8 +364,10 @@ test("reset restores every filter to its default", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
     await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("2");
+    await page.locator("#dur_min").press("Enter");
     await page.locator("#pause_filter_toggle").click();
     await page.locator("#pause_max").fill("1");
+    await page.locator("#pause_max").press("Enter");
     await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
 
     await page.click("#clear_filters_btn");

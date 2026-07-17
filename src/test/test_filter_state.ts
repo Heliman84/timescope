@@ -144,6 +144,9 @@ export function run_resolve_preset_range_tests(): void {
         fs_module.resolve_preset_range("last_14", now),
         { start_day: "2026-07-02", end_day: "2026-07-15" }, "14 days inclusive of today");
     assert.deepStrictEqual(
+        fs_module.resolve_preset_range("last_4_weeks", now),
+        { start_day: "2026-06-18", end_day: "2026-07-15" }, "28 days inclusive of today");
+    assert.deepStrictEqual(
         fs_module.resolve_preset_range("this_month", now),
         { start_day: "2026-07-01", end_day: "2026-07-15" });
     assert.deepStrictEqual(

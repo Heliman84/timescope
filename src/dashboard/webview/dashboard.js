@@ -328,6 +328,8 @@ function apply_and_render() {
     render_session_table(filtered);
     render_empty_state(filtered);
     render_sort_indicators();
+    // Legend hours track the date/range filters, so refresh it too
+    render_job_legend();
 }
 
 // ---------------------------------------------------------------------
@@ -391,7 +393,7 @@ const JOB_PICKER_SURFACES = [
     },
 ];
 
-function job_picker_row(surface, job, checked) {
+function job_picker_row(surface, job, checked, hours_label) {
     const swatch = surface.swatches
         ? (job === null
             ? `<span class="legend-swatch" style="visibility:hidden;"></span>`
@@ -401,24 +403,45 @@ function job_picker_row(surface, job, checked) {
         ? `<input type="checkbox" id="${surface.all_id}" ${checked ? "checked" : ""}>`
         : `<input type="checkbox" class="${surface.box_class}" value="${escape_html(job)}" ${checked ? "checked" : ""}>`;
     const text = job === null ? "All" : escape_html(job);
+    const hours = hours_label === undefined ? "" : `<span class="legend-hours">(${hours_label})</span>`;
     const row_class = job === null ? surface.all_row_class : surface.row_class;
-    return `<label class="${row_class}">${input}${swatch}<span class="legend-text">${text}</span></label>`;
+    return `<label class="${row_class}">${input}${swatch}<span class="legend-text">${text}</span>${hours}</label>`;
 }
 
-function render_job_picker(surface) {
+function render_job_picker(surface, totals) {
     const container = document.getElementById(surface.container_id);
     if (!container) return;
     const selected = selected_job_set();
     const jobs = all_job_names();
     const all_checked = jobs.every(j => selected.has(j));
 
+    const hours_for = (job) => {
+        if (!totals) return undefined;
+        const ms = job === null
+            ? Object.values(totals).reduce((a, b) => a + b, 0)
+            : (totals[job] || 0);
+        return (ms / 3600000).toFixed(1) + "h";
+    };
+
     container.innerHTML =
-        job_picker_row(surface, null, all_checked) +
-        jobs.map(job => job_picker_row(surface, job, selected.has(job))).join("");
+        job_picker_row(surface, null, all_checked, hours_for(null)) +
+        jobs.map(job => job_picker_row(surface, job, selected.has(job), hours_for(job))).join("");
+}
+
+/**
+ * Per-job totals under the current date/duration/pause/source filters but
+ * ignoring the job selection itself — so unchecking a job doesn't zero its
+ * legend number, it keeps telling you what checking it would bring back.
+ */
+function job_totals_ignoring_job_filter() {
+    const sessions = Filters.apply_filters(all_sessions, { ...filter_state, jobs: null });
+    const totals = {};
+    sessions.forEach(s => { totals[s.job] = (totals[s.job] || 0) + s.duration_ms; });
+    return totals;
 }
 
 function render_job_legend() {
-    render_job_picker(JOB_PICKER_SURFACES[0]);
+    render_job_picker(JOB_PICKER_SURFACES[0], job_totals_ignoring_job_filter());
 }
 
 function render_job_dropdown() {
@@ -506,10 +529,22 @@ function attach_filter_listeners() {
     bind_once(document.getElementById("end_date"), "change", on_date_input_change);
     bind_once(document.getElementById("clear_filters_btn"), "click", clear_filters);
 
-    // Debounced: re-filtering destroys/rebuilds both charts, so don't do it
-    // per keystroke while a number is being typed.
+    // Range filters commit on Enter or on leaving the field (native "change"),
+    // never per keystroke — typing "0.5" must not transiently filter on "0".
+    // Enter also closes the menu.
     ["dur_min", "dur_max", "pause_min", "pause_max"].forEach(id => {
-        bind_once(document.getElementById(id), "input", debounce(on_range_change, 150));
+        const el = document.getElementById(id);
+        if (el && !el.dataset.bound) {
+            el.addEventListener("change", on_range_change);
+            el.addEventListener("keydown", (ev) => {
+                if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    on_range_change();
+                    close_all_filter_menus();
+                }
+            });
+            el.dataset.bound = "true";
+        }
     });
 
     // Job legend + dropdown use event delegation so they survive re-renders.
@@ -585,14 +620,6 @@ function bind_once(el, evt, handler) {
         el.addEventListener(evt, handler);
         el.dataset.bound = "true";
     }
-}
-
-function debounce(fn, wait_ms) {
-    let timer = null;
-    return function (...args) {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => { timer = null; fn.apply(this, args); }, wait_ms);
-    };
 }
 
 function on_preset_change() {

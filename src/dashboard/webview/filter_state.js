@@ -51,6 +51,11 @@
                 d.setDate(now.getDate() - 13);
                 return { start_day: get_local_day(d.getTime()), end_day: today };
             }
+            case "last_4_weeks": {
+                const d = new Date(now);
+                d.setDate(now.getDate() - 27);
+                return { start_day: get_local_day(d.getTime()), end_day: today };
+            }
             case "this_month": {
                 const first = new Date(now.getFullYear(), now.getMonth(), 1);
                 return { start_day: get_local_day(first.getTime()), end_day: today };

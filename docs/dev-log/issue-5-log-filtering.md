@@ -58,6 +58,14 @@ Verdict: snappy, functions well. Changes agreed and implemented:
 - **Palette**: David dislikes the hues; deliberately deferred — revisit with him before changing (it stays for its accessibility properties meanwhile).
 
 
+## F5 evaluation round 2 (2026-07-17)
+
+- **Range filters commit on Enter or blur** (native `change`), never per keystroke — typing "0.5" no longer transiently filters on "0". Enter also closes the funnel menu. The 150ms debounce from round 1 was replaced by this (strictly better: no timing at all).
+- **Legend hours**: each legend row shows "(N.Nh)" in muted grey; the All row carries the grand total. Totals respect the date/duration/pause filters but ignore the job selection itself — unchecking a job keeps its number visible (it tells you what re-checking brings back) and keeps it consistent with the "hide, don't re-derive" legend philosophy.
+- **"Last 4 Weeks" preset** added between Last 14 Days and This Month (today−27 → today).
+- **Seed generator follow-up paused** at David's request — no issue/branch action until he says otherwise.
+
+
 ## Retrospective
 
 _To be finalized at PR time._

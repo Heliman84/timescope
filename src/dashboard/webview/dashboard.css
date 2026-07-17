@@ -164,6 +164,13 @@ h2, h3 {
     white-space: nowrap;
 }
 
+.legend-hours {
+    color: var(--ink-muted);
+    font-weight: 400;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
 .legend-all {
     border-bottom: 1px solid var(--hairline);
     margin-bottom: 4px;
