@@ -165,7 +165,7 @@ function build_sessions_from_events(events) {
         return stateByJob.get(job);
     }
 
-    function noteSource(state, e) {
+    function note_source(state, e) {
         if (typeof e.global_line_index === "number" && e.global_line_index >= 0) state.hasGlobal = true;
         if (typeof e.workspace_line_index === "number" && e.workspace_line_index >= 0) state.hasWorkspace = true;
     }
@@ -226,7 +226,7 @@ function build_sessions_from_events(events) {
                 state.pausePairs = 0;
                 state.hasGlobal = false;
                 state.hasWorkspace = false;
-                noteSource(state, e);
+                note_source(state, e);
                 break;
             }
 
@@ -235,7 +235,7 @@ function build_sessions_from_events(events) {
                     state.accumulatedMs += ts - state.lastActiveStart;
                     state.lastActiveStart = null;
                     state.inPause = true;
-                    noteSource(state, e);
+                    note_source(state, e);
                 }
                 break;
             }
@@ -245,14 +245,14 @@ function build_sessions_from_events(events) {
                     state.inPause = false;
                     state.lastActiveStart = ts;
                     state.pausePairs += 1;
-                    noteSource(state, e);
+                    note_source(state, e);
                 }
                 break;
             }
 
             case "stop": {
                 if (state.currentSession) {
-                    noteSource(state, e);
+                    note_source(state, e);
                     finalizeSession(job, ts, e.task);
                 }
                 break;
@@ -284,9 +284,9 @@ function assign_job_colors(allSessions) {
         "#8a8a3a", "#b06a9e"
     ];
     // Alphabetical order → a job keeps the same colour across data reloads.
-    const jobs = [...new Set(allSessions.map(s => s.job))].sort((a, b) => a.localeCompare(b));
+    all_jobs_sorted = [...new Set(allSessions.map(s => s.job))].sort((a, b) => a.localeCompare(b));
     job_color_map = {};
-    jobs.forEach((job, i) => {
+    all_jobs_sorted.forEach((job, i) => {
         job_color_map[job] = base[i % base.length];
     });
 }
@@ -295,10 +295,25 @@ function color_for(job) {
     return job_color_map[job] || "#898781";
 }
 
-// Chart chrome tokens (match dashboard.css)
-const CHART_SURFACE = "#1e1e1e";
-const CHART_INK_SECONDARY = "#c3c2b7";
-const CHART_GRIDLINE = "#2c2c2a";
+// Chart chrome tokens: read from the CSS custom properties so the stylesheet
+// stays the single source of truth (literals are the no-CSS fallback).
+function css_token(name, fallback) {
+    const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return value || fallback;
+}
+const CHART_SURFACE = css_token("--surface", "#1e1e1e");
+const CHART_INK_SECONDARY = css_token("--ink-secondary", "#c3c2b7");
+const CHART_GRIDLINE = css_token("--gridline", "#2c2c2a");
+
+/** Escape a string for interpolation into HTML text or attribute values. */
+function escape_html(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
 
 // ---------------------------------------------------------------------
 // MAIN FILTER PIPELINE
@@ -326,18 +341,21 @@ function render_date_controls() {
 }
 
 function set_date_inputs(start_day, end_day) {
-    const startEl = document.getElementById("start_date");
-    const endEl = document.getElementById("end_date");
-    if (startEl) startEl.value = start_day || "";
-    if (endEl) endEl.value = end_day || "";
+    const start_el = document.getElementById("start_date");
+    const end_el = document.getElementById("end_date");
+    if (start_el) start_el.value = start_day || "";
+    if (end_el) end_el.value = end_day || "";
 }
 
 // ---------------------------------------------------------------------
 // JOB LEGEND + TABLE DROPDOWN (two synced surfaces, one selection)
 // ---------------------------------------------------------------------
 
+// Cached by load_payload — the job list only changes when the payload does.
+let all_jobs_sorted = [];
+
 function all_job_names() {
-    return [...new Set(all_sessions.map(s => s.job))].sort((a, b) => a.localeCompare(b));
+    return all_jobs_sorted;
 }
 
 /** Which jobs are currently selected (state.jobs === null means all). */
@@ -352,49 +370,59 @@ function render_filter_controls() {
     sync_range_inputs();
 }
 
-function render_job_legend() {
-    const container = document.getElementById("job_legend");
+// The legend and the table dropdown are the same picker rendered into two
+// surfaces; only ids/classes/decoration differ.
+const JOB_PICKER_SURFACES = [
+    {
+        container_id: "job_legend",
+        all_id: "job_all_checkbox",
+        row_class: "legend-row",
+        all_row_class: "legend-row legend-all",
+        box_class: "legend-job-box",
+        swatches: true,
+    },
+    {
+        container_id: "job_dropdown_list",
+        all_id: "job_dropdown_all",
+        row_class: "dropdown-row",
+        all_row_class: "dropdown-row",
+        box_class: "dropdown-job-box",
+        swatches: false,
+    },
+];
+
+function job_picker_row(surface, job, checked) {
+    const swatch = surface.swatches
+        ? (job === null
+            ? `<span class="legend-swatch" style="visibility:hidden;"></span>`
+            : `<span class="legend-swatch" style="background:${color_for(job)};"></span>`)
+        : "";
+    const input = job === null
+        ? `<input type="checkbox" id="${surface.all_id}" ${checked ? "checked" : ""}>`
+        : `<input type="checkbox" class="${surface.box_class}" value="${escape_html(job)}" ${checked ? "checked" : ""}>`;
+    const text = job === null ? "All" : escape_html(job);
+    const row_class = job === null ? surface.all_row_class : surface.row_class;
+    return `<label class="${row_class}">${input}${swatch}<span class="legend-text">${text}</span></label>`;
+}
+
+function render_job_picker(surface) {
+    const container = document.getElementById(surface.container_id);
     if (!container) return;
     const selected = selected_job_set();
     const jobs = all_job_names();
-    const allChecked = jobs.every(j => selected.has(j));
+    const all_checked = jobs.every(j => selected.has(j));
 
-    let html =
-        `<label class="legend-row legend-all">` +
-        `<input type="checkbox" id="job_all_checkbox" ${allChecked ? "checked" : ""}>` +
-        `<span class="legend-swatch" style="visibility:hidden;"></span>` +
-        `<span class="legend-text">All</span></label>`;
+    container.innerHTML =
+        job_picker_row(surface, null, all_checked) +
+        jobs.map(job => job_picker_row(surface, job, selected.has(job))).join("");
+}
 
-    jobs.forEach(job => {
-        const checked = selected.has(job) ? "checked" : "";
-        html +=
-            `<label class="legend-row">` +
-            `<input type="checkbox" class="legend-job-box" value="${job}" ${checked}>` +
-            `<span class="legend-swatch" style="background:${color_for(job)};"></span>` +
-            `<span class="legend-text">${job}</span></label>`;
-    });
-
-    container.innerHTML = html;
+function render_job_legend() {
+    render_job_picker(JOB_PICKER_SURFACES[0]);
 }
 
 function render_job_dropdown() {
-    const list = document.getElementById("job_dropdown_list");
-    if (!list) return;
-    const selected = selected_job_set();
-    const jobs = all_job_names();
-    const allChecked = jobs.every(j => selected.has(j));
-
-    let html =
-        `<label class="dropdown-row">` +
-        `<input type="checkbox" id="job_dropdown_all" ${allChecked ? "checked" : ""}> All</label>`;
-    jobs.forEach(job => {
-        const checked = selected.has(job) ? "checked" : "";
-        html +=
-            `<label class="dropdown-row">` +
-            `<input type="checkbox" class="dropdown-job-box" value="${job}" ${checked}> ${job}</label>`;
-    });
-    list.innerHTML = html;
-
+    render_job_picker(JOB_PICKER_SURFACES[1]);
     update_dropdown_summary();
 }
 
@@ -414,12 +442,12 @@ function update_dropdown_summary() {
  * Update the shared job selection from one surface, then re-render both.
  * A full set collapses to null so newly appearing jobs stay included.
  */
-function set_job_selection(jobArray) {
+function set_job_selection(job_array) {
     const jobs = all_job_names();
-    if (jobArray.length === jobs.length) {
+    if (job_array.length === jobs.length) {
         filter_state.jobs = null;
     } else {
-        filter_state.jobs = jobArray;
+        filter_state.jobs = job_array;
     }
     render_job_legend();
     render_job_dropdown();
@@ -459,13 +487,28 @@ function attach_filter_listeners() {
     bind_once(document.getElementById("end_date"), "change", on_date_input_change);
     bind_once(document.getElementById("clear_filters_btn"), "click", clear_filters);
 
+    // Debounced: re-filtering destroys/rebuilds both charts, so don't do it
+    // per keystroke while a number is being typed.
     ["dur_min", "dur_max", "pause_min", "pause_max"].forEach(id => {
-        bind_once(document.getElementById(id), "input", on_range_change);
+        bind_once(document.getElementById(id), "input", debounce(on_range_change, 150));
     });
 
     // Job legend + dropdown use event delegation so they survive re-renders.
-    bind_once(document.getElementById("job_legend"), "change", on_legend_change);
-    bind_once(document.getElementById("job_dropdown_list"), "change", on_dropdown_change);
+    JOB_PICKER_SURFACES.forEach(surface => {
+        bind_once(document.getElementById(surface.container_id), "change",
+            (ev) => on_job_picker_change(surface, ev));
+    });
+
+    // Session table: delegated Edit-button handler survives row rebuilds.
+    bind_once(document.getElementById("session_table_body"), "click", (ev) => {
+        const btn = ev.target.closest("button.session-edit-btn");
+        if (!btn) return;
+        open_session_edit_modal({
+            job: btn.dataset.job,
+            start: Number(btn.dataset.start),
+            stop: Number(btn.dataset.stop),
+        });
+    });
 
     // Sortable headers
     document.querySelectorAll("#session_table th.sortable").forEach(th => {
@@ -478,6 +521,14 @@ function bind_once(el, evt, handler) {
         el.addEventListener(evt, handler);
         el.dataset.bound = "true";
     }
+}
+
+function debounce(fn, wait_ms) {
+    let timer = null;
+    return function (...args) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => { timer = null; fn.apply(this, args); }, wait_ms);
+    };
 }
 
 function on_preset_change() {
@@ -520,25 +571,14 @@ function on_range_change() {
     apply_and_render();
 }
 
-function on_legend_change(ev) {
+function on_job_picker_change(surface, ev) {
     const target = ev.target;
-    if (target.id === "job_all_checkbox") {
-        set_job_selection(target.checked ? all_job_names() : []);
+    if (target.id === surface.all_id) {
+        set_job_selection(target.checked ? all_job_names().slice() : []);
         return;
     }
-    if (target.classList.contains("legend-job-box")) {
-        set_job_selection(read_checked_values("#job_legend .legend-job-box"));
-    }
-}
-
-function on_dropdown_change(ev) {
-    const target = ev.target;
-    if (target.id === "job_dropdown_all") {
-        set_job_selection(target.checked ? all_job_names() : []);
-        return;
-    }
-    if (target.classList.contains("dropdown-job-box")) {
-        set_job_selection(read_checked_values("#job_dropdown_list .dropdown-job-box"));
+    if (target.classList.contains(surface.box_class)) {
+        set_job_selection(read_checked_values(`#${surface.container_id} .${surface.box_class}`));
     }
 }
 
@@ -775,7 +815,7 @@ function open_session_edit_modal(session) {
         row.innerHTML = `
             <div class="e-label">${e.event}</div>
             <div class="e-ts"><input type="datetime-local" data-idx="${idx}"></div>
-            <div class="e-task"><input type="text" data-idx="${idx}" value="${e.event === 'stop' ? (e.task || '') : ''}"></div>
+            <div class="e-task"><input type="text" data-idx="${idx}" value="${escape_html(e.event === 'stop' ? (e.task || '') : '')}"></div>
         `;
 
         // store metadata on row for save
@@ -873,37 +913,24 @@ function render_session_table(sessions) {
         const start_local = new Date(s.start).toLocaleString();
         const stop_local = new Date(s.stop).toLocaleString();
 
-        const editBtn = `<button class="session-edit-btn" data-job="${s.job}" data-start="${s.start}" data-stop="${s.stop}">Edit</button>`;
+        const editBtn = `<button class="session-edit-btn" data-job="${escape_html(s.job)}" data-start="${s.start}" data-stop="${s.stop}">Edit</button>`;
 
         tr.dataset.job = s.job;
         tr.dataset.day = day;
 
         tr.innerHTML =
             `<td>${day}</td>` +
-            `<td>${s.job}</td>` +
+            `<td>${escape_html(s.job)}</td>` +
             `<td>${(s.duration_ms / 3600000).toFixed(2)}h</td>` +
-            `<td>${s.task || ""}</td>` +
-            `<td>${start_local}</td>` +
-            `<td>${stop_local}</td>` +
+            `<td>${escape_html(s.task || "")}</td>` +
+            `<td>${escape_html(start_local)}</td>` +
+            `<td>${escape_html(stop_local)}</td>` +
             `<td>${s.pause_pairs}</td>` +
             `<td>${editBtn}</td>`;
 
         body.appendChild(tr);
     });
-
-    // Attach session edit handlers
-    document.querySelectorAll("button.session-edit-btn").forEach(btn => {
-        if (!btn.dataset.bound) {
-            btn.addEventListener('click', (ev) => {
-                const el = ev.currentTarget;
-                const job = el.getAttribute('data-job');
-                const start = Number(el.getAttribute('data-start'));
-                const stop = Number(el.getAttribute('data-stop'));
-                open_session_edit_modal({ job, start, stop });
-            });
-            btn.dataset.bound = 'true';
-        }
-    });
+    // Edit clicks are handled by the delegated listener on #session_table_body
 }
 
 // ---------------------------------------------------------------------

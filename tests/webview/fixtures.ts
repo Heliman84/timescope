@@ -119,8 +119,7 @@ export interface FilterFixtureSession {
 
 export interface FilterFixtureData {
     payload: FixtureEvent[];
-    sessions: FilterFixtureSession[];
-    /** All job names, in creation order (matches palette assignment order). */
+    /** All job names, in creation order. */
     jobs: string[];
     /** Jobs whose session falls inside the default Last-14-Days window. */
     jobs_in_last_14: string[];
@@ -199,7 +198,6 @@ export function build_filter_fixture(now: Date = FIXED_NOW): FilterFixtureData {
 
     return {
         payload: events.slice().sort((a, b) => b.timestamp - a.timestamp),
-        sessions: plan,
         jobs: plan.map(s => s.job),
         jobs_in_last_14: plan.filter(s => s.day >= shift_day(now, -13)).map(s => s.job),
     };

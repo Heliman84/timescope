@@ -45,6 +45,8 @@ The summary view's filter sidebar is weak: the date preset defaults to "Today" b
 - **"Clear Filters" became "Reset filters"**, placed at the right end of the date bar; ghost-button styling.
 - **Chart-click row highlight** restyled from light-yellow (glared on dark) to an accent wash.
 
+- **Code review (8-angle, high effort) findings fixed:** HTML/attribute injection via unescaped job/task names in the new innerHTML surfaces (plus the pre-existing edit-modal case) — fixed with an `escape_html` helper and locked in by a hostile-job-name Playwright test; range inputs debounced 150ms (chart teardown per keystroke); legend/dropdown render + change handlers unified into one parameterized job-picker (two angles flagged sync-drift risk); edit buttons moved to a delegated listener; job list cached per payload; chart chrome tokens now read from the CSS custom properties. Waived (queued for review): day-total label rides the alphabetically-last dataset; webview session math duplicates `core/session.ts` (pre-existing, needs its own issue); fixture/test constants deliberately mirrored across the two test trees.
+
 ## Retrospective
 
 _To be finalized at PR time._

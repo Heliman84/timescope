@@ -1,6 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 
-import { build_filter_fixture, FilterFixtureData } from "./fixtures";
+import { build_filter_fixture, FilterFixtureData, FixtureEvent, FIXED_NOW } from "./fixtures";
 import { open_dashboard } from "./harness";
 
 // The 12-job filter fixture (see build_filter_fixture). Time is frozen at
@@ -158,19 +158,21 @@ test("duration range filters inclusively and recalculates charts", async ({ page
     await page.locator("#dur_min").fill("2");
     await page.locator("#dur_max").fill("4");
 
-    const jobs = await table_jobs(page);
-    expect(jobs.sort()).toEqual(["Beacon", "Cobalt", "Juno"]);
+    // Range inputs are debounced — poll until the pipeline has re-run
+    await expect.poll(async () => (await table_jobs(page)).sort())
+        .toEqual(["Beacon", "Cobalt", "Juno"]);
 
     // Pie recalculated to the same set
-    expect(Object.keys(await pie_data(page)).sort()).toEqual(["Beacon", "Cobalt", "Juno"]);
+    await expect.poll(async () => Object.keys(await pie_data(page)).sort())
+        .toEqual(["Beacon", "Cobalt", "Juno"]);
 });
 
 test("an empty duration bound is unbounded", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
     await page.locator("#dur_min").fill("4"); // max left empty
 
-    // 4h and up: Juno 4h, Wolf 8h
-    expect((await table_jobs(page)).sort()).toEqual(["Juno", "Wolf"]);
+    // 4h and up: Juno 4h, Wolf 8h (debounced — poll)
+    await expect.poll(async () => (await table_jobs(page)).sort()).toEqual(["Juno", "Wolf"]);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -184,7 +186,9 @@ test("pause range filters inclusively", async ({ page }) => {
     await page.locator("#pause_min").fill("1");
     await page.locator("#pause_max").fill("2");
 
-    expect((await table_jobs(page)).sort()).toEqual(["Beacon", "Cobalt", "Harbor"]);
+    // Range inputs are debounced — poll until the pipeline has re-run
+    await expect.poll(async () => (await table_jobs(page)).sort())
+        .toEqual(["Beacon", "Cobalt", "Harbor"]);
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -243,6 +247,37 @@ test("empty state appears when no sessions match and hides when they do", async 
 // ═══════════════════════════════════════════════════════════════════════════
 // Reset
 // ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HTML/attribute injection hardening
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("job and task names with HTML metacharacters render as text and stay filterable", async ({ page }) => {
+    const hostile_job = `Ac"me <img src=x onerror="window.__pwned=1"> &Co`;
+    const start = FIXED_NOW.getTime() - 3600_000;
+    const payload: FixtureEvent[] = [
+        { event: "stop", job: hostile_job, timestamp: start + 3600_000, task: `<b>"task"</b>`, id: "x-2", job_id: "x", time_seed: start + 3600_000, global_line_index: 2, workspace_line_index: 2 },
+        { event: "start", job: hostile_job, timestamp: start, task: "", id: "x-1", job_id: "x", time_seed: start, global_line_index: 1, workspace_line_index: 1 },
+    ];
+    await open_dashboard(page, payload);
+
+    // No injected element executed or exists
+    expect(await page.evaluate(() => (window as any).__pwned)).toBeUndefined();
+    await expect(page.locator("#session_table_body img, #job_legend img")).toHaveCount(0);
+
+    // The names render as literal text in legend and table
+    await expect(page.locator("#job_legend .legend-row").nth(1)).toContainText(hostile_job);
+    await expect(page.locator("#session_table_body tr td").nth(1)).toHaveText(hostile_job);
+    await expect(page.locator("#session_table_body tr td").nth(3)).toHaveText(`<b>"task"</b>`);
+
+    // The checkbox round-trips the exact name: unchecking hides the session
+    const box = page.locator("#job_legend .legend-job-box");
+    await expect(box).toHaveCount(1);
+    await box.uncheck();
+    await expect(page.locator("#session_table_body tr")).toHaveCount(0);
+    await box.check();
+    await expect(page.locator("#session_table_body tr")).toHaveCount(1);
+});
 
 test("reset restores every filter to its default", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
