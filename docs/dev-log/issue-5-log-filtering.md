@@ -3,7 +3,7 @@
 > Decision log, not a spec. Started at plan time, finalized as a retrospective at PR time.
 > Keep it short — capture the *why*, not a blow-by-blow. Skip any section that doesn't apply.
 
-**Issue:** https://github.com/Heliman84/timescope/issues/5  ·  **PR:** _pending_
+**Issue:** https://github.com/Heliman84/timescope/issues/5  ·  **PR:** https://github.com/Heliman84/timescope/pull/46
 
 ## Problem
 
