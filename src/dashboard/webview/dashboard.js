@@ -27,6 +27,9 @@ window.addEventListener("message", (event) => {
     if (msg.type === "summary_data") {
         const payload = msg.payload || [];
 
+        const footer = document.getElementById('build_info_footer');
+        if (footer) footer.textContent = msg.build_info || 'no build info';
+
         // payload is an array of grouped events { event, job, timestamp, task, occurrences }
 
         // Build canonical events array (ascending order) for session construction

@@ -3,7 +3,7 @@
     "displayName": "TimeScope",
     "description": "A VS Code extension for tracking work sessions with analytics and a dashboard.",
     "publisher": "davidclass",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -56,6 +56,11 @@
                 "command": "timescope.renameJob",
                 "title": "Rename Job",
                 "category": "TimeScope"
+            },
+            {
+                "command": "timescope.showBuildInfo",
+                "title": "Show Build Info",
+                "category": "TimeScope"
             }
         ]
     },
@@ -63,10 +68,11 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "copy-dashboard": "node -e \"const fs=require('fs');fs.mkdirSync('out/dashboard/webview',{recursive:true});fs.cpSync('src/dashboard/webview','out/dashboard/webview',{recursive:true});\"",
-        "vscode:prepublish": "npm run compile && npm run copy-dashboard",
+        "vscode:prepublish": "npm run compile && npm run copy-dashboard && npm run write-buildinfo",
         "test": "npm run compile && node ./out/test/run_tests.js",
         "test:ui": "playwright test",
         "seed-testdata": "npm run compile && node scripts/seed_test_data.js",
+        "write-buildinfo": "node scripts/write_buildinfo.js",
         "package": "npm run vscode:prepublish && vsce package"
     },
     "devDependencies": {

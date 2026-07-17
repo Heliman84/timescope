@@ -33,6 +33,14 @@ body {
     background: #555;
 }
 
+.build-info-footer {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid #333;
+    color: #888;
+    font-size: 11px;
+}
+
 #main {
     flex: 1;
     padding: 16px;

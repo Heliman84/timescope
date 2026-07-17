@@ -15,7 +15,9 @@ Fully chat-driven. The user's only manual step is reviewing/merging the release 
 
 ## 2. Bump
 
-- Ask the user: major / minor / patch → edit `version` in `package.json`
+Per-PR bumps ([coding_standards.md](../../../coding_standards.md) Versioning) mean `develop`'s version is normally already current going into a release — there is usually nothing to bump here.
+
+- Show the user the current `package.json` version and confirm it's correct for this release. Only edit it if they want an adjustment — e.g. promoting `0.y.z` → `1.0.0` is always a deliberate, explicit user decision, never automatic.
 - In `CHANGELOG.md`: move the **Unreleased** entries under a new `## vX.Y.Z — <date>` heading
 - Offer to update the README roadmap if features shipped from it
 - Commit (`chore(release): vX.Y.Z`) and push to develop

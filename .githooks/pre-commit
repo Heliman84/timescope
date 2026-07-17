@@ -1,0 +1,12 @@
+#!/bin/sh
+# Blocks commits made directly on develop or main.
+# Enable with: git config core.hooksPath .githooks
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$branch" = "develop" ] || [ "$branch" = "main" ]; then
+  echo "Refusing to commit directly on '$branch'. Branch off develop and open a PR instead."
+  exit 1
+fi
+
+exit 0

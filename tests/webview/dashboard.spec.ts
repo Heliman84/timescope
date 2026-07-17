@@ -181,3 +181,12 @@ test("highlighting marks matching session rows", async ({ page }) => {
     await page.evaluate(() => (window as any).clear_session_highlights());
     await expect(page.locator("#session_table_body tr.session-highlighted")).toHaveCount(0);
 });
+
+test("build info footer falls back to 'no build info' when the controller sends none", async ({ page }) => {
+    await expect(page.locator("#build_info_footer")).toHaveText("no build info");
+});
+
+test("build info footer shows the controller-provided build string", async ({ page }) => {
+    await open_dashboard(page, fx.payload, "v0.3.0 @ a1b2c3d (2026-07-16T00:00:00.000Z)");
+    await expect(page.locator("#build_info_footer")).toHaveText("v0.3.0 @ a1b2c3d (2026-07-16T00:00:00.000Z)");
+});

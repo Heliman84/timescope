@@ -51,6 +51,15 @@ To maintain consistency, clarity, and maintainability in the TimeScope project, 
 * Provide tooltips and instant context feedback.
 * Ensure visual identity aligns with project metaphor and usability.
 
+## Versioning
+
+TimeScope is pre-1.0 (`0.y.z`) — still stabilizing. The major version stays `0` until a deliberate decision to promote to `1.0.0`; that promotion is never automatic.
+
+* **PATCH** (`0.y.Z`) — bug fixes, internal refactors, docs/test-only changes. No user-visible behavior change beyond a fix.
+* **MINOR** (`0.Y.0`) — new user-facing feature, command, or setting, or backward-compatible enhancement. While major is pinned at `0`, changes that would normally warrant a major bump (e.g. a breaking data/format change) still land as minor — treat `0.y.z` as "anything below 1.0 can move" per standard semver pre-release convention.
+* **MAJOR** (`1.0.0`) — reserved for the explicit, user-driven decision to call TimeScope stable. Never proposed automatically.
+* Bump timing: every feature/bugfix PR to `develop` bumps `package.json`'s `version` as part of its own commit — not batched at release. Before editing, propose the bump type and the exact `from → to` version and get explicit user confirmation; never bump silently.
+
 ## Build and Packaging
 
 * Ensure deterministic build pipelines.

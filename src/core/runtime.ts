@@ -8,12 +8,14 @@ import { JobCollection } from "./job_collection";
 import { Session } from "./session";
 import { Job } from "./job";
 import { updateTimerText, updateStatusBar, startTimerInterval, stopTimerInterval } from "./timer";
+import { load_build_info, BuildInfo } from "./build_info";
 
 export class Runtime {
   public readonly paths: TimeScopePaths;
   public jobs: JobCollection;
   public readonly jobRepo: JobRepository;
   public readonly logRepo: EventRepository;
+  public readonly buildInfo: BuildInfo | null;
 
   public activeSession: Session | null = null;
   public timerInterval: NodeJS.Timeout | null = null;
@@ -34,6 +36,7 @@ export class Runtime {
     this.jobRepo = new JobRepository(this.paths);
     this.logRepo = new EventRepository(this.paths);
     this.jobs = JobCollection.fromArray([]);
+    this.buildInfo = load_build_info(context.extensionUri.fsPath);
     // UI is created when `initializeUI()` is called by the extension activation flow.
   }
 

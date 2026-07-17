@@ -3,6 +3,7 @@ import * as fs from "fs";
 import { Runtime } from "../../core/runtime";
 import { Event, ValidationError } from "../../core/event";
 import { buildPayload, filterRelevantErrors } from "./dashboard_utils";
+import { format_build_info_full } from "../../core/build_info";
 
 export { buildPayload, filterRelevantErrors };
 
@@ -47,7 +48,8 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
             const collection = runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "summary_data",
-                payload: buildPayload(collection.toEvents())
+                payload: buildPayload(collection.toEvents()),
+                build_info: format_build_info_full(runtime.buildInfo)
             });
         }
 

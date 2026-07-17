@@ -20,6 +20,12 @@ VS Code extension for tracking consulting hours: start/pause/resume/stop work se
 - Hotfixes: branch off `main`, PR to main, then merge main back into develop
 
 
+## Agent process controls
+
+- Before the first file edit in any work session, confirm `git branch --show-current` is not `develop` or `main`. Re-check if the branch may have changed since the last check (e.g. after a checkout, merge, or a gap in the conversation).
+- When a clarifying question offers specific options and the user answers with free text that doesn't match one of them ("Other"), that is **not** consent to any of the listed options — it means none of them fit. Treat the question as still open: restate what changed based on their input and ask again explicitly before taking the action the question was gating.
+
+
 ## Workflow
 
 Three chat-driven loops, each a skill in `.claude/skills/`:

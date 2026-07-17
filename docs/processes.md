@@ -14,6 +14,7 @@ flowchart TD
     A["activate(context)"] --> B["new Runtime(context)"]
     B --> B1["resolve_paths<br>→ global & workspace dirs"]
     B --> B2["JobRepository<br>EventRepository created"]
+    B --> B3["load_build_info(extensionRoot)<br>→ out/buildinfo.json or null"]
     A --> C["runtime.loadJobs()"]
     C --> D["update VS Code settings<br>(global_jobs_path, global_log_path)"]
     D --> E["runtime.initializeUI()<br>→ divider, start, pause,<br>resume, stop, summary"]
@@ -26,7 +27,7 @@ flowchart TD
     F2 --> G
     F5 --> G
     G["runtime.setActiveSession()<br>→ updateStatusBar,<br>start/stop timer"]
-    G --> H["register commands<br>(start, pause, resume, stop,<br>dashboard, addJob,<br>renameJob, deleteJob)"]
+    G --> H["register commands<br>(start, pause, resume, stop,<br>dashboard, addJob,<br>renameJob, deleteJob,<br>showBuildInfo)"]
 
     style A fill:#5b21b6,stroke:#333,color:#fff
     style F3 fill:#92400e,stroke:#333,color:#fff
@@ -357,7 +358,8 @@ sequenceDiagram
     RT-->>Ctrl: EventCollection
     Ctrl->>Utils: buildPayload(events)
     Utils-->>Ctrl: payload[]
-    Ctrl-->>WV: summary_data { payload }
+    Ctrl->>Ctrl: format_build_info_full(runtime.buildInfo)
+    Ctrl-->>WV: summary_data { payload, build_info }
 
     WV->>Ctrl: edit_log_entry
     Ctrl->>RT: loadEventCollection()
@@ -376,6 +378,7 @@ sequenceDiagram
 ```
 
 - `dashboard_utils.ts` exports two pure functions: `buildPayload()` (timestamp-descending DTO array) and `filterRelevantErrors()` (scopes validation errors to the edited events).
+- `build_info.ts` exports `load_build_info()` (reads `out/buildinfo.json`, `null` if missing/malformed) and formatters `format_status_bar_suffix()` / `format_build_info_full()` (the latter composed from the former). `Runtime` loads it once at construction; the status-bar tooltip, dashboard footer, and the Show Build Info command all render it, with a "no build info" fallback.
 - The controller routes all data access through `Runtime` — never directly to `EventRepository`.
 - `edit_log_entries` (batch edit) follows the same pattern per-edit, with per-item error accumulation.
 - The dashboard panel uses `retainContextWhenHidden` so it stays alive when the tab loses focus.

@@ -1,10 +1,15 @@
 import type { Runtime } from "./runtime";
+import { format_status_bar_suffix } from "./build_info";
 
 function formatDurationMiliseconds(ms: number): string {
     const total_seconds = Math.floor(ms / 1000);
     const hours = Math.floor(total_seconds / 3600);
     const minutes = Math.floor((total_seconds % 3600) / 60);
     return `${hours}h ${minutes}m`;
+}
+
+function withBuildInfo(baseTooltip: string, runtime: Runtime): string {
+    return `${baseTooltip} — ${format_status_bar_suffix(runtime.buildInfo)}`;
 }
 
 /**
@@ -17,7 +22,7 @@ export function updateTimerText(runtime: Runtime): void {
     if (!session || !session.isOpen) {
         if (divider) {
             divider.text = "TimeScope:";
-            divider.tooltip = "Idle: No active job";
+            divider.tooltip = withBuildInfo("Idle: No active job", runtime);
         }
         return;
     }
@@ -27,7 +32,7 @@ export function updateTimerText(runtime: Runtime): void {
         divider.text = session.isPaused
             ? `TimeScope (Paused at ${formatted}):`
             : `TimeScope (${formatted}):`;
-        divider.tooltip = `Active job: ${session.currentJobTitle}`;
+        divider.tooltip = withBuildInfo(`Active job: ${session.currentJobTitle}`, runtime);
     }
 }
 
@@ -70,7 +75,7 @@ export function updateStatusBar(runtime: Runtime): void {
         ui.start_button && ui.start_button.show();
         if (ui.divider) {
             ui.divider.text = "TimeScope:";
-            ui.divider.tooltip = "Idle: No active job";
+            ui.divider.tooltip = withBuildInfo("Idle: No active job", runtime);
         }
         return;
     }

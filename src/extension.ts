@@ -8,6 +8,7 @@ import { checkAndRecover } from "./core/recovery";
 import { Session } from "./core/session";
 // timer is now managed by Runtime
 import { Job } from "./core/job";
+import { format_build_info_full } from "./core/build_info";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
@@ -153,6 +154,17 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.dashboard", () => {
             handle_dashboard(runtime, context);
+        })
+    );
+
+    //
+    // ────────────────────────────────────────────────────────────────
+    // COMMAND: Show Build Info
+    // ────────────────────────────────────────────────────────────────
+    //
+    context.subscriptions.push(
+        vscode.commands.registerCommand("timescope.showBuildInfo", () => {
+            vscode.window.showInformationMessage(`TimeScope build: ${format_build_info_full(runtime.buildInfo)}`);
         })
     );
 

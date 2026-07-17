@@ -77,6 +77,8 @@ npm run test:ui      # Playwright dashboard webview tests (headless Chromium)
 npm run package      # build the .vsix (prepublish + vsce)
 ```
 
+One-time per clone: `git config core.hooksPath .githooks` enables the tracked pre-commit hook that blocks commits made directly on `develop` or `main` (all work should land there via a PR — see [Branch model](#branch-model)).
+
 Press **F5** in VS Code to launch the Extension Development Host. It opens `test-workspace/`, whose settings pin TimeScope storage to `test-workspace/global-storage/` — F5 testing never touches your real tracking data.
 
 That storage is gitignored, so a fresh clone starts empty. Run `npm run seed-testdata` to generate 3 jobs and ~4 weeks of sessions (timestamps relative to now, so the dashboard presets always have data). Re-run any time to reset.
