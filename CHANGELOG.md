@@ -5,6 +5,7 @@ One line per merged PR, added at PR time under **Unreleased**. At release, entri
 
 ## Unreleased
 
+- Dev logs: each feature branch keeps a short decision log in `docs/dev-log/` (started at plan time, finalized as a retrospective at PR time) — captures the *why* behind a change, not a spec (#36)
 - Build info: `npm run package` writes `out/buildinfo.json`; visible via the new **TimeScope: Show Build Info** command, the status-bar tooltip, and a dashboard footer — plus a per-PR version-bump policy so the Extensions view version reflects real progress (#35)
 - Claude-driven development process: three chat-driven workflow skills (feature / install / release), CLAUDE.md, PR CI, isolated F5 test storage; retired the legacy script-based workflow
 - Playwright UI test suite for the dashboard webview (`npm run test:ui`): renders the real dashboard against fixture data, covering charts, filters, session table, and the edit-modal round-trip
