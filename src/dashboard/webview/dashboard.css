@@ -1,59 +1,114 @@
 
+/* Chrome & ink tokens (dark surface). Chart-side copies of the ink/surface
+   values live in dashboard.js as CHART_* constants — keep them in sync. */
+:root {
+    --surface: #1e1e1e;
+    --surface-raised: #242424;
+    --ink-primary: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --ink-muted: #898781;
+    --hairline: rgba(255, 255, 255, 0.10);
+    --gridline: #2c2c2a;
+    --accent: #3987e5;
+    --accent-wash: rgba(57, 135, 229, 0.16);
+}
+
 body {
     margin: 0;
     padding: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink-secondary);
+    background: var(--surface);
+}
+
+h2, h3 {
+    color: var(--ink-primary);
+    font-weight: 600;
+}
+
+/* ---------- Header ---------- */
+
+#dashboard_header {
     display: flex;
-    font-family: sans-serif;
-    height: 100vh;
-    overflow: hidden;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--hairline);
 }
 
-#sidebar {
-    width: 260px;
-    background: #1e1e1e;
-    color: #ddd;
-    padding: 16px;
-    overflow-y: auto;
-    border-right: 1px solid #333;
+#dashboard_header h2 {
+    margin: 0;
 }
 
-.sidebar-button {
-    width: 100%;
-    padding: 8px 12px;
-    margin-top: 12px;
-    background: #444;
-    color: #fff;
-    border: 1px solid #666;
+.build-info {
+    color: var(--ink-muted);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* ---------- Date bar ---------- */
+
+#date_bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface-raised);
+}
+
+.date-field,
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+}
+
+.date-field label,
+.filter-field label {
+    color: var(--ink-muted);
+}
+
+#date_bar select,
+#date_bar input,
+#session_filter_row input {
+    background: var(--surface);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-family: inherit;
+    color-scheme: dark;
+}
+
+.reset-button {
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
     border-radius: 4px;
     cursor: pointer;
-    text-align: left;
+    font-family: inherit;
+    margin-left: auto;
 }
 
-.sidebar-button:hover {
-    background: #555;
+.reset-button:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+    border-color: var(--accent);
 }
 
-.build-info-footer {
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid #333;
-    color: #888;
-    font-size: 11px;
-}
+/* ---------- Main ---------- */
 
 #main {
-    flex: 1;
     padding: 16px;
-    overflow-y: auto;
-}
-
-.section {
-    margin-bottom: 24px;
 }
 
 .chart-container {
     margin-bottom: 40px;
-    max-height: 400px;
 }
 
 #pie_chart,
@@ -61,25 +116,287 @@ body {
     max-height: 350px;
 }
 
+/* ---------- Pie section: legend + canvas ---------- */
+
+.pie-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.job-legend {
+    flex: 0 0 220px;
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 8px;
+    background: var(--surface-raised);
+}
+
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink-primary);
+}
+
+.legend-row:hover {
+    background: var(--accent-wash);
+}
+
+.legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+    border: 1px solid var(--hairline);
+}
+
+.legend-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legend-all {
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+    border-radius: 4px 4px 0 0;
+}
+
+.pie-canvas-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: 350px;
+}
+
+/* ---------- Session filter row ---------- */
+
+#session_filter_row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 12px;
+}
+
+.filter-field {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+}
+
+.filter-field input[type="number"] {
+    width: 64px;
+}
+
+.range-sep {
+    color: var(--ink-muted);
+}
+
+/* Job dropdown (native <details>) */
+
+.job-dropdown {
+    position: relative;
+}
+
+.job-dropdown summary {
+    list-style: none;
+    cursor: pointer;
+    background: var(--surface);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 4px 24px 4px 8px;
+    min-width: 100px;
+}
+
+.job-dropdown summary::-webkit-details-marker {
+    display: none;
+}
+
+.job-dropdown summary::after {
+    content: "▾";
+    position: absolute;
+    right: 8px;
+    color: var(--ink-muted);
+}
+
+.job-dropdown-list {
+    position: absolute;
+    z-index: 10;
+    margin-top: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 6px;
+    min-width: 160px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.dropdown-row {
+    display: block;
+    padding: 3px 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 3px;
+}
+
+.dropdown-row:hover {
+    background: var(--accent-wash);
+}
+
+/* ---------- Session table ---------- */
+
 #session_table {
     width: 100%;
     border-collapse: collapse;
 }
 
-#session_table th, #session_table td {
-    border: 1px solid #444;
-    padding: 6px 8px;
+#session_table th,
+#session_table td {
+    border-bottom: 1px solid var(--hairline);
+    padding: 6px 10px;
+    text-align: left;
 }
 
-/* Highlighted session row when filtering by chart click */
-.session-highlighted td {
-    background: #fff3bf; /* light yellow */
-    color: #000; /* dark text for contrast */
+#session_table th {
+    color: var(--ink-muted);
+    font-size: 12px;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--gridline);
+}
+
+#session_table td {
+    font-variant-numeric: tabular-nums;
+}
+
+#session_table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+#session_table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+#session_table th.sortable:hover {
+    color: var(--ink-primary);
+}
+
+#session_table th.sort-asc::after {
+    content: " ▲";
+    color: var(--accent);
+}
+
+#session_table th.sort-desc::after {
+    content: " ▼";
+    color: var(--accent);
+}
+
+#session_table button.session-edit-btn {
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 2px 10px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+#session_table button.session-edit-btn:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+}
+
+.empty-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--ink-muted);
+}
+
+/* Highlighted session row when clicking a bar segment: accent wash instead
+   of the old light-yellow block, which glared on the dark surface */
+.session-highlighted td {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+    font-weight: 600;
+    border-color: var(--accent);
     transition: background 0.2s ease-in-out;
 }
 
-/* Slightly darker border to improve readability on highlight */
-.session-highlighted td {
-    border-color: #e0c263;
+/* ---------- Edit modal ---------- */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.modal-content {
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 20px;
+    max-width: 640px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.session-event-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.session-event-row input {
+    background: var(--surface);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 4px 6px;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    color-scheme: dark;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.modal-actions button {
+    padding: 6px 16px;
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.modal-actions button:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
 }

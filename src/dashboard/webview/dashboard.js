@@ -2,6 +2,9 @@ console.log("dashboard.js loaded");
 
 const vscode = acquireVsCodeApi();
 
+// Pure filter/sort logic shared with the Node test suite (filter_state.js).
+const Filters = window.TimeScopeFilters;
+
 // Request data from extension
 vscode.postMessage({
     type: "request_data"
@@ -12,7 +15,13 @@ let all_events = []; // ascending events used to build sessions and compute paus
 let eventOccurrencesMap = new Map(); // key -> occurrences array
 let pie_chart_instance = null;
 let stacked_chart_instance = null;
-let hasRenderedJobFilter = false;
+
+// One filter state object drives every chart and the table.
+let filter_state = Filters.create_default_filter_state(new Date());
+
+// job -> colour, assigned once from the full job list so filtering never
+// reshuffles the palette.
+let job_color_map = {};
 
 // Current highlighted job/day (for toggle behavior)
 let current_highlight = null;
@@ -30,32 +39,14 @@ window.addEventListener("message", (event) => {
         const footer = document.getElementById('build_info_footer');
         if (footer) footer.textContent = msg.build_info || 'no build info';
 
-        // payload is an array of grouped events { event, job, timestamp, task, occurrences }
+        load_payload(payload);
 
-        // Build canonical events array (ascending order) for session construction
-        // Preserve id, job_id, time_seed so edits can send a complete DTO back
-        const eventsAsc = payload
-            .map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp, id: e.id, job_id: e.job_id, time_seed: e.time_seed }))
-            .sort((a, b) => a.timestamp - b.timestamp);
-
-        // keep all_events for pause/resume counts and session edit mapping
-        all_events = eventsAsc;
-
-        // Build occurrences map for quick lookup when editing
-        eventOccurrencesMap = new Map();
-        payload.forEach(e => {
-            const key = `${e.event}|${e.job}|${e.timestamp}|${e.task || ""}`;
-            eventOccurrencesMap.set(key, e.occurrences || []);
-        });
-
-        // 2) Build sessions from start/pause/resume/stop event stream
-        all_sessions = build_sessions_from_events(eventsAsc);
-
-        // 3) Initial render + filter hookup
-        render_dashboard(all_sessions);
+        // Initial render applies the default filter state (Last 14 Days),
+        // fixing the old "default preset never applied on load" bug (#31).
+        render_date_controls();
+        render_filter_controls();
         attach_filter_listeners();
-
-        // Event log removed; session-based editing is available via Edit buttons in the Sessions table.
+        apply_and_render();
     }
 
     if (msg.type === "edit_result") {
@@ -72,7 +63,7 @@ window.addEventListener("message", (event) => {
             if (result && result.warnings && result.warnings.length > 0) {
                 warningBox.style.display = '';
                 const wMsgs = result.warnings.map(w => (typeof w === 'string' ? w : (w.message || JSON.stringify(w))));
-                warningBox.textContent = '\u26A0 ' + wMsgs.join('\n\u26A0 ');
+                warningBox.textContent = '⚠ ' + wMsgs.join('\n⚠ ');
             } else {
                 warningBox.style.display = 'none';
                 warningBox.textContent = '';
@@ -95,10 +86,10 @@ window.addEventListener("message", (event) => {
             return;
         }
 
-        // success — refresh UI with new payload
-        const eventsAsc = payload.map(e => ({ event: e.event, job: e.job, task: e.task, timestamp: e.timestamp, id: e.id, job_id: e.job_id, time_seed: e.time_seed })).sort((a, b) => a.timestamp - b.timestamp);
-        all_sessions = build_sessions_from_events(eventsAsc);
-        render_dashboard(all_sessions);
+        // success — refresh UI with new payload (keeps current filter state)
+        load_payload(payload);
+        render_filter_controls();
+        apply_and_render();
 
         // If there are warnings but no errors, keep the modal open so the user sees them
         if (result && result.warnings && result.warnings.length > 0) {
@@ -110,47 +101,35 @@ window.addEventListener("message", (event) => {
 });
 
 // ---------------------------------------------------------------------
-// NORMALIZATION: RAW EVENTS → CANONICAL EVENTS
+// PAYLOAD → SESSIONS
 // ---------------------------------------------------------------------
 
-function normalize_events(rawEvents) {
-    // 1) Normalize
-    let events = rawEvents
-        .map(e => {
-            const evt = e.event || e.type;
-            const job = e.job || "";
-            const task = e.task || "";
+function load_payload(payload) {
+    // Canonical events array (ascending) for session construction.
+    // Preserve id, job_id, time_seed (edit DTO) and line indices (source seam).
+    all_events = payload
+        .map(e => ({
+            event: e.event,
+            job: e.job,
+            task: e.task,
+            timestamp: e.timestamp,
+            id: e.id,
+            job_id: e.job_id,
+            time_seed: e.time_seed,
+            global_line_index: e.global_line_index,
+            workspace_line_index: e.workspace_line_index,
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
 
-            const tsRaw = e.timestamp;
-            let ts;
-            if (typeof tsRaw === "number") ts = tsRaw;
-            else if (typeof tsRaw === "string") {
-                if (/^\d+$/.test(tsRaw.trim())) ts = Number(tsRaw);
-                else ts = Date.parse(tsRaw);
-            } else ts = NaN;
-
-            return { event: evt, job, task, timestamp: ts };
-        })
-        .filter(e =>
-            e.event &&
-            e.job &&
-            typeof e.timestamp === "number" &&
-            !Number.isNaN(e.timestamp)
-        );
-
-    // 2) DEDUPE (fixes global+workspace mirror duplication)
-    const seen = new Set();
-    events = events.filter(e => {
+    // Occurrences map for the edit modal
+    eventOccurrencesMap = new Map();
+    payload.forEach(e => {
         const key = `${e.event}|${e.job}|${e.timestamp}|${e.task || ""}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
+        eventOccurrencesMap.set(key, e.occurrences || []);
     });
 
-    // 3) Sort
-    events.sort((a, b) => a.timestamp - b.timestamp);
-
-    return events;
+    all_sessions = build_sessions_from_events(all_events);
+    assign_job_colors(all_sessions);
 }
 
 // ---------------------------------------------------------------------
@@ -162,7 +141,7 @@ function normalize_events(rawEvents) {
 //   start → pause → resume → stop
 //   start → pause → resume → pause → resume → stop
 //
-// Each job has its own state; we assume you’re not running the same job
+// Each job has its own state; we assume you're not running the same job
 // concurrently in multiple overlapping sessions.
 
 function build_sessions_from_events(events) {
@@ -177,10 +156,18 @@ function build_sessions_from_events(events) {
                 currentSession: null,
                 lastActiveStart: null,
                 accumulatedMs: 0,
-                inPause: false
+                inPause: false,
+                pausePairs: 0,
+                hasGlobal: false,
+                hasWorkspace: false
             });
         }
         return stateByJob.get(job);
+    }
+
+    function noteSource(state, e) {
+        if (typeof e.global_line_index === "number" && e.global_line_index >= 0) state.hasGlobal = true;
+        if (typeof e.workspace_line_index === "number" && e.workspace_line_index >= 0) state.hasWorkspace = true;
     }
 
     function finalizeSession(job, stopTs, stopTask) {
@@ -199,7 +186,10 @@ function build_sessions_from_events(events) {
             start: state.currentSession.start,
             stop: stopTs,
             duration_ms,
-            task: stopTask || state.currentSession.task || ""
+            task: stopTask || state.currentSession.task || "",
+            pause_pairs: state.pausePairs,
+            has_global: state.hasGlobal,
+            has_workspace: state.hasWorkspace
         });
 
         // Reset state for this job
@@ -207,6 +197,9 @@ function build_sessions_from_events(events) {
         state.lastActiveStart = null;
         state.accumulatedMs = 0;
         state.inPause = false;
+        state.pausePairs = 0;
+        state.hasGlobal = false;
+        state.hasWorkspace = false;
     }
 
     for (const e of events) {
@@ -230,6 +223,10 @@ function build_sessions_from_events(events) {
                 state.lastActiveStart = ts;
                 state.accumulatedMs = 0;
                 state.inPause = false;
+                state.pausePairs = 0;
+                state.hasGlobal = false;
+                state.hasWorkspace = false;
+                noteSource(state, e);
                 break;
             }
 
@@ -238,6 +235,7 @@ function build_sessions_from_events(events) {
                     state.accumulatedMs += ts - state.lastActiveStart;
                     state.lastActiveStart = null;
                     state.inPause = true;
+                    noteSource(state, e);
                 }
                 break;
             }
@@ -246,12 +244,15 @@ function build_sessions_from_events(events) {
                 if (state.currentSession && state.inPause) {
                     state.inPause = false;
                     state.lastActiveStart = ts;
+                    state.pausePairs += 1;
+                    noteSource(state, e);
                 }
                 break;
             }
 
             case "stop": {
                 if (state.currentSession) {
+                    noteSource(state, e);
                     finalizeSession(job, ts, e.task);
                 }
                 break;
@@ -269,231 +270,324 @@ function build_sessions_from_events(events) {
 }
 
 // ---------------------------------------------------------------------
-// FILTER LISTENERS
+// STABLE PALETTE
 // ---------------------------------------------------------------------
 
-function attach_filter_listeners() {
-    const preset = document.getElementById("preset_range");
-    if (preset && !preset.dataset.bound) {
-        preset.addEventListener("change", apply_filters_and_render);
-        preset.dataset.bound = "true";
-    }
-
-    const clearBtn = document.getElementById("clear_filters_btn");
-    if (clearBtn && !clearBtn.dataset.bound) {
-        clearBtn.addEventListener("click", clear_filters);
-        clearBtn.dataset.bound = "true";
-    }
-
-    // “All” checkbox
-    const allBox = document.getElementById("job_all_checkbox");
-    if (allBox && !allBox.dataset.bound) {
-        allBox.addEventListener("change", () => {
-            const checked = allBox.checked;
-            document
-                .querySelectorAll("#job_filter_container .job-box")
-                .forEach(box => {
-                    box.checked = checked;
-                });
-            apply_filters_and_render();
-        });
-        allBox.dataset.bound = "true";
-    }
-
-    // Individual job boxes
-    document
-        .querySelectorAll("#job_filter_container .job-box")
-        .forEach(box => {
-            if (!box.dataset.bound) {
-                box.addEventListener("change", () => {
-                    const allBox = document.getElementById("job_all_checkbox");
-                    const allJobs = [
-                        ...document.querySelectorAll("#job_filter_container .job-box")
-                    ];
-                    const allChecked = allJobs.every(b => b.checked);
-                    if (allBox) {
-                        allBox.checked = allChecked;
-                    }
-                    apply_filters_and_render();
-                });
-                box.dataset.bound = "true";
-            }
-        });
+function assign_job_colors(allSessions) {
+    // Validated categorical palette (dark surface #1e1e1e): passes lightness,
+    // chroma, CVD-separation, normal-vision and contrast checks in this order.
+    // Past 10 jobs the palette wraps — colour alone no longer identifies a job,
+    // which is why the legend and table carry the names.
+    const base = [
+        "#3987e5", "#008300", "#d55181", "#c98500",
+        "#199e70", "#d95926", "#9085e9", "#e66767",
+        "#8a8a3a", "#b06a9e"
+    ];
+    // Alphabetical order → a job keeps the same colour across data reloads.
+    const jobs = [...new Set(allSessions.map(s => s.job))].sort((a, b) => a.localeCompare(b));
+    job_color_map = {};
+    jobs.forEach((job, i) => {
+        job_color_map[job] = base[i % base.length];
+    });
 }
+
+function color_for(job) {
+    return job_color_map[job] || "#898781";
+}
+
+// Chart chrome tokens (match dashboard.css)
+const CHART_SURFACE = "#1e1e1e";
+const CHART_INK_SECONDARY = "#c3c2b7";
+const CHART_GRIDLINE = "#2c2c2a";
 
 // ---------------------------------------------------------------------
 // MAIN FILTER PIPELINE
 // ---------------------------------------------------------------------
 
-function apply_filters_and_render() {
-    const filtered = filter_sessions(all_sessions);
-    render_dashboard(filtered);
+function apply_and_render() {
+    let filtered = Filters.apply_filters(all_sessions, filter_state);
+    filtered = Filters.sort_sessions(filtered, filter_state.sort_key, filter_state.sort_dir);
+
+    render_pie_chart(filtered);
+    render_stacked_bar_chart(filtered);
+    render_session_table(filtered);
+    render_empty_state(filtered);
+    render_sort_indicators();
 }
 
 // ---------------------------------------------------------------------
-// DATE + JOB FILTERING
+// DATE CONTROLS
 // ---------------------------------------------------------------------
 
-function filter_sessions(sessions) {
-    const presetEl = document.getElementById("preset_range");
-    const preset = presetEl ? presetEl.value : "this_month";
+function render_date_controls() {
+    const preset = document.getElementById("preset_range");
+    if (preset) preset.value = filter_state.preset;
+    set_date_inputs(filter_state.start_day, filter_state.end_day);
+}
 
-    const now = new Date();
-    const today_local = get_local_day(now.getTime());
-
-    let start_date = null;
-    let end_date = null;
-
-    if (preset === "today") {
-        start_date = today_local;
-        end_date = today_local;
-    }
-
-    if (preset === "this_week") {
-        const day = now.getDay();
-        const monday = new Date(now);
-        monday.setDate(now.getDate() - ((day + 6) % 7));
-        start_date = get_local_day(monday.getTime());
-        end_date = today_local;
-    }
-
-    if (preset === "last_7") {
-        const d = new Date(now);
-        d.setDate(now.getDate() - 6);
-        start_date = get_local_day(d.getTime());
-        end_date = today_local;
-    }
-
-    if (preset === "this_month") {
-        const first = new Date(now.getFullYear(), now.getMonth(), 1);
-        start_date = get_local_day(first.getTime());
-        end_date = today_local;
-    }
-
-    if (preset === "last_3_months") {
-        const d = new Date(now);
-        d.setMonth(now.getMonth() - 2);
-        const first = new Date(d.getFullYear(), d.getMonth(), 1);
-        start_date = get_local_day(first.getTime());
-        end_date = today_local;
-    }
-
-    let date_filtered = sessions;
-
-    if (start_date && end_date) {
-        date_filtered = sessions.filter(s => {
-            const day = get_local_day(s.start);
-            return day >= start_date && day <= end_date;
-        });
-    }
-
-    // JOB FILTERING — only job boxes, ignore "All"
-    const selected_jobs = [
-        ...document.querySelectorAll("#job_filter_container .job-box:checked")
-    ].map(b => b.value);
-
-    if (selected_jobs.length === 0) {
-        return [];
-    }
-
-    return date_filtered.filter(s => selected_jobs.includes(s.job));
+function set_date_inputs(start_day, end_day) {
+    const startEl = document.getElementById("start_date");
+    const endEl = document.getElementById("end_date");
+    if (startEl) startEl.value = start_day || "";
+    if (endEl) endEl.value = end_day || "";
 }
 
 // ---------------------------------------------------------------------
-// DASHBOARD RENDERER
+// JOB LEGEND + TABLE DROPDOWN (two synced surfaces, one selection)
 // ---------------------------------------------------------------------
 
-function render_dashboard(sessions) {
-    render_job_filter(all_sessions);
-    attach_filter_listeners();
-    render_pie_chart(sessions);
-    render_stacked_bar_chart(sessions);
-    render_session_table(sessions);
+function all_job_names() {
+    return [...new Set(all_sessions.map(s => s.job))].sort((a, b) => a.localeCompare(b));
 }
 
-// ---------------------------------------------------------------------
-// JOB FILTER CHECKBOXES (WITH “ALL”)
-// ---------------------------------------------------------------------
+/** Which jobs are currently selected (state.jobs === null means all). */
+function selected_job_set() {
+    if (filter_state.jobs === null) return new Set(all_job_names());
+    return new Set(filter_state.jobs);
+}
 
-function render_job_filter(allSessions) {
-    const container = document.getElementById("job_filter_container");
+function render_filter_controls() {
+    render_job_legend();
+    render_job_dropdown();
+    sync_range_inputs();
+}
+
+function render_job_legend() {
+    const container = document.getElementById("job_legend");
     if (!container) return;
+    const selected = selected_job_set();
+    const jobs = all_job_names();
+    const allChecked = jobs.every(j => selected.has(j));
 
-    // Capture previous selections (job boxes only)
-    const previouslyChecked = new Set(
-        [...container.querySelectorAll("input.job-box")]
-            .filter(b => b.checked)
-            .map(b => b.value)
-    );
+    let html =
+        `<label class="legend-row legend-all">` +
+        `<input type="checkbox" id="job_all_checkbox" ${allChecked ? "checked" : ""}>` +
+        `<span class="legend-swatch" style="visibility:hidden;"></span>` +
+        `<span class="legend-text">All</span></label>`;
 
-    container.innerHTML = "";
-
-    const jobs = [...new Set(allSessions.map(s => s.job))];
-
-    // Determine if "All" should be checked:
-    // - first render → true
-    // - later renders → true if every job was checked previously
-    let allShouldBeChecked;
-    if (!hasRenderedJobFilter) {
-        allShouldBeChecked = true;
-    } else {
-        allShouldBeChecked =
-            jobs.length > 0 &&
-            jobs.every(job => previouslyChecked.has(job));
-    }
-
-    // "All" checkbox
-    const allDiv = document.createElement("div");
-    allDiv.innerHTML =
-        `<label><input type="checkbox" id="job_all_checkbox" ${allShouldBeChecked ? "checked" : ""}> All</label>`;
-    container.appendChild(allDiv);
-
-    // Job checkboxes
     jobs.forEach(job => {
-        const div = document.createElement("div");
-
-        let checked;
-        if (!hasRenderedJobFilter) {
-            // First render → all checked
-            checked = true;
-        } else if (previouslyChecked.size === 0) {
-            checked = allShouldBeChecked;
-        } else {
-            checked = previouslyChecked.has(job);
-        }
-
-        div.innerHTML =
-            `<label><input type="checkbox" class="job-box" value="${job}" ${checked ? "checked" : ""}> ${job}</label>`;
-
-        container.appendChild(div);
+        const checked = selected.has(job) ? "checked" : "";
+        html +=
+            `<label class="legend-row">` +
+            `<input type="checkbox" class="legend-job-box" value="${job}" ${checked}>` +
+            `<span class="legend-swatch" style="background:${color_for(job)};"></span>` +
+            `<span class="legend-text">${job}</span></label>`;
     });
 
-    hasRenderedJobFilter = true;
+    container.innerHTML = html;
+}
+
+function render_job_dropdown() {
+    const list = document.getElementById("job_dropdown_list");
+    if (!list) return;
+    const selected = selected_job_set();
+    const jobs = all_job_names();
+    const allChecked = jobs.every(j => selected.has(j));
+
+    let html =
+        `<label class="dropdown-row">` +
+        `<input type="checkbox" id="job_dropdown_all" ${allChecked ? "checked" : ""}> All</label>`;
+    jobs.forEach(job => {
+        const checked = selected.has(job) ? "checked" : "";
+        html +=
+            `<label class="dropdown-row">` +
+            `<input type="checkbox" class="dropdown-job-box" value="${job}" ${checked}> ${job}</label>`;
+    });
+    list.innerHTML = html;
+
+    update_dropdown_summary();
+}
+
+function update_dropdown_summary() {
+    const summary = document.getElementById("job_dropdown_summary");
+    if (!summary) return;
+    const jobs = all_job_names();
+    const selected = selected_job_set();
+    const count = jobs.filter(j => selected.has(j)).length;
+    if (count === jobs.length) summary.textContent = "All jobs";
+    else if (count === 0) summary.textContent = "No jobs";
+    else if (count === 1) summary.textContent = jobs.find(j => selected.has(j));
+    else summary.textContent = `${count} jobs`;
+}
+
+/**
+ * Update the shared job selection from one surface, then re-render both.
+ * A full set collapses to null so newly appearing jobs stay included.
+ */
+function set_job_selection(jobArray) {
+    const jobs = all_job_names();
+    if (jobArray.length === jobs.length) {
+        filter_state.jobs = null;
+    } else {
+        filter_state.jobs = jobArray;
+    }
+    render_job_legend();
+    render_job_dropdown();
+    apply_and_render();
 }
 
 // ---------------------------------------------------------------------
-// CLEAR FILTERS
+// RANGE INPUTS (duration / pauses)
+// ---------------------------------------------------------------------
+
+function sync_range_inputs() {
+    set_number_input("dur_min", filter_state.duration_min_h);
+    set_number_input("dur_max", filter_state.duration_max_h);
+    set_number_input("pause_min", filter_state.pauses_min);
+    set_number_input("pause_max", filter_state.pauses_max);
+}
+
+function set_number_input(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.value = value === null || value === undefined ? "" : String(value);
+}
+
+function read_number_input(id) {
+    const el = document.getElementById(id);
+    if (!el || el.value.trim() === "") return null;
+    const n = Number(el.value);
+    return Number.isFinite(n) ? n : null;
+}
+
+// ---------------------------------------------------------------------
+// FILTER LISTENERS
+// ---------------------------------------------------------------------
+
+function attach_filter_listeners() {
+    bind_once(document.getElementById("preset_range"), "change", on_preset_change);
+    bind_once(document.getElementById("start_date"), "change", on_date_input_change);
+    bind_once(document.getElementById("end_date"), "change", on_date_input_change);
+    bind_once(document.getElementById("clear_filters_btn"), "click", clear_filters);
+
+    ["dur_min", "dur_max", "pause_min", "pause_max"].forEach(id => {
+        bind_once(document.getElementById(id), "input", on_range_change);
+    });
+
+    // Job legend + dropdown use event delegation so they survive re-renders.
+    bind_once(document.getElementById("job_legend"), "change", on_legend_change);
+    bind_once(document.getElementById("job_dropdown_list"), "change", on_dropdown_change);
+
+    // Sortable headers
+    document.querySelectorAll("#session_table th.sortable").forEach(th => {
+        bind_once(th, "click", () => on_sort_click(th.dataset.sort));
+    });
+}
+
+function bind_once(el, evt, handler) {
+    if (el && !el.dataset.bound) {
+        el.addEventListener(evt, handler);
+        el.dataset.bound = "true";
+    }
+}
+
+function on_preset_change() {
+    const preset = document.getElementById("preset_range").value;
+    filter_state.preset = preset;
+    if (preset !== "custom") {
+        const range = Filters.resolve_preset_range(preset, new Date());
+        filter_state.start_day = range.start_day;
+        filter_state.end_day = range.end_day;
+        set_date_inputs(range.start_day, range.end_day);
+    }
+    apply_and_render();
+}
+
+function on_date_input_change() {
+    let start = document.getElementById("start_date").value || null;
+    let end = document.getElementById("end_date").value || null;
+
+    // Single-day rule: if the other field is empty, mirror the entered date.
+    if (start && !end) end = start;
+    else if (end && !start) start = end;
+
+    filter_state.start_day = start;
+    filter_state.end_day = end;
+    set_date_inputs(start, end);
+
+    // A manual date edit means the range is no longer a named preset.
+    filter_state.preset = "custom";
+    const preset = document.getElementById("preset_range");
+    if (preset) preset.value = "custom";
+
+    apply_and_render();
+}
+
+function on_range_change() {
+    filter_state.duration_min_h = read_number_input("dur_min");
+    filter_state.duration_max_h = read_number_input("dur_max");
+    filter_state.pauses_min = read_number_input("pause_min");
+    filter_state.pauses_max = read_number_input("pause_max");
+    apply_and_render();
+}
+
+function on_legend_change(ev) {
+    const target = ev.target;
+    if (target.id === "job_all_checkbox") {
+        set_job_selection(target.checked ? all_job_names() : []);
+        return;
+    }
+    if (target.classList.contains("legend-job-box")) {
+        set_job_selection(read_checked_values("#job_legend .legend-job-box"));
+    }
+}
+
+function on_dropdown_change(ev) {
+    const target = ev.target;
+    if (target.id === "job_dropdown_all") {
+        set_job_selection(target.checked ? all_job_names() : []);
+        return;
+    }
+    if (target.classList.contains("dropdown-job-box")) {
+        set_job_selection(read_checked_values("#job_dropdown_list .dropdown-job-box"));
+    }
+}
+
+function read_checked_values(selector) {
+    return [...document.querySelectorAll(selector)].filter(b => b.checked).map(b => b.value);
+}
+
+function on_sort_click(sort_key) {
+    if (!sort_key) return;
+    if (filter_state.sort_key === sort_key) {
+        filter_state.sort_dir = filter_state.sort_dir === "asc" ? "desc" : "asc";
+    } else {
+        filter_state.sort_key = sort_key;
+        filter_state.sort_dir = "desc";
+    }
+    apply_and_render();
+}
+
+// ---------------------------------------------------------------------
+// CLEAR / RESET FILTERS
 // ---------------------------------------------------------------------
 
 function clear_filters() {
-    const preset = document.getElementById("preset_range");
-    if (preset) {
-        preset.value = "this_month";
-    }
+    filter_state = Filters.create_default_filter_state(new Date());
+    render_date_controls();
+    render_filter_controls();
+    apply_and_render();
+}
 
-    // Re-check "All" and all jobs
-    const allBox = document.getElementById("job_all_checkbox");
-    if (allBox) {
-        allBox.checked = true;
-    }
+// ---------------------------------------------------------------------
+// SORT INDICATORS
+// ---------------------------------------------------------------------
 
-    document
-        .querySelectorAll("#job_filter_container .job-box")
-        .forEach(box => {
-            box.checked = true;
-        });
+function render_sort_indicators() {
+    document.querySelectorAll("#session_table th.sortable").forEach(th => {
+        th.classList.remove("sort-asc", "sort-desc");
+        if (th.dataset.sort === filter_state.sort_key) {
+            th.classList.add(filter_state.sort_dir === "asc" ? "sort-asc" : "sort-desc");
+        }
+    });
+}
 
-    apply_filters_and_render();
+// ---------------------------------------------------------------------
+// EMPTY STATE
+// ---------------------------------------------------------------------
+
+function render_empty_state(sessions) {
+    const el = document.getElementById("empty_state");
+    if (el) el.style.display = sessions.length === 0 ? "" : "none";
 }
 
 // ---------------------------------------------------------------------
@@ -514,19 +608,27 @@ function render_pie_chart(sessions) {
 
     if (pie_chart_instance) pie_chart_instance.destroy();
 
+    const total_hours = hours.reduce((a, b) => a + b, 0);
+
     pie_chart_instance = new Chart(ctx, {
         type: "pie",
         data: {
             labels: jobs,
             datasets: [{
                 data: hours,
-                backgroundColor: generate_color_palette(jobs.length)
+                backgroundColor: jobs.map(j => color_for(j)),
+                // 2px surface gap between slices
+                borderColor: CHART_SURFACE,
+                borderWidth: 2
             }]
         },
         options: {
             plugins: {
+                legend: { display: false },
                 datalabels: {
-                    formatter: (value) => value.toFixed(1) + "h",
+                    // Selective labels: skip slices under 5% — they'd collide
+                    formatter: (value) =>
+                        total_hours > 0 && value / total_hours < 0.05 ? "" : value.toFixed(1) + "h",
                     color: "#fff",
                     font: { weight: "bold" }
                 }
@@ -546,20 +648,22 @@ function render_stacked_bar_chart(sessions) {
 
     const map = {};
     sessions.forEach(s => {
-        const day = get_local_day(s.start);
+        const day = Filters.get_local_day(s.start);
         map[day] = map[day] || {};
         map[day][s.job] = (map[day][s.job] || 0) + s.duration_ms;
     });
 
     const days = Object.keys(map).sort((a, b) => new Date(a) - new Date(b));
-    const jobs = [...new Set(sessions.map(s => s.job))];
+    const jobs = [...new Set(sessions.map(s => s.job))].sort((a, b) => a.localeCompare(b));
 
-    const palette = generate_color_palette(jobs.length);
-
-    const datasets = jobs.map((job, idx) => ({
+    const datasets = jobs.map(job => ({
         label: job,
         data: days.map(d => (map[d][job] || 0) / 3600000),
-        backgroundColor: palette[idx]
+        backgroundColor: color_for(job),
+        // 2px surface gap between stacked segments and adjacent bars
+        borderColor: CHART_SURFACE,
+        borderWidth: 2,
+        borderSkipped: false
     }));
 
     const totals_per_day = days.map(d =>
@@ -578,28 +682,38 @@ function render_stacked_bar_chart(sessions) {
             responsive: true,
             maintainAspectRatio: false,
             scales: {
-                x: { stacked: true },
+                x: {
+                    stacked: true,
+                    grid: { display: false },
+                    ticks: { color: CHART_INK_SECONDARY }
+                },
                 y: {
                     stacked: true,
                     beginAtZero: true,
-                    suggestedMax: padded_max
+                    suggestedMax: padded_max,
+                    grid: { color: CHART_GRIDLINE },
+                    border: { color: CHART_GRIDLINE },
+                    ticks: { color: CHART_INK_SECONDARY }
                 }
             },
             plugins: {
-                legend: { position: "right" },
+                legend: { display: false },
                 datalabels: {
                     color: "#fff",
                     font: { weight: "bold" },
                     clip: false,
                     offset: 4,
                     formatter: (value, ctx) => {
-                        if (!value) return "";
+                        // The last dataset carries the per-day total, even when
+                        // its own segment is empty that day
                         const last = ctx.chart.data.datasets.length - 1;
                         if (ctx.datasetIndex === last) {
                             const total = totals_per_day[ctx.dataIndex];
-                            return total.toFixed(1) + "h";
+                            return total > 0 ? total.toFixed(1) + "h" : "";
                         }
-                        return value.toFixed(1) + "h";
+                        // Selective labels: segments under 30 min are too short
+                        // for legible text — the tooltip still carries the value
+                        return !value || value < 0.5 ? "" : value.toFixed(1) + "h";
                     },
                     anchor: (ctx) =>
                         ctx.datasetIndex === ctx.chart.data.datasets.length - 1
@@ -722,7 +836,6 @@ function open_session_edit_modal(session) {
 
             // UI: disable save and show progress
             save.disabled = true;
-            const prevText = save.textContent;
             save.textContent = 'Saving…';
 
             // Clear previous errors
@@ -749,25 +862,16 @@ function render_session_table(sessions) {
 
     body.innerHTML = "";
 
-    // Show latest sessions first (reverse chronological)
-    const rev = sessions.slice().sort((a, b) => b.start - a.start);
-
     // Clear any previous highlights
     clear_session_highlights();
 
-    rev.forEach(s => {
+    sessions.forEach(s => {
         const tr = document.createElement("tr");
 
-        const day = get_local_day(s.start);
+        const day = Filters.get_local_day(s.start);
 
         const start_local = new Date(s.start).toLocaleString();
         const stop_local = new Date(s.stop).toLocaleString();
-
-        // Compute pause/resume pair count for this session
-        const eventsForSession = all_events.filter(e => e.job === s.job && e.timestamp >= s.start && e.timestamp <= s.stop);
-        const pauseCount = eventsForSession.filter(e => e.event === 'pause').length;
-        const resumeCount = eventsForSession.filter(e => e.event === 'resume').length;
-        const pairs = Math.min(pauseCount, resumeCount);
 
         const editBtn = `<button class="session-edit-btn" data-job="${s.job}" data-start="${s.start}" data-stop="${s.stop}">Edit</button>`;
 
@@ -781,26 +885,11 @@ function render_session_table(sessions) {
             `<td>${s.task || ""}</td>` +
             `<td>${start_local}</td>` +
             `<td>${stop_local}</td>` +
-            `<td>${pairs}</td>` +
+            `<td>${s.pause_pairs}</td>` +
             `<td>${editBtn}</td>`;
 
         body.appendChild(tr);
     });
-
-    // Attach session edit handlers
-    document.querySelectorAll("button.session-edit-btn").forEach(btn => {
-        if (!btn.dataset.bound) {
-            btn.addEventListener('click', (ev) => {
-                const el = ev.currentTarget;
-                const job = el.getAttribute('data-job');
-                const start = Number(el.getAttribute('data-start'));
-                const stop = Number(el.getAttribute('data-stop'));
-                open_session_edit_modal({ job, start, stop });
-            });
-            btn.dataset.bound = 'true';
-        }
-    });
-
 
     // Attach session edit handlers
     document.querySelectorAll("button.session-edit-btn").forEach(btn => {
@@ -820,25 +909,6 @@ function render_session_table(sessions) {
 // ---------------------------------------------------------------------
 // UTILITIES
 // ---------------------------------------------------------------------
-
-function generate_color_palette(n) {
-    const base = [
-        "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
-        "#59a14f", "#edc949", "#af7aa1", "#ff9da7",
-        "#9c755f", "#bab0ab"
-    ];
-    return Array.from({ length: n }, (_, i) => base[i % base.length]);
-}
-
-function get_local_day(timestamp) {
-    const d = new Date(timestamp);
-
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-
-    return `${year}-${month}-${day}`;  // local ISO date
-}
 
 // Highlight helpers (module-level so chart click handler can call them)
 function clear_session_highlights() {

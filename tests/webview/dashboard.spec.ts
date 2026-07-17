@@ -4,7 +4,9 @@ import { build_fixture, FixtureData } from "./fixtures";
 import { open_dashboard, posted_messages, reply, to_datetime_input_value } from "./harness";
 
 // Fixture: Alpha today 09:00–10:30 (1 pause/resume pair), Beta today
-// 13:00–14:00, Alpha 40 days ago 10:00–11:00. Default preset is "today".
+// 13:00–14:00, Alpha 40 days ago 10:00–11:00. Time is frozen at FIXED_NOW,
+// and the default preset (Last 14 Days) is applied on load, so the 40-days-ago
+// session is filtered out until a wider preset is chosen.
 
 interface EditLogEntriesPayload {
     edits: Array<{ id: string; new_record: Record<string, unknown> }>;
@@ -37,27 +39,34 @@ test("loads, requests data, and renders charts, filters, and table", async ({ pa
     const posted = await posted_messages(page);
     expect(posted[0]).toEqual({ type: "request_data" });
 
-    // Job filter: "All" + one checkbox per job, all checked initially
+    // Default preset is Last 14 Days, applied on load (was bug #31)
+    await expect(page.locator("#preset_range")).toHaveValue("last_14");
+
+    // Job legend: "All" + one checkbox per job, all checked initially
     await expect(page.locator("#job_all_checkbox")).toBeChecked();
-    await expect(page.locator("#job_filter_container .job-box")).toHaveCount(2);
-    for (const box of await page.locator("#job_filter_container .job-box").all()) {
+    await expect(page.locator("#job_legend .legend-job-box")).toHaveCount(2);
+    for (const box of await page.locator("#job_legend .legend-job-box").all()) {
         await expect(box).toBeChecked();
     }
 
-    // KNOWN BUG #31: initial render ignores the preset select ("Today") and
-    // shows ALL sessions until a filter control is touched. Update this
-    // assertion (3 → 2 rows) when #31 is fixed.
+    // Default filter applied: the 40-days-ago "old work" session is excluded,
+    // leaving the two "today" sessions (newest first).
     const rows = page.locator("#session_table_body tr");
-    await expect(rows).toHaveCount(3);
+    await expect(rows).toHaveCount(2);
     await expect(rows.nth(0)).toContainText("Beta");
     await expect(rows.nth(1)).toContainText("morning work");
-    await expect(rows.nth(2)).toContainText("old work");
 
     // Charts exist in Chart.js's registry with the rendered data
     const pie_labels = await page.evaluate(() => (window as any).Chart.getChart("pie_chart")?.data.labels);
     expect(pie_labels?.slice().sort()).toEqual(["Alpha", "Beta"]);
     const has_bar_chart = await page.evaluate(() => !!(window as any).Chart.getChart("stacked_bar_chart"));
     expect(has_bar_chart).toBe(true);
+
+    // Built-in Chart.js legends are disabled (custom legend replaces them)
+    const pie_legend_on = await page.evaluate(() => (window as any).Chart.getChart("pie_chart")?.options.plugins.legend.display);
+    const bar_legend_on = await page.evaluate(() => (window as any).Chart.getChart("stacked_bar_chart")?.options.plugins.legend.display);
+    expect(pie_legend_on).toBe(false);
+    expect(bar_legend_on).toBe(false);
 });
 
 test("computes durations and pause/resume pairs per session", async ({ page }) => {
@@ -80,14 +89,14 @@ test("date preset filters sessions", async ({ page }) => {
     await expect(page.locator("#session_table_body tr")).toHaveCount(2);
 });
 
-test("job checkboxes filter sessions and sync the All checkbox", async ({ page }) => {
-    await page.locator("#job_filter_container .job-box[value='Beta']").uncheck();
+test("job legend checkboxes filter sessions and sync the All checkbox", async ({ page }) => {
+    await page.locator("#job_legend .legend-job-box[value='Beta']").uncheck();
     await expect(page.locator("#session_table_body tr")).toHaveCount(1);
     await expect(page.locator("#session_table_body tr")).toContainText("Alpha");
     await expect(page.locator("#job_all_checkbox")).not.toBeChecked();
 
     // Unchecking every job empties the table
-    await page.locator("#job_filter_container .job-box[value='Alpha']").uncheck();
+    await page.locator("#job_legend .legend-job-box[value='Alpha']").uncheck();
     await expect(page.locator("#session_table_body tr")).toHaveCount(0);
 
     // "All" re-checks every job
@@ -95,13 +104,13 @@ test("job checkboxes filter sessions and sync the All checkbox", async ({ page }
     await expect(page.locator("#session_table_body tr")).toHaveCount(2);
 });
 
-test("clear filters resets to this-month preset with all jobs", async ({ page }) => {
+test("reset restores the default Last 14 Days preset with all jobs", async ({ page }) => {
     await page.selectOption("#preset_range", "last_3_months");
-    await page.locator("#job_filter_container .job-box[value='Beta']").uncheck();
+    await page.locator("#job_legend .legend-job-box[value='Beta']").uncheck();
 
     await page.click("#clear_filters_btn");
 
-    await expect(page.locator("#preset_range")).toHaveValue("this_month");
+    await expect(page.locator("#preset_range")).toHaveValue("last_14");
     await expect(page.locator("#job_all_checkbox")).toBeChecked();
     await expect(page.locator("#session_table_body tr")).toHaveCount(2);
 });

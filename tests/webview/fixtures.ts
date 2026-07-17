@@ -5,8 +5,10 @@
  * timestamp-descending array of { event, job, timestamp, task, id, job_id,
  * time_seed, global_line_index, workspace_line_index }.
  *
- * Timestamps are generated relative to "now" so the dashboard's relative
- * date presets (today / this month / last 3 months) behave predictably.
+ * Time is frozen: fixtures are generated relative to FIXED_NOW, and the
+ * harness pins the page clock to the same instant (page.clock.setFixedTime).
+ * This removes the old "run straddling local midnight" flake — the dashboard's
+ * relative date presets now resolve against a fixed, known day.
  */
 
 export interface FixtureEvent {
@@ -20,6 +22,13 @@ export interface FixtureEvent {
     global_line_index: number;
     workspace_line_index: number;
 }
+
+/**
+ * The frozen "now" all fixtures and the page clock share:
+ * Wednesday 2026-07-15, 12:00 local. Chosen mid-week and mid-month so the
+ * this_week / this_month presets have a non-trivial span to assert against.
+ */
+export const FIXED_NOW = new Date(2026, 6, 15, 12, 0, 0, 0);
 
 /** Same local-day formatting the dashboard uses (get_local_day). */
 function local_day(timestamp: number): string {
@@ -45,16 +54,15 @@ export interface FixtureData {
 }
 
 /**
- * Three closed sessions:
+ * Three closed sessions (relative to FIXED_NOW = 2026-07-15):
  * - Alpha, today 09:00–10:30 with one pause/resume pair (09:45–10:00), task "morning work"
  * - Beta,  today 13:00–14:00, task "beta task"
- * - Alpha, 40 days ago 10:00–11:00 (inside "last 3 months", outside "this month" and "today")
+ * - Alpha, 40 days ago 10:00–11:00 (inside "last 3 months", outside "last 14 days")
+ *
+ * Kept intentionally small: this fixture backs the edit-modal, highlighting,
+ * and build-info tests. Filtering behaviour is exercised by build_filter_fixture.
  */
-export function build_fixture(): FixtureData {
-    // Known flake window: "today" is stamped here, but the dashboard recomputes
-    // its own "today" at filter time — a run straddling local midnight can
-    // disagree. Accepted: the window is one page-load wide.
-    const now = new Date();
+export function build_fixture(now: Date = FIXED_NOW): FixtureData {
     const old = new Date(now.getTime() - 40 * 24 * 3600 * 1000);
 
     let line = 0;
@@ -94,4 +102,112 @@ export function build_fixture(): FixtureData {
         today: local_day(now.getTime()),
         alpha_stop_ts,
     };
+}
+
+/** One planned session in the filtering fixture. */
+export interface FilterFixtureSession {
+    job: string;
+    /** Local day of the session ("YYYY-MM-DD"). */
+    day: string;
+    /** Active duration in hours (pause gaps are zero-length, so span == active). */
+    hours: number;
+    /** Number of pause/resume pairs. */
+    pauses: number;
+    /** Log provenance — controls has_global/has_workspace for the #3 source seam. */
+    source: "merged" | "global" | "workspace";
+}
+
+export interface FilterFixtureData {
+    payload: FixtureEvent[];
+    sessions: FilterFixtureSession[];
+    /** All job names, in creation order (matches palette assignment order). */
+    jobs: string[];
+    /** Jobs whose session falls inside the default Last-14-Days window. */
+    jobs_in_last_14: string[];
+}
+
+/**
+ * A twelve-job fixture built for filter/sort coverage (relative to FIXED_NOW):
+ *
+ * - 12 jobs → exercises the scrollable legend and palette wrap (10-colour base).
+ * - Sessions placed on preset boundaries: 07-02 (Last-14 start), 07-01 (this
+ *   month, outside Last-14), 06-20 (Last-3-months only).
+ * - Duration spread 0.5h..8h with exact boundary values for the range filter.
+ * - Pause spread 0..3 pairs (zero-length gaps keep durations exact).
+ * - One global-only and one workspace-only session for the source seam.
+ *
+ * Ten of the twelve sessions fall inside the default Last-14-Days window;
+ * Wolf (07-01) and Vega (06-20) fall outside it.
+ */
+export function build_filter_fixture(now: Date = FIXED_NOW): FilterFixtureData {
+    const plan: FilterFixtureSession[] = [
+        { job: "Acme", day: local_day(at_local_time(now, 9, 0)), hours: 1.0, pauses: 0, source: "merged" },      // today 07-15
+        { job: "Beacon", day: shift_day(now, -1), hours: 2.0, pauses: 1, source: "merged" },                     // 07-14
+        { job: "Cobalt", day: shift_day(now, -2), hours: 3.0, pauses: 2, source: "merged" },                     // 07-13
+        { job: "Delta", day: shift_day(now, -3), hours: 1.0, pauses: 0, source: "merged" },                      // 07-12
+        { job: "Ember", day: shift_day(now, -4), hours: 1.0, pauses: 0, source: "global" },                      // 07-11 global-only
+        { job: "Flint", day: shift_day(now, -5), hours: 0.5, pauses: 0, source: "workspace" },                   // 07-10 workspace-only
+        { job: "Gale", day: shift_day(now, -6), hours: 1.0, pauses: 0, source: "merged" },                       // 07-09
+        { job: "Harbor", day: shift_day(now, -7), hours: 1.0, pauses: 1, source: "merged" },                     // 07-08
+        { job: "Iris", day: shift_day(now, -8), hours: 1.0, pauses: 0, source: "merged" },                       // 07-07
+        { job: "Juno", day: shift_day(now, -13), hours: 4.0, pauses: 3, source: "merged" },                      // 07-02 Last-14 start boundary
+        { job: "Wolf", day: shift_day(now, -14), hours: 8.0, pauses: 0, source: "merged" },                      // 07-01 outside Last-14
+        { job: "Vega", day: shift_day(now, -25), hours: 1.0, pauses: 0, source: "merged" },                      // 06-20 Last-3-months only
+    ];
+
+    let line = 0;
+    const events: FixtureEvent[] = [];
+
+    const push = (
+        event: string,
+        job: string,
+        job_id: string,
+        timestamp: number,
+        source: FilterFixtureSession["source"],
+        task = ""
+    ): void => {
+        line += 1;
+        events.push({
+            event,
+            job,
+            timestamp,
+            task,
+            id: `ff-${line}`,
+            job_id,
+            time_seed: timestamp,
+            global_line_index: source === "workspace" ? -1 : line,
+            workspace_line_index: source === "global" ? -1 : line,
+        });
+    };
+
+    for (const s of plan) {
+        const job_id = s.job.toLowerCase();
+        const base = new Date(`${s.day}T00:00:00`);
+        const start = at_local_time(base, 9, 0);
+        const active_ms = Math.round(s.hours * 3600_000);
+        const stop = start + active_ms;
+
+        push("start", s.job, job_id, start, s.source);
+        // Zero-length pause gaps: paused time is 0, so active duration == span.
+        for (let p = 0; p < s.pauses; p++) {
+            const at = start + 60_000 * (p + 1);
+            push("pause", s.job, job_id, at, s.source);
+            push("resume", s.job, job_id, at, s.source);
+        }
+        push("stop", s.job, job_id, stop, s.source, `${s.job} work`);
+    }
+
+    return {
+        payload: events.slice().sort((a, b) => b.timestamp - a.timestamp),
+        sessions: plan,
+        jobs: plan.map(s => s.job),
+        jobs_in_last_14: plan.filter(s => s.day >= shift_day(now, -13)).map(s => s.job),
+    };
+}
+
+/** Local-day string N days before `now` (N negative = past). */
+function shift_day(now: Date, delta_days: number): string {
+    const d = new Date(now);
+    d.setDate(now.getDate() + delta_days);
+    return local_day(d.getTime());
 }
