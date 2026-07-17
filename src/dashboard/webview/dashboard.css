@@ -405,14 +405,14 @@ h2, h3 {
 
 /* ---------- Narrow layout ---------- */
 
-/* Wide layout: full column titles */
+/* Wide layout: full column titles (Pause/Resume is always "P/R" + tooltip) */
 .th-short {
     display: none;
 }
 
-/* Narrow panel: abbreviate Duration and Pause/Resume so Job and Task
-   get the freed width */
-@media (max-width: 900px) {
+/* Abbreviate Duration well before the table gets cramped — a half-screen
+   panel on a large monitor should already get the short form */
+@media (max-width: 1200px) {
     .th-full {
         display: none;
     }
@@ -420,7 +420,10 @@ h2, h3 {
     .th-short {
         display: inline;
     }
+}
 
+/* Genuinely narrow panel: tighten cells, shrink the legend */
+@media (max-width: 900px) {
     #session_table th,
     #session_table td {
         padding: 6px 6px;

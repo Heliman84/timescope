@@ -435,14 +435,17 @@ test("empty result shows a prominent message in place of the pie chart", async (
     await expect(page.locator("#pie_chart")).toBeVisible();
 });
 
-test("narrow panels abbreviate the Duration and Pause/Resume headers", async ({ page }) => {
-    // Wide: full titles
-    await expect(page.locator("th[data-sort='duration'] .th-full")).toBeVisible();
-    await expect(page.locator("th[data-sort='pauses'] .th-short")).toBeHidden();
+test("Pause/Resume is always P/R with a tooltip; Duration abbreviates at half-screen widths", async ({ page }) => {
+    // Pause/Resume: permanent abbreviation with the full name in the tooltip
+    const pr_label = page.locator("th[data-sort='pauses'] .th-label");
+    await expect(pr_label).toHaveText("P/R");
+    await expect(pr_label).toHaveAttribute("title", "Pause/Resume");
 
-    // Narrow (half-screen-ish): abbreviations take over
-    await page.setViewportSize({ width: 700, height: 900 });
+    // Wide (default 1280px viewport): Duration shows its full title
+    await expect(page.locator("th[data-sort='duration'] .th-full")).toBeVisible();
+
+    // Half-screen-ish (≤1200px): Duration abbreviates
+    await page.setViewportSize({ width: 1100, height: 900 });
     await expect(page.locator("th[data-sort='duration'] .th-full")).toBeHidden();
     await expect(page.locator("th[data-sort='duration'] .th-short")).toBeVisible();
-    await expect(page.locator("th[data-sort='pauses'] .th-short")).toHaveText("P/R");
 });
