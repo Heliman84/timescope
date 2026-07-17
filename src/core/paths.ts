@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
+import { resolve_storage_dir } from "./resolve_storage_dir";
 
 export interface TimeScopePaths {
     global_jobs_path: string;
@@ -12,24 +13,24 @@ export interface TimeScopePaths {
 export function resolve_paths(context: vscode.ExtensionContext): TimeScopePaths {
     const config = vscode.workspace.getConfiguration("timescope");
 
-    // New folder-based setting
-    const customDir = config.get<string>("global_storage_dir", "").trim();
-
-    // If user picked a folder → use it
-    // Otherwise → use VS Code's global storage folder
-    const globalDir = customDir || context.globalStorageUri.fsPath;
+    // Folder-based setting. A relative value resolves against the first workspace
+    // folder; an absolute value is used as-is. If it can't be resolved (empty, or
+    // relative with no workspace open) → fall back to VS Code's global storage folder.
+    const custom_dir = config.get<string>("global_storage_dir", "");
+    const workspace_folder = vscode.workspace.workspaceFolders?.[0];
+    const resolved_dir = resolve_storage_dir(custom_dir, workspace_folder?.uri.fsPath);
+    const global_dir = resolved_dir ?? context.globalStorageUri.fsPath;
 
     // Ensure folder exists
-    if (!fs.existsSync(globalDir)) {
-        fs.mkdirSync(globalDir, { recursive: true });
+    if (!fs.existsSync(global_dir)) {
+        fs.mkdirSync(global_dir, { recursive: true });
     }
 
     // Canonical filenames inside the chosen folder
-    const global_jobs_path = path.join(globalDir, "jobs.json");
-    const global_log_path  = path.join(globalDir, "logs.jsonl");
+    const global_jobs_path = path.join(global_dir, "jobs.json");
+    const global_log_path  = path.join(global_dir, "logs.jsonl");
 
     // Workspace folder logic unchanged
-    const workspace_folder = vscode.workspace.workspaceFolders?.[0];
     let workspace_jobs_path: string | undefined = undefined;
     let workspace_log_path: string | undefined = undefined;
 
