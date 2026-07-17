@@ -259,6 +259,31 @@ h2, h3 {
     color-scheme: dark;
 }
 
+/* The job list scrolls inside the menu so the Clear button stays visible */
+#job_dropdown_list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.menu-clear {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 4px 8px;
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.menu-clear:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+}
+
 .dropdown-row {
     display: block;
     padding: 3px 4px;

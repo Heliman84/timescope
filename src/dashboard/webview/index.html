@@ -87,7 +87,10 @@
                         <span class="th-label">Job</span>
                         <details class="col-filter">
                             <summary id="job_filter_toggle" title="Filter by job"><svg class="funnel" viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M1 1h12L8.5 6.5V12l-3 1.5v-7z" fill="currentColor"/></svg></summary>
-                            <div class="col-filter-menu" id="job_dropdown_list"></div>
+                            <div class="col-filter-menu">
+                                <div id="job_dropdown_list"></div>
+                                <button type="button" class="menu-clear" id="job_filter_clear">Clear</button>
+                            </div>
                         </details>
                     </th>
                     <th class="sortable" data-sort="duration">
@@ -97,6 +100,7 @@
                             <div class="col-filter-menu range-menu">
                                 <label>Min <input type="number" id="dur_min" min="0" step="0.25" placeholder="hours"></label>
                                 <label>Max <input type="number" id="dur_max" min="0" step="0.25" placeholder="hours"></label>
+                                <button type="button" class="menu-clear" id="dur_filter_clear">Clear</button>
                             </div>
                         </details>
                     </th>
@@ -110,6 +114,7 @@
                             <div class="col-filter-menu range-menu">
                                 <label>Min <input type="number" id="pause_min" min="0" step="1" placeholder="count"></label>
                                 <label>Max <input type="number" id="pause_max" min="0" step="1" placeholder="count"></label>
+                                <button type="button" class="menu-clear" id="pause_filter_clear">Clear</button>
                             </div>
                         </details>
                     </th>

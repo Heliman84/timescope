@@ -114,8 +114,35 @@ function seed_from_real(realDir) {
     console.log("Press F5 — the dashboard shows your real tracking data in the isolated test storage.");
 }
 
+/**
+ * Where the user's real global store lives: the timescope.global_storage_dir
+ * setting when configured (read from the VS Code user settings.json), else
+ * the extension's default globalStorage folder.
+ */
 function default_real_dir() {
     const appdata = process.env.APPDATA || path.join(require("os").homedir(), "AppData", "Roaming");
+
+    const settingsPath = path.join(appdata, "Code", "User", "settings.json");
+    try {
+        const raw = fs.readFileSync(settingsPath, "utf8");
+        // settings.json is JSONC; pull just the one key rather than parsing it all
+        const m = raw.match(/"timescope\.global_storage_dir"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+        if (m) {
+            const configured = JSON.parse(`"${m[1]}"`);
+            if (configured.trim()) {
+                if (!path.isAbsolute(configured)) {
+                    console.error(`--from-real: timescope.global_storage_dir is relative ("${configured}") — it resolves against a workspace folder at runtime, which this script can't know.`);
+                    console.error("Pass the folder explicitly: npm run seed-testdata -- --from-real <dir>");
+                    process.exit(1);
+                }
+                console.log(`--from-real: using configured timescope.global_storage_dir`);
+                return configured;
+            }
+        }
+    } catch {
+        // no readable settings file → fall through to the default location
+    }
+
     return path.join(appdata, "Code", "User", "globalStorage", "davidclass.timescope");
 }
 

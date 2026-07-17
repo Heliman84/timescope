@@ -157,6 +157,31 @@ test("typing a partial range value does not filter until committed", async ({ pa
     await expect(page.locator("#dur_max")).toBeHidden(); // menu closed by Enter
 });
 
+test("each funnel menu's Clear button removes only that column's filter", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    // Constrain duration AND jobs
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("2");
+    await page.locator("#dur_min").press("Enter");
+    await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
+    await expect(page.locator("#dur_filter_toggle")).toHaveClass(/filter-active/);
+    await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
+
+    // Clearing duration leaves the job filter intact
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_filter_clear").click();
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
+    await expect(page.locator("#dur_min")).toBeHidden(); // menu closed
+
+    // Clearing jobs re-selects everything
+    await page.locator("#job_filter_toggle").click();
+    await page.locator("#job_filter_clear").click();
+    await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#job_all_checkbox")).toBeChecked();
+});
+
 test("only one funnel menu is open at a time and Escape closes it", async ({ page }) => {
     await page.locator("#job_filter_toggle").click();
     await expect(page.locator("#job_dropdown_list")).toBeVisible();

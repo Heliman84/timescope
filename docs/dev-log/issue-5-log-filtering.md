@@ -64,6 +64,8 @@ Verdict: snappy, functions well. Changes agreed and implemented:
 - **Legend hours**: each legend row shows "(N.Nh)" in muted grey; the All row carries the grand total. Totals respect the date/duration/pause filters but ignore the job selection itself — unchecking a job keeps its number visible (it tells you what re-checking brings back) and keeps it consistent with the "hide, don't re-derive" legend philosophy.
 - **"Last 4 Weeks" preset** added between Last 14 Days and This Month (today−27 → today).
 - **Seed generator follow-up paused** at David's request — no issue/branch action until he says otherwise.
+- **Per-column "Clear" buttons** added to each funnel menu ("Clear" over "Reset": more universal, and distinct from the global "Reset filters" — Clear = this column, Reset = everything). Clearing one column leaves the others intact and closes the menu.
+- **`--from-real` honors `timescope.global_storage_dir`**: the script now reads the VS Code user settings.json and uses the configured storage folder (falls back to default globalStorage; relative values error with instructions to pass the folder explicitly).
 
 
 ## Retrospective

@@ -564,6 +564,24 @@ function attach_filter_listeners() {
         });
     });
 
+    // Per-column Clear buttons: remove just that column's filter, close the menu
+    bind_once(document.getElementById("job_filter_clear"), "click", () => {
+        set_job_selection(all_job_names().slice());
+        close_all_filter_menus();
+    });
+    bind_once(document.getElementById("dur_filter_clear"), "click", () => {
+        set_number_input("dur_min", null);
+        set_number_input("dur_max", null);
+        on_range_change();
+        close_all_filter_menus();
+    });
+    bind_once(document.getElementById("pause_filter_clear"), "click", () => {
+        set_number_input("pause_min", null);
+        set_number_input("pause_max", null);
+        on_range_change();
+        close_all_filter_menus();
+    });
+
     // Sortable headers — clicks inside a funnel menu must not change the sort
     document.querySelectorAll("#session_table th.sortable").forEach(th => {
         bind_once(th, "click", (ev) => {
