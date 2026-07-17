@@ -41,7 +41,7 @@ function harness_html(): string {
     return html;
 }
 
-export async function open_dashboard(page: Page, payload: FixtureEvent[]): Promise<void> {
+export async function open_dashboard(page: Page, payload: FixtureEvent[], buildInfo?: string): Promise<void> {
     await page.route("https://timescope.test/**", (route) => {
         const url = route.request().url();
         if (url.endsWith("index.html")) {
@@ -75,7 +75,7 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[]): Promi
         })
     );
 
-    await page.addInitScript((fixturePayload: FixtureEvent[]) => {
+    await page.addInitScript(({ fixturePayload, fixtureBuildInfo }: { fixturePayload: FixtureEvent[]; fixtureBuildInfo?: string }) => {
         const w = window as any;
         w.__posted = [];
         w.__reply = (msg: unknown) => window.postMessage(msg, "*");
@@ -83,13 +83,13 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[]): Promi
             postMessage: (msg: { type?: string }) => {
                 w.__posted.push(msg);
                 if (msg && msg.type === "request_data") {
-                    setTimeout(() => window.postMessage({ type: "summary_data", payload: fixturePayload }, "*"), 0);
+                    setTimeout(() => window.postMessage({ type: "summary_data", payload: fixturePayload, build_info: fixtureBuildInfo }, "*"), 0);
                 }
             },
             getState: () => undefined,
             setState: () => undefined,
         });
-    }, payload);
+    }, { fixturePayload: payload, fixtureBuildInfo: buildInfo });
 
     await page.goto(DASHBOARD_URL);
     // Dashboard is ready once the job filter has rendered
