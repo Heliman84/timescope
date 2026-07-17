@@ -110,18 +110,43 @@ test("unchecking a legend job updates the table dropdown and charts", async ({ p
     expect(Object.keys(await pie_data(page))).not.toContain("Acme");
 });
 
-test("unchecking a dropdown job updates the legend and charts", async ({ page }) => {
-    await page.locator("#job_dropdown_summary").click(); // open the <details>
+test("unchecking a job in the column funnel menu updates the legend and charts", async ({ page }) => {
+    await page.locator("#job_filter_toggle").click(); // open the funnel menu
     await page.locator("#job_dropdown_list .dropdown-job-box[value='Beacon']").uncheck();
 
     await expect(page.locator("#job_legend .legend-job-box[value='Beacon']")).not.toBeChecked();
     expect(await table_jobs(page)).not.toContain("Beacon");
 });
 
-test("the dropdown summary reflects the selection count", async ({ page }) => {
-    await expect(page.locator("#job_dropdown_summary")).toHaveText("All jobs");
+test("funnels light up when their filter is actively limiting data", async ({ page }) => {
+    // Inactive by default
+    await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+
+    // Job filter active (driven from the legend — the synced surface)
     await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
-    await expect(page.locator("#job_dropdown_summary")).toHaveText(/jobs$/);
+    await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
+
+    // Duration filter active
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("2");
+    await expect(page.locator("#dur_filter_toggle")).toHaveClass(/filter-active/);
+
+    // Clearing the bound turns the funnel off again
+    await page.locator("#dur_min").fill("");
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+});
+
+test("only one funnel menu is open at a time and Escape closes it", async ({ page }) => {
+    await page.locator("#job_filter_toggle").click();
+    await expect(page.locator("#job_dropdown_list")).toBeVisible();
+
+    await page.locator("#dur_filter_toggle").click();
+    await expect(page.locator("#dur_min")).toBeVisible();
+    await expect(page.locator("#job_dropdown_list")).toBeHidden();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dur_min")).toBeHidden();
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -155,6 +180,7 @@ test("duration range filters inclusively and recalculates charts", async ({ page
 
     // Sessions with duration between 2h and 4h inclusive:
     // Beacon 2h, Cobalt 3h, Juno 4h (Acme/Delta/... 1h excluded, Wolf 8h excluded)
+    await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("2");
     await page.locator("#dur_max").fill("4");
 
@@ -169,6 +195,7 @@ test("duration range filters inclusively and recalculates charts", async ({ page
 
 test("an empty duration bound is unbounded", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
+    await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("4"); // max left empty
 
     // 4h and up: Juno 4h, Wolf 8h (debounced — poll)
@@ -183,6 +210,7 @@ test("pause range filters inclusively", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
 
     // Pause pairs: Acme 0, Beacon 1, Harbor 1, Cobalt 2, Juno 3
+    await page.locator("#pause_filter_toggle").click();
     await page.locator("#pause_min").fill("1");
     await page.locator("#pause_max").fill("2");
 
@@ -203,14 +231,15 @@ test("clicking a column header sorts and toggles direction", async ({ page }) =>
     expect(jobs[0]).toBe("Acme");
     expect(jobs[jobs.length - 1]).toBe("Vega"); // 06-20, oldest
 
-    // First click on a new column sorts descending (reverse alphabetical)
-    await page.locator("#session_table th[data-sort='job']").click();
+    // First click on a new column sorts descending (reverse alphabetical).
+    // Click the label — the header also hosts the funnel toggle.
+    await page.locator("#session_table th[data-sort='job'] .th-label").click();
     jobs = await table_jobs(page);
     expect(jobs).toEqual([...jobs].sort((a, b) => b.localeCompare(a)));
     await expect(page.locator("#session_table th[data-sort='job']")).toHaveClass(/sort-desc/);
 
     // Second click toggles to ascending
-    await page.locator("#session_table th[data-sort='job']").click();
+    await page.locator("#session_table th[data-sort='job'] .th-label").click();
     jobs = await table_jobs(page);
     expect(jobs).toEqual([...jobs].sort((a, b) => a.localeCompare(b)));
     await expect(page.locator("#session_table th[data-sort='job']")).toHaveClass(/sort-asc/);
@@ -218,7 +247,7 @@ test("clicking a column header sorts and toggles direction", async ({ page }) =>
 
 test("sorting by duration orders by active hours", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
-    await page.locator("#session_table th[data-sort='duration']").click(); // desc
+    await page.locator("#session_table th[data-sort='duration'] .th-label").click(); // desc
 
     const jobs = await table_jobs(page);
     // Longest first: Wolf 8h, then Juno 4h, then Cobalt 3h
@@ -234,6 +263,7 @@ test("empty state appears when no sessions match and hides when they do", async 
 
     // A window with no sessions
     await page.selectOption("#preset_range", "all");
+    await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("100");
 
     await expect(page.locator("#empty_state")).toBeVisible();
@@ -281,15 +311,19 @@ test("job and task names with HTML metacharacters render as text and stay filter
 
 test("reset restores every filter to its default", async ({ page }) => {
     await page.selectOption("#preset_range", "all");
+    await page.locator("#dur_filter_toggle").click();
     await page.locator("#dur_min").fill("2");
+    await page.locator("#pause_filter_toggle").click();
     await page.locator("#pause_max").fill("1");
     await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
 
     await page.click("#clear_filters_btn");
 
     await expect(page.locator("#preset_range")).toHaveValue("last_14");
-    await expect(page.locator("#dur_min")).toHaveValue("");
-    await expect(page.locator("#pause_max")).toHaveValue("");
     await expect(page.locator("#job_all_checkbox")).toBeChecked();
+    // Funnel indicators are all off again
+    await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#pause_filter_toggle")).not.toHaveClass(/filter-active/);
     expect((await table_jobs(page)).sort()).toEqual(ff.jobs_in_last_14.slice().sort());
 });

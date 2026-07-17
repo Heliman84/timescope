@@ -181,6 +181,27 @@ test("edit_result errors keep the modal open; success closes it", async ({ page 
     await expect(alpha_row.locator("td").nth(2)).toHaveText("2.25h");
 });
 
+test("edit modal: Escape cancels, Enter saves", async ({ page }) => {
+    const open_modal = () =>
+        page
+            .locator("#session_table_body tr", { hasText: "morning work" })
+            .locator("button.session-edit-btn")
+            .click();
+
+    // Escape closes without saving
+    await open_modal();
+    await expect(page.locator("#session_edit_modal")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#session_edit_modal")).toBeHidden();
+
+    // Enter acts as Save (no edits → modal just closes, nothing posted)
+    await open_modal();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#session_edit_modal")).toBeHidden();
+    const posted = await posted_messages(page);
+    expect(posted.find((m) => m.type === "edit_log_entries")).toBeUndefined();
+});
+
 test("highlighting marks matching session rows", async ({ page }) => {
     await page.evaluate((day) => (window as any).highlight_session_rows("Alpha", day), fx.today);
     const highlighted = page.locator("#session_table_body tr.session-highlighted");

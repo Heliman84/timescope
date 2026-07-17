@@ -423,19 +423,38 @@ function render_job_legend() {
 
 function render_job_dropdown() {
     render_job_picker(JOB_PICKER_SURFACES[1]);
-    update_dropdown_summary();
+    render_filter_indicators();
 }
 
-function update_dropdown_summary() {
-    const summary = document.getElementById("job_dropdown_summary");
-    if (!summary) return;
+/**
+ * Light up each column's funnel when its filter is actively limiting data,
+ * and carry the detail in the tooltip.
+ */
+function render_filter_indicators() {
     const jobs = all_job_names();
     const selected = selected_job_set();
-    const count = jobs.filter(j => selected.has(j)).length;
-    if (count === jobs.length) summary.textContent = "All jobs";
-    else if (count === 0) summary.textContent = "No jobs";
-    else if (count === 1) summary.textContent = jobs.find(j => selected.has(j));
-    else summary.textContent = `${count} jobs`;
+    const job_active = filter_state.jobs !== null && selected.size < jobs.length;
+    set_funnel_state("job_filter_toggle", job_active,
+        job_active ? `Filtering: ${selected.size} of ${jobs.length} jobs` : "Filter by job");
+
+    const dur_active = filter_state.duration_min_h !== null || filter_state.duration_max_h !== null;
+    set_funnel_state("dur_filter_toggle", dur_active,
+        dur_active ? "Duration filter active" : "Filter by duration");
+
+    const pause_active = filter_state.pauses_min !== null || filter_state.pauses_max !== null;
+    set_funnel_state("pause_filter_toggle", pause_active,
+        pause_active ? "Pause filter active" : "Filter by pause count");
+}
+
+function set_funnel_state(id, active, tooltip) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.toggle("filter-active", active);
+    el.title = tooltip;
+}
+
+function close_all_filter_menus() {
+    document.querySelectorAll("details.col-filter[open]").forEach(d => { d.open = false; });
 }
 
 /**
@@ -510,11 +529,56 @@ function attach_filter_listeners() {
         });
     });
 
-    // Sortable headers
+    // Sortable headers — clicks inside a funnel menu must not change the sort
     document.querySelectorAll("#session_table th.sortable").forEach(th => {
-        bind_once(th, "click", () => on_sort_click(th.dataset.sort));
+        bind_once(th, "click", (ev) => {
+            if (ev.target.closest("details.col-filter")) return;
+            on_sort_click(th.dataset.sort);
+        });
     });
+
+    // Column filter menus: one open at a time
+    document.querySelectorAll("details.col-filter").forEach(d => {
+        bind_once(d, "toggle", () => {
+            if (d.open) {
+                document.querySelectorAll("details.col-filter[open]").forEach(other => {
+                    if (other !== d) other.open = false;
+                });
+            }
+        });
+    });
+
+    // Document-level bindings (guarded — attach_filter_listeners can re-run)
+    if (!document_listeners_bound) {
+        document_listeners_bound = true;
+
+        // Click outside any open funnel menu closes it
+        document.addEventListener("click", (ev) => {
+            if (!ev.target.closest("details.col-filter")) close_all_filter_menus();
+        });
+
+        // Keyboard: in the edit modal Enter saves / Escape cancels;
+        // elsewhere Escape closes any open funnel menu
+        document.addEventListener("keydown", (ev) => {
+            const modal = document.getElementById("session_edit_modal");
+            const modal_open = modal && modal.style.display !== "none";
+            if (modal_open) {
+                if (ev.key === "Enter") {
+                    ev.preventDefault();
+                    const save = document.getElementById("session_edit_save");
+                    if (save && !save.disabled) save.click();
+                } else if (ev.key === "Escape") {
+                    ev.preventDefault();
+                    close_session_modal();
+                }
+                return;
+            }
+            if (ev.key === "Escape") close_all_filter_menus();
+        });
+    }
 }
+
+let document_listeners_bound = false;
 
 function bind_once(el, evt, handler) {
     if (el && !el.dataset.bound) {
@@ -568,6 +632,7 @@ function on_range_change() {
     filter_state.duration_max_h = read_number_input("dur_max");
     filter_state.pauses_min = read_number_input("pause_min");
     filter_state.pauses_max = read_number_input("pause_max");
+    render_filter_indicators();
     apply_and_render();
 }
 

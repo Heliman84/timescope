@@ -47,6 +47,17 @@ The summary view's filter sidebar is weak: the date preset defaults to "Today" b
 
 - **Code review (8-angle, high effort) findings fixed:** HTML/attribute injection via unescaped job/task names in the new innerHTML surfaces (plus the pre-existing edit-modal case) — fixed with an `escape_html` helper and locked in by a hostile-job-name Playwright test; range inputs debounced 150ms (chart teardown per keystroke); legend/dropdown render + change handlers unified into one parameterized job-picker (two angles flagged sync-drift risk); edit buttons moved to a delegated listener; job list cached per payload; chart chrome tokens now read from the CSS custom properties. Waived (queued for review): day-total label rides the alphabetically-last dataset; webview session math duplicates `core/session.ts` (pre-existing, needs its own issue); fixture/test constants deliberately mirrored across the two test trees.
 
+## F5 evaluation round 1 (2026-07-17)
+
+Verdict: snappy, functions well. Changes agreed and implemented:
+
+- **Column-header filter UX (Option 1, Excel/AG-Grid style)** chosen over a Sheets-style header menu — keeps sort one-click. Each sortable header shows a dimmed ↕ hint (accent ▲/▼ when active); Job/Duration/Pause-Resume get a funnel opening a per-column menu (job checkboxes, min/max ranges). Funnel renders in accent when its filter limits data. The separate filter row above the table was removed; global date bar and legend unchanged. One menu open at a time; click-outside and Escape close.
+- **Edit modal keyboard**: Enter = Save, Escape = Cancel.
+- **"Raw Sessions" → "Session Log"** (picked over Sessions / Work Log / Session History).
+- **Seed generator**: history extended to ~6 months (sparser with age) so wide presets have data; new `--from-real [dir]` mode copies the real global store into the isolated test storage (source untouched, workspace store cleared).
+- **Palette**: David dislikes the hues; deliberately deferred — revisit with him before changing (it stays for its accessibility properties meanwhile).
+
+
 ## Retrospective
 
 _To be finalized at PR time._
