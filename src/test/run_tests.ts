@@ -9,6 +9,7 @@ import { run_job_domain_tests } from "./test_job";
 import { run_job_collection_tests } from "./test_job_collection";
 import { run_build_info_tests } from "./test_build_info";
 import { run_resolve_storage_dir_tests } from "./test_paths";
+import { run_filter_state_tests } from "./test_filter_state";
 
 async function main() {
     try {
@@ -35,6 +36,7 @@ async function main() {
         run_dashboard_editRoundTrip_tests();
         run_build_info_tests();
         run_resolve_storage_dir_tests();
+        run_filter_state_tests();
         console.log("All tests passed.");
         process.exit(0);
     } catch (err) {

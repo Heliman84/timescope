@@ -378,6 +378,7 @@ sequenceDiagram
 ```
 
 - `dashboard_utils.ts` exports two pure functions: `buildPayload()` (timestamp-descending DTO array) and `filterRelevantErrors()` (scopes validation errors to the edited events).
+- `filter_state.js` (webview) holds the pure filter/sort logic behind the summary view: one filter-state object (date range, jobs, duration/pause ranges, source, sort) that `dashboard.js` renders from. Date presets resolve into explicit `start_day`/`end_day` bounds; `source` (merged/global/workspace) is wired through the filter model as the seam for issue #3, with no UI yet. Loaded as a plain `<script>` in the webview and `require()`d directly by the pure-Node test suite (`src/test/test_filter_state.ts`).
 - `build_info.ts` exports `load_build_info()` (reads `out/buildinfo.json`, `null` if missing/malformed) and formatters `format_status_bar_suffix()` / `format_build_info_full()` (the latter composed from the former). `Runtime` loads it once at construction; the status-bar tooltip, dashboard footer, and the Show Build Info command all render it, with a "no build info" fallback.
 - The controller routes all data access through `Runtime` — never directly to `EventRepository`.
 - `edit_log_entries` (batch edit) follows the same pattern per-edit, with per-item error accumulation.

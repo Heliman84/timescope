@@ -18,7 +18,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { Page } from "@playwright/test";
 
-import { FixtureEvent } from "./fixtures";
+import { FixtureEvent, FIXED_NOW } from "./fixtures";
 
 const WEBVIEW_DIR = path.resolve(__dirname, "../../src/dashboard/webview");
 const VENDOR_DIR = path.resolve(__dirname, "vendor");
@@ -37,6 +37,7 @@ function harness_html(): string {
     html = html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*>/, "");
     html = html.replace(/\$\{cssUri\}/g, "dashboard.css");
     html = html.replace(/\$\{jsUri\}/g, "dashboard.js");
+    html = html.replace(/\$\{filterStateUri\}/g, "filter_state.js");
     html = html.replace(/ nonce="\$\{nonce\}"/g, "");
     return html;
 }
@@ -51,6 +52,12 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[], buildI
             return route.fulfill({
                 contentType: "text/javascript",
                 body: fs.readFileSync(path.join(WEBVIEW_DIR, "dashboard.js"), "utf8"),
+            });
+        }
+        if (url.endsWith("filter_state.js")) {
+            return route.fulfill({
+                contentType: "text/javascript",
+                body: fs.readFileSync(path.join(WEBVIEW_DIR, "filter_state.js"), "utf8"),
             });
         }
         if (url.endsWith("dashboard.css")) {
@@ -77,6 +84,20 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[], buildI
 
     await page.addInitScript(({ fixturePayload, fixtureBuildInfo }: { fixturePayload: FixtureEvent[]; fixtureBuildInfo?: string }) => {
         const w = window as any;
+
+        // Disable Chart.js animations the moment the CDN script assigns the
+        // global — geometry is final immediately, so pixel-level interaction
+        // tests (bar clicks) are deterministic instead of racing the tween.
+        let chart_global: any;
+        Object.defineProperty(w, "Chart", {
+            configurable: true,
+            get() { return chart_global; },
+            set(v) {
+                chart_global = v;
+                if (v && v.defaults) v.defaults.animation = false;
+            },
+        });
+
         w.__posted = [];
         w.__reply = (msg: unknown) => window.postMessage(msg, "*");
         w.acquireVsCodeApi = () => ({
@@ -91,8 +112,12 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[], buildI
         });
     }, { fixturePayload: payload, fixtureBuildInfo: buildInfo });
 
+    // Freeze the page clock to the same instant the fixtures are built around,
+    // so relative date presets resolve deterministically (no midnight flake).
+    await page.clock.setFixedTime(FIXED_NOW);
+
     await page.goto(DASHBOARD_URL);
-    // Dashboard is ready once the job filter has rendered
+    // Dashboard is ready once the job filter legend has rendered
     await page.waitForSelector("#job_all_checkbox");
 }
 

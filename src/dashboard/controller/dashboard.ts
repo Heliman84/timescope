@@ -31,6 +31,9 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
     const js_uri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(context.extensionUri, "out", "dashboard", "webview", "dashboard.js")
     );
+    const filter_state_uri = panel.webview.asWebviewUri(
+        vscode.Uri.joinPath(context.extensionUri, "out", "dashboard", "webview", "filter_state.js")
+    );
     const css_uri = panel.webview.asWebviewUri(
         vscode.Uri.joinPath(context.extensionUri, "out", "dashboard", "webview", "dashboard.css")
     );
@@ -38,6 +41,7 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
     html = html
         .replace(/\${nonce}/g, nonce)
         .replace(/\${jsUri}/g, js_uri.toString())
+        .replace(/\${filterStateUri}/g, filter_state_uri.toString())
         .replace(/\${cssUri}/g, css_uri.toString())
         .replace(/\${cspSource}/g, panel.webview.cspSource);
 

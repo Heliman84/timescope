@@ -5,6 +5,7 @@ One line per merged PR, added at PR time under **Unreleased**. At release, entri
 
 ## Unreleased
 
+- Summary view redesign: sidebar replaced by integrated filtering — date presets (default Last 14 Days, now actually applied) with native start/end date pickers, a checkbox job legend synced with a table job dropdown, inclusive duration and pause/resume range filters, sortable columns, an explicit empty state, and a validated colorblind-safe chart palette; all filters drive the charts and table together (#5)
 - `npm run seed-testdata`: also seeds a workspace-local `.timescope/` store (last week of global events re-emitted with identical IDs + a few unique events under a "Local Client" job) so F5 exercises the cross-file dedup/merge path (#39)
 - `timescope.global_storage_dir`: a relative value now resolves against the first workspace folder (absolute values unchanged), so the isolated F5 test-storage setting is portable across clones and machines (#33)
 - Dev logs: each feature branch keeps a short decision log in `docs/dev-log/` (started at plan time, finalized as a retrospective at PR time) — captures the *why* behind a change, not a spec (#36)

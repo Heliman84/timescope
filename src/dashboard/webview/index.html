@@ -19,65 +19,115 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels" nonce="${nonce}"></script>
 
 <link rel="stylesheet" href="${cssUri}">
+<script nonce="${nonce}" src="${filterStateUri}"></script>
 <script nonce="${nonce}" src="${jsUri}"></script>
 
 </head>
 
 <body>
-<div id="sidebar">
-    <h3>Filters</h3>
 
-    <div class="section">
-        <label>Date Range</label>
+<header id="dashboard_header">
+    <h2>Summary Dashboard</h2>
+    <div id="build_info_footer" class="build-info"></div>
+</header>
+
+<!-- Global date filter: applies to every chart and the table -->
+<div id="date_bar">
+    <div class="date-field">
+        <label for="preset_range">Date</label>
         <select id="preset_range">
             <option value="today">Today</option>
             <option value="this_week">This Week</option>
             <option value="last_7">Last 7 Days</option>
+            <option value="last_14">Last 14 Days</option>
+            <option value="last_4_weeks">Last 4 Weeks</option>
             <option value="this_month">This Month</option>
             <option value="last_3_months">Last 3 Months</option>
-            <option value="custom">Custom Range…</option>
+            <option value="last_year">Last Year</option>
+            <option value="all">All</option>
+            <option value="custom">Custom…</option>
         </select>
     </div>
-
-    <div class="section">
-        <label>Jobs</label>
-        <div id="job_filter_container"></div>
+    <div class="date-field">
+        <label for="start_date">Start</label>
+        <input type="date" id="start_date">
     </div>
-
-    <button id="clear_filters_btn" class="sidebar-button">Clear Filters</button>
-
-    <div id="build_info_footer" class="build-info-footer"></div>
+    <div class="date-field">
+        <label for="end_date">End</label>
+        <input type="date" id="end_date">
+    </div>
+    <button id="clear_filters_btn" class="reset-button">Reset filters</button>
 </div>
 
 <div id="main">
-    <h2>Summary Dashboard</h2>
 
-    <div class="chart-container">
-        <h3>Time per Job (Pie Chart)</h3>
-        <canvas id="pie_chart"></canvas>
+    <div class="chart-container pie-section">
+        <h3>Time per Job</h3>
+        <div class="pie-layout">
+            <div id="job_legend" class="job-legend"></div>
+            <div class="pie-canvas-wrap">
+                <div id="pie_empty" class="pie-empty" style="display:none;">
+                    No data in the selected date range or filters
+                    <span class="pie-empty-hint">The date range may be too narrow — try a wider preset or clear the filters.</span>
+                </div>
+                <canvas id="pie_chart"></canvas>
+            </div>
+        </div>
     </div>
 
     <div class="chart-container">
-        <h3>Time per Job per Day (Stacked Bar)</h3>
+        <h3>Time per Job per Day</h3>
         <canvas id="stacked_bar_chart"></canvas>
     </div>
 
     <div class="chart-container">
-        <h3>Raw Sessions</h3>
+        <h3>Session Log</h3>
+
         <table id="session_table">
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Job</th>
-                    <th>Duration</th>
-                    <th>Task</th>
-                    <th>Start</th>
-                    <th>Stop</th>
-                    <th>Pause/Resume</th>
-                    <th>Edit</th>
+                    <th class="sortable" data-sort="date"><span class="th-label">Date</span></th>
+                    <th class="sortable" data-sort="job">
+                        <span class="th-label">Job</span>
+                        <details class="col-filter">
+                            <summary id="job_filter_toggle" title="Filter by job"><svg class="funnel" viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M1 1h12L8.5 6.5V12l-3 1.5v-7z" fill="currentColor"/></svg></summary>
+                            <div class="col-filter-menu">
+                                <div id="job_dropdown_list"></div>
+                                <button type="button" class="menu-clear" id="job_filter_clear">Clear</button>
+                            </div>
+                        </details>
+                    </th>
+                    <th class="sortable" data-sort="duration">
+                        <span class="th-label"><span class="th-full">Duration</span><span class="th-short">Dur.</span></span>
+                        <details class="col-filter">
+                            <summary id="dur_filter_toggle" title="Filter by duration"><svg class="funnel" viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M1 1h12L8.5 6.5V12l-3 1.5v-7z" fill="currentColor"/></svg></summary>
+                            <div class="col-filter-menu range-menu">
+                                <label>Min <input type="number" id="dur_min" min="0" step="0.25" placeholder="hours"></label>
+                                <label>Max <input type="number" id="dur_max" min="0" step="0.25" placeholder="hours"></label>
+                                <button type="button" class="menu-clear" id="dur_filter_clear">Clear</button>
+                            </div>
+                        </details>
+                    </th>
+                    <th><span class="th-label">Task</span></th>
+                    <th class="sortable" data-sort="start"><span class="th-label">Start</span></th>
+                    <th class="sortable" data-sort="stop"><span class="th-label">Stop</span></th>
+                    <th class="sortable" data-sort="pauses">
+                        <span class="th-label" title="Pause/Resume">P/R</span>
+                        <details class="col-filter">
+                            <summary id="pause_filter_toggle" title="Filter by pause count"><svg class="funnel" viewBox="0 0 14 14" width="12" height="12" aria-hidden="true"><path d="M1 1h12L8.5 6.5V12l-3 1.5v-7z" fill="currentColor"/></svg></summary>
+                            <div class="col-filter-menu range-menu">
+                                <label>Min <input type="number" id="pause_min" min="0" step="1" placeholder="count"></label>
+                                <label>Max <input type="number" id="pause_max" min="0" step="1" placeholder="count"></label>
+                                <button type="button" class="menu-clear" id="pause_filter_clear">Clear</button>
+                            </div>
+                        </details>
+                    </th>
+                    <th><span class="th-label">Edit</span></th>
                 </tr>
+            </thead>
             <tbody id="session_table_body"></tbody>
         </table>
+        <div id="empty_state" class="empty-state" style="display:none;">No sessions match the current filters</div>
     </div>
 
 

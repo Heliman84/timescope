@@ -1,59 +1,114 @@
 
+/* Chrome & ink tokens (dark surface). Chart-side copies of the ink/surface
+   values live in dashboard.js as CHART_* constants — keep them in sync. */
+:root {
+    --surface: #1e1e1e;
+    --surface-raised: #242424;
+    --ink-primary: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --ink-muted: #898781;
+    --hairline: rgba(255, 255, 255, 0.10);
+    --gridline: #2c2c2a;
+    --accent: #3987e5;
+    --accent-wash: rgba(57, 135, 229, 0.16);
+}
+
 body {
     margin: 0;
     padding: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink-secondary);
+    background: var(--surface);
+}
+
+h2, h3 {
+    color: var(--ink-primary);
+    font-weight: 600;
+}
+
+/* ---------- Header ---------- */
+
+#dashboard_header {
     display: flex;
-    font-family: sans-serif;
-    height: 100vh;
-    overflow: hidden;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--hairline);
 }
 
-#sidebar {
-    width: 260px;
-    background: #1e1e1e;
-    color: #ddd;
-    padding: 16px;
-    overflow-y: auto;
-    border-right: 1px solid #333;
+#dashboard_header h2 {
+    margin: 0;
 }
 
-.sidebar-button {
-    width: 100%;
-    padding: 8px 12px;
-    margin-top: 12px;
-    background: #444;
-    color: #fff;
-    border: 1px solid #666;
+.build-info {
+    color: var(--ink-muted);
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+/* ---------- Date bar ---------- */
+
+#date_bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--hairline);
+    background: var(--surface-raised);
+}
+
+.date-field,
+.filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+}
+
+.date-field label,
+.filter-field label {
+    color: var(--ink-muted);
+}
+
+#date_bar select,
+#date_bar input,
+#session_filter_row input {
+    background: var(--surface);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-family: inherit;
+    color-scheme: dark;
+}
+
+.reset-button {
+    padding: 6px 14px;
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
     border-radius: 4px;
     cursor: pointer;
-    text-align: left;
+    font-family: inherit;
+    margin-left: auto;
 }
 
-.sidebar-button:hover {
-    background: #555;
+.reset-button:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+    border-color: var(--accent);
 }
 
-.build-info-footer {
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid #333;
-    color: #888;
-    font-size: 11px;
-}
+/* ---------- Main ---------- */
 
 #main {
-    flex: 1;
     padding: 16px;
-    overflow-y: auto;
-}
-
-.section {
-    margin-bottom: 24px;
 }
 
 .chart-container {
     margin-bottom: 40px;
-    max-height: 400px;
 }
 
 #pie_chart,
@@ -61,25 +116,395 @@ body {
     max-height: 350px;
 }
 
+/* ---------- Pie section: legend + canvas ---------- */
+
+.pie-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+}
+
+.job-legend {
+    flex: 0 0 300px;
+    max-height: 350px;
+    overflow-y: auto;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 8px;
+    background: var(--surface-raised);
+}
+
+.legend-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink-primary);
+}
+
+.legend-row:hover {
+    background: var(--accent-wash);
+}
+
+.legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    flex: 0 0 auto;
+    border: 1px solid var(--hairline);
+}
+
+.legend-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.legend-hours {
+    color: var(--ink-muted);
+    font-weight: 400;
+    font-size: 13px;
+    white-space: nowrap;
+}
+
+.legend-all {
+    border-bottom: 1px solid var(--hairline);
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+    border-radius: 4px 4px 0 0;
+}
+
+.pie-canvas-wrap {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-height: 350px;
+}
+
+/* Prominent no-data message shown in place of the pie chart */
+.pie-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 220px;
+    border: 1px dashed var(--hairline);
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink-primary);
+    text-align: center;
+    padding: 16px;
+}
+
+.pie-empty-hint {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ink-muted);
+}
+
+/* ---------- Column filter menus (funnel in the header) ---------- */
+
+.col-filter {
+    display: inline-block;
+    position: relative;
+    vertical-align: middle;
+    margin-left: 6px;
+}
+
+.col-filter summary {
+    list-style: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    color: var(--ink-muted);
+}
+
+.col-filter summary::-webkit-details-marker {
+    display: none;
+}
+
+.col-filter summary:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+}
+
+/* Funnel lights up when its filter is actively limiting data */
+.col-filter summary.filter-active {
+    color: var(--accent);
+}
+
+.col-filter-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 10;
+    margin-top: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 8px;
+    min-width: 170px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+    font-size: 13px;
+    color: var(--ink-secondary);
+}
+
+.range-menu label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 3px 0;
+}
+
+.range-menu input[type="number"] {
+    width: 72px;
+    background: var(--surface);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-family: inherit;
+    color-scheme: dark;
+}
+
+/* The job list scrolls inside the menu so the Clear button stays visible */
+#job_dropdown_list {
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.menu-clear {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 4px 8px;
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+}
+
+.menu-clear:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+}
+
+.dropdown-row {
+    display: block;
+    padding: 3px 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    border-radius: 3px;
+    color: var(--ink-primary);
+}
+
+.dropdown-row:hover {
+    background: var(--accent-wash);
+}
+
+/* ---------- Session table ---------- */
+
 #session_table {
     width: 100%;
     border-collapse: collapse;
 }
 
-#session_table th, #session_table td {
-    border: 1px solid #444;
-    padding: 6px 8px;
+#session_table th,
+#session_table td {
+    border-bottom: 1px solid var(--hairline);
+    padding: 6px 10px;
+    text-align: left;
 }
 
-/* Highlighted session row when filtering by chart click */
-.session-highlighted td {
-    background: #fff3bf; /* light yellow */
-    color: #000; /* dark text for contrast */
+#session_table th {
+    color: var(--ink-muted);
+    font-size: 12px;
     font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid var(--gridline);
+}
+
+#session_table td {
+    font-variant-numeric: tabular-nums;
+}
+
+#session_table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+#session_table th.sortable {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    position: relative;
+    overflow: visible;
+}
+
+#session_table th.sortable:hover .th-label {
+    color: var(--ink-primary);
+}
+
+/* Sortable columns always show a (dimmed) direction hint; the active sort
+   column shows its direction in the accent color */
+#session_table th.sortable .th-label::after {
+    content: " ↕";
+    opacity: 0.35;
+}
+
+#session_table th.sort-asc .th-label::after {
+    content: " ▲";
+    opacity: 1;
+    color: var(--accent);
+}
+
+#session_table th.sort-desc .th-label::after {
+    content: " ▼";
+    opacity: 1;
+    color: var(--accent);
+}
+
+#session_table button.session-edit-btn {
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 2px 10px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+#session_table button.session-edit-btn:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+}
+
+.empty-state {
+    padding: 24px;
+    text-align: center;
+    color: var(--ink-muted);
+}
+
+/* ---------- Narrow layout ---------- */
+
+/* Wide layout: full column titles (Pause/Resume is always "P/R" + tooltip) */
+.th-short {
+    display: none;
+}
+
+/* Abbreviate Duration well before the table gets cramped — a half-screen
+   panel on a large monitor should already get the short form */
+@media (max-width: 1200px) {
+    .th-full {
+        display: none;
+    }
+
+    .th-short {
+        display: inline;
+    }
+}
+
+/* Genuinely narrow panel: tighten cells, shrink the legend */
+@media (max-width: 900px) {
+    #session_table th,
+    #session_table td {
+        padding: 6px 6px;
+    }
+
+    .job-legend {
+        flex: 0 0 240px;
+    }
+}
+
+/* Highlighted session row when clicking a bar segment: accent wash instead
+   of the old light-yellow block, which glared on the dark surface */
+.session-highlighted td {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
+    font-weight: 600;
+    border-color: var(--accent);
     transition: background 0.2s ease-in-out;
 }
 
-/* Slightly darker border to improve readability on highlight */
-.session-highlighted td {
-    border-color: #e0c263;
+/* ---------- Edit modal ---------- */
+
+.modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+}
+
+.modal-content {
+    background: var(--surface-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 20px;
+    max-width: 640px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.session-event-row {
+    display: grid;
+    grid-template-columns: 80px 1fr 1fr;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.session-event-row input {
+    background: var(--surface);
+    color: var(--ink-primary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    padding: 4px 6px;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    color-scheme: dark;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.modal-actions button {
+    padding: 6px 16px;
+    background: transparent;
+    color: var(--ink-secondary);
+    border: 1px solid var(--hairline);
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.modal-actions button:hover {
+    background: var(--accent-wash);
+    color: var(--ink-primary);
 }

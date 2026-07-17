@@ -1,0 +1,504 @@
+import { test, expect, Page } from "@playwright/test";
+
+import { build_filter_fixture, FilterFixtureData, FixtureEvent, FIXED_NOW } from "./fixtures";
+import { open_dashboard } from "./harness";
+
+// The 12-job filter fixture (see build_filter_fixture). Time is frozen at
+// FIXED_NOW = 2026-07-15; the harness pins the page clock to the same instant.
+
+let ff: FilterFixtureData;
+
+test.beforeEach(async ({ page }) => {
+    ff = build_filter_fixture();
+    await open_dashboard(page, ff.payload);
+});
+
+/** Job names currently rendered in the sessions table, in row order. */
+async function table_jobs(page: Page): Promise<string[]> {
+    return page.locator("#session_table_body tr td:nth-child(2)").allTextContents();
+}
+
+/** The pie chart's current job → hours map, read from the live Chart.js instance. */
+async function pie_data(page: Page): Promise<Record<string, number>> {
+    return page.evaluate(() => {
+        const chart = (window as any).Chart.getChart("pie_chart");
+        const out: Record<string, number> = {};
+        chart.data.labels.forEach((label: string, i: number) => { out[label] = chart.data.datasets[0].data[i]; });
+        return out;
+    });
+}
+
+/** The pie chart's job → colour map, read from the live Chart.js instance. */
+async function pie_colors(page: Page): Promise<Record<string, string>> {
+    return page.evaluate(() => {
+        const chart = (window as any).Chart.getChart("pie_chart");
+        const out: Record<string, string> = {};
+        chart.data.labels.forEach((label: string, i: number) => { out[label] = chart.data.datasets[0].backgroundColor[i]; });
+        return out;
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Default preset applied on load
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("default Last 4 Weeks preset is applied on load across table and charts", async ({ page }) => {
+    await expect(page.locator("#preset_range")).toHaveValue("last_4_weeks");
+
+    // Start/end inputs are populated with the resolved default range
+    await expect(page.locator("#start_date")).toHaveValue("2026-06-18");
+    await expect(page.locator("#end_date")).toHaveValue("2026-07-15");
+
+    // Eleven of the twelve jobs fall inside the window (Wolf sits exactly on
+    // the start boundary); only Vega is excluded
+    const jobs = await table_jobs(page);
+    expect(jobs.sort()).toEqual(ff.jobs_in_default_range.slice().sort());
+    expect(jobs).toContain("Wolf");
+    expect(jobs).not.toContain("Vega");
+
+    // Charts agree with the table
+    const pie = await pie_data(page);
+    expect(Object.keys(pie).sort()).toEqual(ff.jobs_in_default_range.slice().sort());
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Preset ↔ date field interaction
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("selecting a preset fills the start/end date fields", async ({ page }) => {
+    await page.selectOption("#preset_range", "this_month");
+    await expect(page.locator("#start_date")).toHaveValue("2026-07-01");
+    await expect(page.locator("#end_date")).toHaveValue("2026-07-15");
+
+    await page.selectOption("#preset_range", "all");
+    await expect(page.locator("#start_date")).toHaveValue("");
+    await expect(page.locator("#end_date")).toHaveValue("");
+});
+
+test("editing a date field flips the preset to Custom", async ({ page }) => {
+    await page.locator("#start_date").fill("2026-07-05");
+    await page.locator("#start_date").blur();
+    await expect(page.locator("#preset_range")).toHaveValue("custom");
+});
+
+test("first date entered fills both start and end (single-day rule)", async ({ page }) => {
+    // Clear both by choosing "all", then enter a single start date
+    await page.selectOption("#preset_range", "all");
+    await page.locator("#start_date").fill("2026-07-10");
+    await page.locator("#start_date").blur();
+
+    await expect(page.locator("#end_date")).toHaveValue("2026-07-10");
+
+    // Only the 07-10 session (Flint) remains
+    expect(await table_jobs(page)).toEqual(["Flint"]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Job legend ↔ table dropdown sync
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("unchecking a legend job updates the table dropdown and charts", async ({ page }) => {
+    await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
+
+    // Dropdown reflects the same selection
+    await expect(page.locator("#job_dropdown_list .dropdown-job-box[value='Acme']")).not.toBeChecked();
+    // Both "All" boxes clear
+    await expect(page.locator("#job_all_checkbox")).not.toBeChecked();
+    await expect(page.locator("#job_dropdown_all")).not.toBeChecked();
+
+    // Acme is gone from the table and the pie
+    expect(await table_jobs(page)).not.toContain("Acme");
+    expect(Object.keys(await pie_data(page))).not.toContain("Acme");
+});
+
+test("unchecking a job in the column funnel menu updates the legend and charts", async ({ page }) => {
+    await page.locator("#job_filter_toggle").click(); // open the funnel menu
+    await page.locator("#job_dropdown_list .dropdown-job-box[value='Beacon']").uncheck();
+
+    await expect(page.locator("#job_legend .legend-job-box[value='Beacon']")).not.toBeChecked();
+    expect(await table_jobs(page)).not.toContain("Beacon");
+});
+
+test("funnels light up when their filter is actively limiting data", async ({ page }) => {
+    // Inactive by default
+    await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+
+    // Job filter active (driven from the legend — the synced surface)
+    await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
+    await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
+
+    // Duration filter active — values commit on Enter, not per keystroke
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("2");
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/); // not yet committed
+    await page.locator("#dur_min").press("Enter");
+    await expect(page.locator("#dur_filter_toggle")).toHaveClass(/filter-active/);
+
+    // Clearing the bound turns the funnel off again
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("");
+    await page.locator("#dur_min").press("Enter");
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+});
+
+test("typing a partial range value does not filter until committed", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+    const before = (await table_jobs(page)).length;
+
+    // "0" typed but not committed: a max of 0h would hide everything if applied
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_max").pressSequentially("0");
+    await expect(page.locator("#session_table_body tr")).toHaveCount(before);
+
+    // Finishing the value and pressing Enter applies it and closes the menu
+    await page.locator("#dur_max").pressSequentially(".5");
+    await page.locator("#dur_max").press("Enter");
+    await expect.poll(async () => (await table_jobs(page)).sort()).toEqual(["Flint"]);
+    await expect(page.locator("#dur_max")).toBeHidden(); // menu closed by Enter
+});
+
+test("each funnel menu's Clear button removes only that column's filter", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    // Constrain duration AND jobs
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("2");
+    await page.locator("#dur_min").press("Enter");
+    await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
+    await expect(page.locator("#dur_filter_toggle")).toHaveClass(/filter-active/);
+    await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
+
+    // Clearing duration leaves the job filter intact
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_filter_clear").click();
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#job_filter_toggle")).toHaveClass(/filter-active/);
+    await expect(page.locator("#dur_min")).toBeHidden(); // menu closed
+
+    // Clearing jobs re-selects everything
+    await page.locator("#job_filter_toggle").click();
+    await page.locator("#job_filter_clear").click();
+    await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#job_all_checkbox")).toBeChecked();
+});
+
+test("only one funnel menu is open at a time and Escape closes it", async ({ page }) => {
+    await page.locator("#job_filter_toggle").click();
+    await expect(page.locator("#job_dropdown_list")).toBeVisible();
+
+    await page.locator("#dur_filter_toggle").click();
+    await expect(page.locator("#dur_min")).toBeVisible();
+    await expect(page.locator("#job_dropdown_list")).toBeHidden();
+
+    await page.keyboard.press("Escape");
+    await expect(page.locator("#dur_min")).toBeHidden();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stacked bar data
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("stacked bar buckets hours per local day per job", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    const bar = await page.evaluate(() => {
+        const chart = (window as any).Chart.getChart("stacked_bar_chart");
+        return {
+            labels: chart.data.labels,
+            datasets: chart.data.datasets.map((d: any) => ({ label: d.label, data: d.data })),
+        };
+    });
+
+    // One column per active day, twelve datasets (one per job), alphabetical
+    expect(bar.labels.length).toBe(12);
+    expect(bar.datasets.map((d: { label: string }) => d.label)).toEqual(
+        ff.jobs.slice().sort((a, b) => a.localeCompare(b)));
+
+    // Spot-check a bucket: Beacon logged 2h on its day, 0h elsewhere
+    const beacon = bar.datasets.find((d: { label: string }) => d.label === "Beacon")!;
+    expect(Math.max(...beacon.data)).toBe(2);
+    expect(beacon.data.filter((v: number) => v > 0).length).toBe(1);
+});
+
+test("per-day total label renders even when the last dataset has no hours that day (regression)", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    const result = await page.evaluate(() => {
+        const chart = (window as any).Chart.getChart("stacked_bar_chart");
+        const datasets = chart.data.datasets;
+        const last = datasets.length - 1;
+        // Find a day where the alphabetically-last job (Wolf) logged nothing
+        // but others did — e.g. Acme's day
+        const acme = datasets.find((d: any) => d.label === "Acme");
+        const day_idx = acme.data.findIndex((v: number) => v > 0);
+        // Read the formatter from the raw config — the chart.options proxy
+        // treats function values as scriptables and invokes them on access
+        const fmt = chart.config.options.plugins.datalabels.formatter;
+        return {
+            last_label: datasets[last].label,
+            last_value_that_day: datasets[last].data[day_idx],
+            rendered: fmt(datasets[last].data[day_idx], { datasetIndex: last, dataIndex: day_idx, chart }),
+        };
+    });
+
+    // The zero-height last segment must still carry the day total
+    expect(result.last_label).toBe("Wolf");
+    expect(result.last_value_that_day).toBe(0);
+    expect(result.rendered).toBe("1.0h"); // Acme's 1h is that day's total
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Legend hour totals
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("legend rows show per-job hours that track the date filter but not the job selection", async ({ page }) => {
+    const acme_row = page.locator("#job_legend .legend-row", { hasText: "Acme" });
+    const all_row = page.locator("#job_legend .legend-all");
+
+    // Acme worked 1h today; All shows the grand total of the visible window
+    await expect(acme_row.locator(".legend-hours")).toHaveText("(1.0h)");
+    await expect(all_row.locator(".legend-hours")).toContainText("h)");
+
+    // Narrowing the date range updates the numbers (Acme is outside "today"… it IS today)
+    await page.selectOption("#preset_range", "today");
+    await expect(acme_row.locator(".legend-hours")).toHaveText("(1.0h)");
+    await expect(all_row.locator(".legend-hours")).toHaveText("(1.0h)");
+
+    // Unchecking a job does NOT zero its own number — it still tells you
+    // what checking it would bring back
+    await page.selectOption("#preset_range", "last_14");
+    await acme_row.locator(".legend-job-box").uncheck();
+    await expect(page.locator("#job_legend .legend-row", { hasText: "Acme" }).locator(".legend-hours"))
+        .toHaveText("(1.0h)");
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Palette stability
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("job colours stay stable when other jobs are filtered out", async ({ page }) => {
+    // Widen to include all 12 jobs so the palette wraps (10-colour base)
+    await page.selectOption("#preset_range", "last_3_months");
+
+    const before = await pie_colors(page);
+
+    // Remove several jobs
+    await page.locator("#job_legend .legend-job-box[value='Cobalt']").uncheck();
+    await page.locator("#job_legend .legend-job-box[value='Delta']").uncheck();
+
+    const after = await pie_colors(page);
+
+    // Every job that remains kept its exact colour
+    for (const job of Object.keys(after)) {
+        expect(after[job]).toBe(before[job]);
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Duration range filter
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("duration range filters inclusively and recalculates charts", async ({ page }) => {
+    await page.selectOption("#preset_range", "all"); // all 12 sessions in play
+
+    // Sessions with duration between 2h and 4h inclusive:
+    // Beacon 2h, Cobalt 3h, Juno 4h (Acme/Delta/... 1h excluded, Wolf 8h excluded)
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("2");
+    await page.locator("#dur_max").fill("4");
+    await page.locator("#dur_max").press("Enter");
+
+    // Range inputs are debounced — poll until the pipeline has re-run
+    await expect.poll(async () => (await table_jobs(page)).sort())
+        .toEqual(["Beacon", "Cobalt", "Juno"]);
+
+    // Pie recalculated to the same set
+    await expect.poll(async () => Object.keys(await pie_data(page)).sort())
+        .toEqual(["Beacon", "Cobalt", "Juno"]);
+});
+
+test("an empty duration bound is unbounded", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("4"); // max left empty
+    await page.locator("#dur_min").press("Enter");
+
+    // 4h and up: Juno 4h, Wolf 8h (debounced — poll)
+    await expect.poll(async () => (await table_jobs(page)).sort()).toEqual(["Juno", "Wolf"]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Pause range filter
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("pause range filters inclusively", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    // Pause pairs: Acme 0, Beacon 1, Harbor 1, Cobalt 2, Juno 3
+    await page.locator("#pause_filter_toggle").click();
+    await page.locator("#pause_min").fill("1");
+    await page.locator("#pause_max").fill("2");
+    await page.locator("#pause_max").press("Enter");
+
+    // Range inputs are debounced — poll until the pipeline has re-run
+    await expect.poll(async () => (await table_jobs(page)).sort())
+        .toEqual(["Beacon", "Cobalt", "Harbor"]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Sorting
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("clicking a column header sorts and toggles direction", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    // Default sort is start desc (newest first): Acme (07-15) leads
+    let jobs = await table_jobs(page);
+    expect(jobs[0]).toBe("Acme");
+    expect(jobs[jobs.length - 1]).toBe("Vega"); // 06-20, oldest
+
+    // First click on a new column sorts descending (reverse alphabetical).
+    // Click the label — the header also hosts the funnel toggle.
+    await page.locator("#session_table th[data-sort='job'] .th-label").click();
+    jobs = await table_jobs(page);
+    expect(jobs).toEqual([...jobs].sort((a, b) => b.localeCompare(a)));
+    await expect(page.locator("#session_table th[data-sort='job']")).toHaveClass(/sort-desc/);
+
+    // Second click toggles to ascending
+    await page.locator("#session_table th[data-sort='job'] .th-label").click();
+    jobs = await table_jobs(page);
+    expect(jobs).toEqual([...jobs].sort((a, b) => a.localeCompare(b)));
+    await expect(page.locator("#session_table th[data-sort='job']")).toHaveClass(/sort-asc/);
+});
+
+test("sorting by duration orders by active hours", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+    await page.locator("#session_table th[data-sort='duration'] .th-label").click(); // desc
+
+    const jobs = await table_jobs(page);
+    // Longest first: Wolf 8h, then Juno 4h, then Cobalt 3h
+    expect(jobs.slice(0, 3)).toEqual(["Wolf", "Juno", "Cobalt"]);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Empty state
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("empty state appears when no sessions match and hides when they do", async ({ page }) => {
+    await expect(page.locator("#empty_state")).toBeHidden();
+
+    // A window with no sessions
+    await page.selectOption("#preset_range", "all");
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("100");
+    await page.locator("#dur_min").press("Enter");
+
+    await expect(page.locator("#empty_state")).toBeVisible();
+    await expect(page.locator("#session_table_body tr")).toHaveCount(0);
+
+    // Clearing the impossible bound brings sessions back
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("");
+    await page.locator("#dur_min").press("Enter");
+    await expect(page.locator("#empty_state")).toBeHidden();
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Reset
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HTML/attribute injection hardening
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("job and task names with HTML metacharacters render as text and stay filterable", async ({ page }) => {
+    const hostile_job = `Ac"me <img src=x onerror="window.__pwned=1"> &Co`;
+    const start = FIXED_NOW.getTime() - 3600_000;
+    const payload: FixtureEvent[] = [
+        { event: "stop", job: hostile_job, timestamp: start + 3600_000, task: `<b>"task"</b>`, id: "x-2", job_id: "x", time_seed: start + 3600_000, global_line_index: 2, workspace_line_index: 2 },
+        { event: "start", job: hostile_job, timestamp: start, task: "", id: "x-1", job_id: "x", time_seed: start, global_line_index: 1, workspace_line_index: 1 },
+    ];
+    await open_dashboard(page, payload);
+
+    // No injected element executed or exists
+    expect(await page.evaluate(() => (window as any).__pwned)).toBeUndefined();
+    await expect(page.locator("#session_table_body img, #job_legend img")).toHaveCount(0);
+
+    // The names render as literal text in legend and table
+    await expect(page.locator("#job_legend .legend-row").nth(1)).toContainText(hostile_job);
+    await expect(page.locator("#session_table_body tr td").nth(1)).toHaveText(hostile_job);
+    await expect(page.locator("#session_table_body tr td").nth(3)).toHaveText(`<b>"task"</b>`);
+
+    // The checkbox round-trips the exact name: unchecking hides the session
+    const box = page.locator("#job_legend .legend-job-box");
+    await expect(box).toHaveCount(1);
+    await box.uncheck();
+    await expect(page.locator("#session_table_body tr")).toHaveCount(0);
+    await box.check();
+    await expect(page.locator("#session_table_body tr")).toHaveCount(1);
+});
+
+test("reset restores every filter to its default", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("2");
+    await page.locator("#dur_min").press("Enter");
+    await page.locator("#pause_filter_toggle").click();
+    await page.locator("#pause_max").fill("1");
+    await page.locator("#pause_max").press("Enter");
+    await page.locator("#job_legend .legend-job-box[value='Acme']").uncheck();
+
+    await page.click("#clear_filters_btn");
+
+    await expect(page.locator("#preset_range")).toHaveValue("last_4_weeks");
+    await expect(page.locator("#job_all_checkbox")).toBeChecked();
+    // Funnel indicators are all off again
+    await expect(page.locator("#job_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#dur_filter_toggle")).not.toHaveClass(/filter-active/);
+    await expect(page.locator("#pause_filter_toggle")).not.toHaveClass(/filter-active/);
+    expect((await table_jobs(page)).sort()).toEqual(ff.jobs_in_default_range.slice().sort());
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Narrow-panel and legend affordances
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("legend names carry a tooltip with the full job name", async ({ page }) => {
+    const acme_text = page.locator("#job_legend .legend-row", { hasText: "Acme" }).locator(".legend-text");
+    await expect(acme_text).toHaveAttribute("title", "Acme");
+});
+
+test("empty result shows a prominent message in place of the pie chart", async ({ page }) => {
+    await expect(page.locator("#pie_empty")).toBeHidden();
+
+    // A range no session satisfies
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_min").fill("100");
+    await page.locator("#dur_min").press("Enter");
+
+    await expect(page.locator("#pie_empty")).toBeVisible();
+    await expect(page.locator("#pie_empty")).toContainText("No data in the selected date range or filters");
+    await expect(page.locator("#pie_chart")).toBeHidden();
+
+    // Data back → chart back
+    await page.locator("#dur_filter_toggle").click();
+    await page.locator("#dur_filter_clear").click();
+    await expect(page.locator("#pie_empty")).toBeHidden();
+    await expect(page.locator("#pie_chart")).toBeVisible();
+});
+
+test("Pause/Resume is always P/R with a tooltip; Duration abbreviates at half-screen widths", async ({ page }) => {
+    // Pause/Resume: permanent abbreviation with the full name in the tooltip
+    const pr_label = page.locator("th[data-sort='pauses'] .th-label");
+    await expect(pr_label).toHaveText("P/R");
+    await expect(pr_label).toHaveAttribute("title", "Pause/Resume");
+
+    // Wide (default 1280px viewport): Duration shows its full title
+    await expect(page.locator("th[data-sort='duration'] .th-full")).toBeVisible();
+
+    // Half-screen-ish (≤1200px): Duration abbreviates
+    await page.setViewportSize({ width: 1100, height: 900 });
+    await expect(page.locator("th[data-sort='duration'] .th-full")).toBeHidden();
+    await expect(page.locator("th[data-sort='duration'] .th-short")).toBeVisible();
+});
