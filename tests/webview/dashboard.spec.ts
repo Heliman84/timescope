@@ -181,6 +181,95 @@ test("edit_result errors keep the modal open; success closes it", async ({ page 
     await expect(alpha_row.locator("td").nth(2)).toHaveText("2.25h");
 });
 
+test("active filters and sort survive an edit_result data reload", async ({ page }) => {
+    // Establish non-default state: wider preset, Beta hidden, duration-sorted
+    await page.selectOption("#preset_range", "last_3_months");
+    await page.locator("#job_legend .legend-job-box[value='Beta']").uncheck();
+    await page.locator("#session_table th[data-sort='duration'] .th-label").click();
+    await expect(page.locator("#session_table_body tr")).toHaveCount(2); // Alpha only
+
+    // Edit round-trip
+    const new_stop = await edit_alpha_stop(page);
+    const updated = fx.payload.map((e) =>
+        e.timestamp === fx.alpha_stop_ts ? { ...e, timestamp: new_stop.getTime() } : e
+    );
+    await reply(page, { type: "edit_result", payload: { summary: {}, payload: updated } });
+    await expect(page.locator("#session_edit_modal")).toBeHidden();
+
+    // Every piece of filter/sort state survived the reload
+    await expect(page.locator("#preset_range")).toHaveValue("last_3_months");
+    await expect(page.locator("#job_legend .legend-job-box[value='Beta']")).not.toBeChecked();
+    await expect(page.locator("#session_table th[data-sort='duration']")).toHaveClass(/sort-desc/);
+    const rows = page.locator("#session_table_body tr");
+    await expect(rows).toHaveCount(2);
+    for (const row of await rows.all()) await expect(row).toContainText("Alpha");
+    // Duration desc: the edited (now 2.25h) session leads
+    await expect(rows.nth(0).locator("td").nth(2)).toHaveText("2.25h");
+});
+
+test("clicking a bar segment highlights matching rows; clicking again clears (toggle)", async ({ page }) => {
+    // Pixel-click the center of Alpha's segment on today's bar through
+    // Chart.js hit-testing — not by calling the highlight helpers directly
+    const segment = async () => {
+        // The chart sits below the fold; mouse.click doesn't scroll, so bring
+        // it into view before mapping canvas coords to viewport coords
+        await page.locator("#stacked_bar_chart").scrollIntoViewIfNeeded();
+        const pos = await page.evaluate((day) => {
+            const chart = (window as any).Chart.getChart("stacked_bar_chart");
+            const ds_idx = chart.data.datasets.findIndex((d: any) => d.label === "Alpha");
+            const day_idx = chart.data.labels.indexOf(day);
+            const el = chart.getDatasetMeta(ds_idx).data[day_idx];
+            return { x: el.x, y: (el.y + el.base) / 2 };
+        }, fx.today);
+        const box = (await page.locator("#stacked_bar_chart").boundingBox())!;
+        return { x: box.x + pos.x, y: box.y + pos.y };
+    };
+
+    let p = await segment();
+    await page.mouse.click(p.x, p.y);
+    const highlighted = page.locator("#session_table_body tr.session-highlighted");
+    await expect(highlighted).toHaveCount(1);
+    await expect(highlighted).toContainText("Alpha");
+
+    p = await segment();
+    await page.mouse.click(p.x, p.y);
+    await expect(page.locator("#session_table_body tr.session-highlighted")).toHaveCount(0);
+});
+
+test("edit_result warnings keep the modal open with the warning shown; batch edits post together", async ({ page }) => {
+    // Batch: move both the start and the stop of today's Alpha session
+    await page
+        .locator("#session_table_body tr", { hasText: "morning work" })
+        .locator("button.session-edit-btn")
+        .click();
+    const event_rows = page.locator(".session-event-row");
+    const new_start = new Date(fx.alpha_stop_ts - 2 * 3600_000);
+    const new_stop = new Date(fx.alpha_stop_ts + 3600_000);
+    await event_rows.nth(0).locator("input[type='datetime-local']").fill(to_datetime_input_value(new_start.getTime()));
+    await event_rows.nth(3).locator("input[type='datetime-local']").fill(to_datetime_input_value(new_stop.getTime()));
+    await page.click("#session_edit_save");
+
+    const posted = await posted_messages(page);
+    const edit_msg = posted.find((m) => m.type === "edit_log_entries");
+    const { edits } = edit_msg!.payload as EditLogEntriesPayload;
+    expect(edits).toHaveLength(2);
+    expect(edits.map((e) => e.new_record.event).sort()).toEqual(["start", "stop"]);
+
+    // Warnings without errors: modal stays open, warning visible, Save re-enabled
+    await reply(page, {
+        type: "edit_result",
+        payload: { summary: { warnings: ["overlaps a session of another job"] }, payload: fx.payload },
+    });
+    await expect(page.locator("#session_edit_modal")).toBeVisible();
+    await expect(page.locator("#session_warning")).toBeVisible();
+    await expect(page.locator("#session_warning")).toContainText("overlaps a session of another job");
+    await expect(page.locator("#session_edit_save")).toBeEnabled();
+
+    // User acknowledges by cancelling
+    await page.click("#session_edit_cancel");
+    await expect(page.locator("#session_edit_modal")).toBeHidden();
+});
+
 test("edit modal: Escape cancels, Enter saves", async ({ page }) => {
     const open_modal = () =>
         page

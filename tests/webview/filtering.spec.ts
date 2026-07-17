@@ -196,6 +196,59 @@ test("only one funnel menu is open at a time and Escape closes it", async ({ pag
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Stacked bar data
+// ═══════════════════════════════════════════════════════════════════════════
+
+test("stacked bar buckets hours per local day per job", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    const bar = await page.evaluate(() => {
+        const chart = (window as any).Chart.getChart("stacked_bar_chart");
+        return {
+            labels: chart.data.labels,
+            datasets: chart.data.datasets.map((d: any) => ({ label: d.label, data: d.data })),
+        };
+    });
+
+    // One column per active day, twelve datasets (one per job), alphabetical
+    expect(bar.labels.length).toBe(12);
+    expect(bar.datasets.map((d: { label: string }) => d.label)).toEqual(
+        ff.jobs.slice().sort((a, b) => a.localeCompare(b)));
+
+    // Spot-check a bucket: Beacon logged 2h on its day, 0h elsewhere
+    const beacon = bar.datasets.find((d: { label: string }) => d.label === "Beacon")!;
+    expect(Math.max(...beacon.data)).toBe(2);
+    expect(beacon.data.filter((v: number) => v > 0).length).toBe(1);
+});
+
+test("per-day total label renders even when the last dataset has no hours that day (regression)", async ({ page }) => {
+    await page.selectOption("#preset_range", "all");
+
+    const result = await page.evaluate(() => {
+        const chart = (window as any).Chart.getChart("stacked_bar_chart");
+        const datasets = chart.data.datasets;
+        const last = datasets.length - 1;
+        // Find a day where the alphabetically-last job (Wolf) logged nothing
+        // but others did — e.g. Acme's day
+        const acme = datasets.find((d: any) => d.label === "Acme");
+        const day_idx = acme.data.findIndex((v: number) => v > 0);
+        // Read the formatter from the raw config — the chart.options proxy
+        // treats function values as scriptables and invokes them on access
+        const fmt = chart.config.options.plugins.datalabels.formatter;
+        return {
+            last_label: datasets[last].label,
+            last_value_that_day: datasets[last].data[day_idx],
+            rendered: fmt(datasets[last].data[day_idx], { datasetIndex: last, dataIndex: day_idx, chart }),
+        };
+    });
+
+    // The zero-height last segment must still carry the day total
+    expect(result.last_label).toBe("Wolf");
+    expect(result.last_value_that_day).toBe(0);
+    expect(result.rendered).toBe("1.0h"); // Acme's 1h is that day's total
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Legend hour totals
 // ═══════════════════════════════════════════════════════════════════════════
 

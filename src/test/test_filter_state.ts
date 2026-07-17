@@ -186,6 +186,45 @@ export function run_resolve_preset_range_tests(): void {
     console.log("  ✓ resolve_preset_range tests passed");
 }
 
+/**
+ * Tests preset resolution across DST transitions:
+ * - What: ranges spanning the US spring-forward (2026-03-08) and fall-back
+ *   (2026-11-01) dates resolve to correct calendar days.
+ * - Why: the implementation must use calendar arithmetic (setDate), not
+ *   milliseconds — an N*24h subtraction lands one hour short/long across a
+ *   DST boundary and shifts the range's start to the wrong day in any
+ *   DST-observing timezone. These assertions hold in every timezone but
+ *   would catch an ms-arithmetic regression on DST-observing CI machines.
+ */
+export function run_dst_boundary_tests(): void {
+    // Range spanning spring-forward (2026-03-08): 23h day in DST zones
+    const after_spring = new Date(2026, 2, 12, 12, 0, 0, 0);
+    assert.deepStrictEqual(
+        fs_module.resolve_preset_range("last_7", after_spring),
+        { start_day: "2026-03-06", end_day: "2026-03-12" }, "last_7 across spring-forward");
+    const mid_march = new Date(2026, 2, 15, 12, 0, 0, 0);
+    assert.deepStrictEqual(
+        fs_module.resolve_preset_range("last_14", mid_march),
+        { start_day: "2026-03-02", end_day: "2026-03-15" }, "last_14 across spring-forward");
+
+    // Range spanning fall-back (2026-11-01): 25h day in DST zones
+    const after_fall = new Date(2026, 10, 4, 12, 0, 0, 0);
+    assert.deepStrictEqual(
+        fs_module.resolve_preset_range("last_7", after_fall),
+        { start_day: "2026-10-29", end_day: "2026-11-04" }, "last_7 across fall-back");
+    assert.deepStrictEqual(
+        fs_module.resolve_preset_range("last_4_weeks", after_fall),
+        { start_day: "2026-10-08", end_day: "2026-11-04" }, "last_4_weeks across fall-back");
+
+    // Day bucketing on the transition day itself
+    assert.strictEqual(fs_module.get_local_day(ts(2026, 3, 8, 23)), "2026-03-08",
+        "late evening of the spring-forward day stays on its day");
+    assert.strictEqual(fs_module.get_local_day(ts(2026, 11, 1, 23)), "2026-11-01",
+        "late evening of the fall-back day stays on its day");
+
+    console.log("  ✓ DST boundary tests passed");
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // apply_filters — one dimension at a time
 // ═══════════════════════════════════════════════════════════════════════════
@@ -433,6 +472,7 @@ export function run_filter_state_tests(): void {
     console.log("filter_state: defaults & presets");
     run_default_filter_state_tests();
     run_resolve_preset_range_tests();
+    run_dst_boundary_tests();
     console.log("filter_state: apply_filters");
     run_apply_filters_date_tests();
     run_apply_filters_job_tests();

@@ -84,6 +84,20 @@ export async function open_dashboard(page: Page, payload: FixtureEvent[], buildI
 
     await page.addInitScript(({ fixturePayload, fixtureBuildInfo }: { fixturePayload: FixtureEvent[]; fixtureBuildInfo?: string }) => {
         const w = window as any;
+
+        // Disable Chart.js animations the moment the CDN script assigns the
+        // global — geometry is final immediately, so pixel-level interaction
+        // tests (bar clicks) are deterministic instead of racing the tween.
+        let chart_global: any;
+        Object.defineProperty(w, "Chart", {
+            configurable: true,
+            get() { return chart_global; },
+            set(v) {
+                chart_global = v;
+                if (v && v.defaults) v.defaults.animation = false;
+            },
+        });
+
         w.__posted = [];
         w.__reply = (msg: unknown) => window.postMessage(msg, "*");
         w.acquireVsCodeApi = () => ({
