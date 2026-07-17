@@ -3,7 +3,7 @@
     "displayName": "TimeScope",
     "description": "A VS Code extension for tracking work sessions with analytics and a dashboard.",
     "publisher": "davidclass",
-    "version": "0.3.0",
+    "version": "0.3.1",
     "engines": {
         "vscode": "^1.85.0"
     },

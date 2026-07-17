@@ -1,0 +1,78 @@
+import * as path from "path";
+import * as assert from "assert";
+import { resolve_storage_dir } from "../core/resolve_storage_dir";
+
+// ═══════════════════════════════════════════════════════════════════════════
+// resolve_storage_dir
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Tests resolve_storage_dir absolute-path passthrough:
+ * - Target: resolve_storage_dir in src/core/resolve_storage_dir.ts
+ * - What: an absolute global_storage_dir is returned as-is (normalized),
+ *   independent of the workspace root — preserving today's behavior.
+ * - Does: passes an absolute path with and without a workspace root.
+ * - Why: existing users pin an absolute folder; that must keep working.
+ */
+export function run_resolve_storage_dir_absolute_tests(): void {
+    const abs = path.resolve(path.sep === "\\" ? "C:\\data\\ts" : "/data/ts");
+
+    assert.strictEqual(resolve_storage_dir(abs, "/some/workspace"), path.normalize(abs),
+        "absolute value returned normalized, workspace ignored");
+    assert.strictEqual(resolve_storage_dir(abs, undefined), path.normalize(abs),
+        "absolute value works with no workspace root");
+
+    console.log("  ✓ resolve_storage_dir absolute tests passed");
+}
+
+/**
+ * Tests resolve_storage_dir relative resolution against the workspace root:
+ * - Target: resolve_storage_dir in src/core/resolve_storage_dir.ts
+ * - What: a relative value is joined onto the first workspace folder's root.
+ * - Does: resolves "global-storage" against a workspace root.
+ * - Why: this is the fix — it lets test-workspace commit a portable value
+ *   that resolves correctly on every clone.
+ */
+export function run_resolve_storage_dir_relative_tests(): void {
+    const wsRoot = path.resolve(path.sep === "\\" ? "C:\\clone\\ts\\test-workspace" : "/clone/ts/test-workspace");
+
+    assert.strictEqual(resolve_storage_dir("global-storage", wsRoot),
+        path.resolve(wsRoot, "global-storage"),
+        "relative value joined against workspace root");
+    assert.strictEqual(resolve_storage_dir("./nested/dir", wsRoot),
+        path.resolve(wsRoot, "./nested/dir"),
+        "relative value with ./ resolves against workspace root");
+
+    console.log("  ✓ resolve_storage_dir relative tests passed");
+}
+
+/**
+ * Tests resolve_storage_dir null fallback cases:
+ * - Target: resolve_storage_dir in src/core/resolve_storage_dir.ts
+ * - What: returns null when there's nothing to resolve — so the caller falls
+ *   back to VS Code's default global storage dir.
+ * - Does: empty/whitespace values, and a relative value with no workspace root.
+ * - Why: an unresolvable relative path must never silently land data in cwd;
+ *   null signals the caller to use the safe default.
+ */
+export function run_resolve_storage_dir_fallback_tests(): void {
+    assert.strictEqual(resolve_storage_dir("", "/some/workspace"), null,
+        "empty value → null");
+    assert.strictEqual(resolve_storage_dir("   ", "/some/workspace"), null,
+        "whitespace-only value → null");
+    assert.strictEqual(resolve_storage_dir("global-storage", undefined), null,
+        "relative value with no workspace root → null");
+
+    console.log("  ✓ resolve_storage_dir fallback tests passed");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Exported runner
+// ═══════════════════════════════════════════════════════════════════════════
+
+export function run_resolve_storage_dir_tests(): void {
+    console.log("paths: resolve_storage_dir");
+    run_resolve_storage_dir_absolute_tests();
+    run_resolve_storage_dir_relative_tests();
+    run_resolve_storage_dir_fallback_tests();
+}

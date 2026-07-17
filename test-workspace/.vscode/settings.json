@@ -2,7 +2,8 @@
     "VsCodeTaskButtons.showCounter": true,
 
     // Pin TimeScope storage for F5 / Extension Development Host sessions so
-    // dev testing NEVER touches real tracking data. paths.ts does not expand
-    // VS Code variables, so this must be an absolute path on this machine.
-    "timescope.global_storage_dir": "r:\\vscode_customizations\\timescope\\test-workspace\\global-storage"
+    // dev testing NEVER touches real tracking data. A relative value resolves
+    // against this workspace folder, so this is portable across clones and
+    // machines (→ test-workspace/global-storage).
+    "timescope.global_storage_dir": "global-storage"
 }
