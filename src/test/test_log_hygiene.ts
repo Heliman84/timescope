@@ -111,6 +111,13 @@ export function run_sanitize_lines_tests(): void {
     assert.strictEqual(unbalanced.report.pause_events, 1);
     assert.strictEqual(unbalanced.report.resume_events, 0);
     assert.strictEqual(has_repairable_damage(unbalanced.report), false, "imbalance alone is not compactable damage");
+
+    // Light mode (hot-path reads): healing + repair detection intact, no event counting.
+    const light = sanitize_lines([HEADER_LINE, start + stop, pause], { count_events: false });
+    assert.strictEqual(light.lines.length, 4, "light mode still heals concatenation");
+    assert.strictEqual(light.report.concatenated_lines_split, 1, "light mode still detects splits");
+    assert.strictEqual(has_repairable_damage(light.report), true, "light mode still flags repairable damage");
+    assert.strictEqual(light.report.pause_events, 0, "light mode skips event counting");
 }
 
 /**
@@ -250,4 +257,11 @@ export function run_compact_log_tests(): void {
     // Missing file: graceful no-op.
     const missing = compact_log_file(path.join(root, "nope.jsonl"));
     assert.strictEqual(missing.changed, false, "missing file is a no-op");
+
+    // New damage later: a fresh compaction must NOT clobber the earlier backup.
+    fs.appendFileSync(logPath, start.toJSONL() + stop.toJSONL() + "\n", "utf8");
+    const third = compact_log_file(logPath);
+    assert.strictEqual(third.changed, true, "new damage should compact again");
+    assert.notStrictEqual(third.backup_path, result.backup_path, "second backup gets a distinct name");
+    assert.strictEqual(fs.readFileSync(result.backup_path!, "utf8"), bakBytes, "original .bak preserved");
 }

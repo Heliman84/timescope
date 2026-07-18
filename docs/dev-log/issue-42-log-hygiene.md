@@ -21,6 +21,17 @@ This is Wave 1 of the focus-milestone re-architecture (see #48): the zero-regret
 - **`timescope.compactLog` added to `package.json` `contributes.commands`** — explicitly approved by user (CLAUDE.md gate).
 - Compaction: `.bak` copy first, temp-file + atomic rename, idempotent (second run detects no change, writes nothing, leaves `.bak` alone). Truly-unparseable lines are preserved verbatim, same as today's rewrite behavior.
 
+## Code-review findings (fixed)
+
+- `write_file_atomic` rename can throw EPERM/EBUSY on Windows when a sync client/AV holds the
+  target → now falls back to an in-place write (non-atomic, but succeeds where the old code did
+  instead of crashing dashboard edits/renames/compaction).
+- Compaction clobbered a pre-existing `.bak` → a second backup now gets a timestamped name;
+  the earlier last-known-good backup is preserved.
+- Every read paid a full per-line `Event` parse for a report nobody used → hot-path reads use
+  `count_events: false` (split detection is a regex fast-path with zero parsing on clean lines);
+  only `checkLogHealth` computes the full report.
+
 ## Rejected approaches
 
 - `showWarningMessage` with action button — standard VS Code idiom but no precedent in this codebase; user chose QuickPick consistency.

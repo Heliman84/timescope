@@ -41,13 +41,11 @@ export function has_repairable_damage(report: SanitizeReport): boolean {
  * it is returned whole. No partial salvage.
  */
 export function split_concatenated_jsonl(line: string): string[] {
-    // Fast path: a line that parses whole is never split.
-    try {
-        JSON.parse(line);
-        return [line];
-    } catch {
-        // fall through to the scanner
-    }
+    // Fast path: concatenation always leaves a "}...{" seam. A line without
+    // one can never split — return it untouched with zero parsing cost.
+    // (A "}{" inside a string value falls through to the string-aware
+    // scanner, which correctly refuses to split it.)
+    if (!/\}\s*\{/.test(line)) return [line];
 
     const parts: string[] = [];
     let depth = 0;
@@ -98,7 +96,11 @@ export function split_concatenated_jsonl(line: string): string[] {
  * never touched here) and report what was found. All repository reads
  * route through this so every consumer sees the same healed view.
  */
-export function sanitize_lines(raw_lines: string[]): { lines: string[]; report: SanitizeReport } {
+export function sanitize_lines(
+    raw_lines: string[],
+    opts?: { count_events?: boolean }
+): { lines: string[]; report: SanitizeReport } {
+    const count_events = opts?.count_events !== false;
     const report: SanitizeReport = {
         concatenated_lines_split: 0,
         malformed_lines: 0,
@@ -117,15 +119,19 @@ export function sanitize_lines(raw_lines: string[]): { lines: string[]; report: 
     // An empty/absent file is not damaged — there is nothing to repair.
     report.missing_header = lines.length > 0 && !is_header_line(lines[0]);
 
-    for (const line of lines) {
-        if (is_header_line(line)) continue;
-        const event = Event.fromJSONL(line);
-        if (!event) {
-            report.malformed_lines++;
-            continue;
+    // Per-line event parsing is only needed for the full health report
+    // (malformed/pause/resume counts) — hot-path reads skip it.
+    if (count_events) {
+        for (const line of lines) {
+            if (is_header_line(line)) continue;
+            const event = Event.fromJSONL(line);
+            if (!event) {
+                report.malformed_lines++;
+                continue;
+            }
+            if (event.isPause()) report.pause_events++;
+            else if (event.isResume()) report.resume_events++;
         }
-        if (event.isPause()) report.pause_events++;
-        else if (event.isResume()) report.resume_events++;
     }
 
     return { lines, report };
@@ -164,7 +170,11 @@ export function compact_log_file(file_path: string | null | undefined): Compacti
         return { changed: false, backup_path: null, report };
     }
 
-    const backup_path = file_path + ".bak";
+    // Never clobber an earlier backup — it may be the last-known-good bytes.
+    let backup_path = file_path + ".bak";
+    if (fs.existsSync(backup_path)) {
+        backup_path = `${file_path}.${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
+    }
     fs.copyFileSync(file_path, backup_path);
     write_file_atomic(file_path, content);
     return { changed: true, backup_path, report };

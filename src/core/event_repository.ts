@@ -25,19 +25,20 @@ export class EventRepository {
      */
     private read_log_lines(file_path: string | null | undefined): string[] {
         if (!file_path) return [];
-        const { lines, report } = sanitize_lines(readJSONLSafe(file_path));
+        // Hot path: skip per-line event parsing — repair detection (splits,
+        // header) is all the cached report needs.
+        const { lines, report } = sanitize_lines(readJSONLSafe(file_path), { count_events: false });
         this._sanitize_reports.set(file_path, report);
         return lines;
     }
 
-    /** Fresh sanitize reports for both logs (used for the load-time damage prompt). */
+    /** Full sanitize reports for both logs (used for the load-time damage prompt). */
     checkLogHealth(): { file_path: string; report: SanitizeReport }[] {
         const results: { file_path: string; report: SanitizeReport }[] = [];
         for (const p of [this.paths.global_log_path, this.paths.workspace_log_path]) {
             if (!p) continue;
-            this.read_log_lines(p);
-            const report = this._sanitize_reports.get(p);
-            if (report) results.push({ file_path: p, report });
+            const { report } = sanitize_lines(readJSONLSafe(p));
+            results.push({ file_path: p, report });
         }
         return results;
     }

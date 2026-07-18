@@ -49,9 +49,16 @@ export function write_file_atomic(file_path: string, content: string): void {
     fs.writeFileSync(tmp, content, "utf8");
     try {
         fs.renameSync(tmp, file_path);
-    } catch (ex) {
-        try { fs.unlinkSync(tmp); } catch { /* best effort cleanup */ }
-        throw ex;
+    } catch {
+        // Windows: renaming over a file another process holds open (sync
+        // client, AV, indexer) can throw EPERM/EBUSY. Fall back to an
+        // in-place write — non-atomic, but succeeds where the old code did
+        // instead of crashing the caller.
+        try {
+            fs.writeFileSync(file_path, content, "utf8");
+        } finally {
+            try { fs.unlinkSync(tmp); } catch { /* best effort cleanup */ }
+        }
     }
 }
 
