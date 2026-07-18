@@ -100,6 +100,16 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
   id — so the reader-level dedup is the correct, general safeguard rather than special-
   casing migration.
 
+## Deferred to #15
+
+- **Repo-log jobs aren't pickable on a fresh/cloned repo.** Jobs load only from the global
+  `jobs.json`; a committed `.timescope/logs.jsonl` references jobs by id+title but nothing surfaces
+  them, so opening an existing repo shows an empty/partial Start picker and forces manual re-typing.
+  This is the legacy→local-first *job conversion* case. `Job.fromEventFields` already reconstructs
+  partial jobs from events, but the real fix belongs in #15's entity model (Client/Project/Task-type
+  + repo binding + global vocabulary). Noted on the issue:
+  https://github.com/Heliman84/timescope/issues/15#issuecomment-5012746866
+
 ## Rejected approaches
 
 - **Making the dashboard read the owned union (scratch + workspace) instead of `index.jsonl`.**
