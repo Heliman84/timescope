@@ -36,4 +36,9 @@ double start. This branch is the webview half of #42, run in parallel with the s
 
 ## Retrospective
 
-(filled at PR time)
+Landed exactly as planned: `build_malformed_fixture` (five isolated single-purpose jobs) +
+four specs pinning all five behaviors from the issue checklist. All passed on first run —
+expected for characterization tests — and code review found no defects (column indices,
+substring-collision safety, and the 10:00 cross-job timestamp tie were all checked and hold).
+No product code touched; the webview-drops / Node-finalizes divergence for dangling sessions
+is now documented here and asserted on the webview side.
