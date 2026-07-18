@@ -85,6 +85,21 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
   simultaneously can mint divergent repo_ids. Same concurrency class; narrow (first-ever opt-in
   only).
 
+## Bugs found during F5
+
+- **Phantom open session → recovery double-stop (48c).** During 48a/48b `appendEvent`
+  dual-wrote every event to the global log *and* the workspace log; 48c migration then
+  moved the global log into `scratch.jsonl`. So the same event id now lives in both
+  scratch and the workspace log. `loadSessions`/`loadLastNSessions` for `"both"`
+  concatenated the two stores **without** deduping by id (unlike `loadAllEntries`), so a
+  closed session's duplicated `start` was reconstructed as a lone phantom *open* session
+  — recovery then offered to "close" it, appending a second `stop`. Fix: dedup by event
+  id in the multi-store session readers (regression test in `test_event_repository.ts`).
+  The duplicate ownership itself (scratch holding copies of workspace-owned events after
+  an upgrade) is benign for reads — the index rebuild and `loadAllEntries` both dedup by
+  id — so the reader-level dedup is the correct, general safeguard rather than special-
+  casing migration.
+
 ## Rejected approaches
 
 - **Making the dashboard read the owned union (scratch + workspace) instead of `index.jsonl`.**

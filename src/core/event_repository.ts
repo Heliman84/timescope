@@ -161,7 +161,15 @@ export class EventRepository {
     loadSessions(location: "workspace" | "global" | "both" = "global"): Session[] {
         const lines = this.readLinesForLocation(location);
         const col = EventCollection.parse_lines(lines);
-        const events = col.sorted();
+        // Dedup by event id: the same event can live in both owned stores (dual-written
+        // during 48a/48b, then the global log migrated into scratch), and reconstructing
+        // sessions from duplicated events yields phantom/broken sessions. Matches loadAllEntries.
+        const seenIds = new Set<string>();
+        const events = col.sorted().filter(ev => {
+            if (seenIds.has(ev.id)) return false;
+            seenIds.add(ev.id);
+            return true;
+        });
 
         // Map job_id → Event[]
         const openByJob = new Map<string, Event[]>();
@@ -223,6 +231,10 @@ export class EventRepository {
         if (!Number.isInteger(n) || n <= 0) return [];
 
         const finalized: Session[] = [];
+        // Dedup by event id across the scan: the same event can exist in both owned
+        // stores (dual-written during 48a/48b, then the global log migrated into
+        // scratch). Reconstructing from duplicates yields a phantom open session.
+        const seenIds = new Set<string>();
 
         // Pick the most recent incomplete session across jobs
         const tryFinalize = (map: Map<string, Event[]>) => {
@@ -263,6 +275,8 @@ export class EventRepository {
             for (let i = lines.length - 1; i >= 0; i--) {
                 const ev = Event.fromJSONL(lines[i]);
                 if (!ev) continue;
+                if (seenIds.has(ev.id)) continue;
+                seenIds.add(ev.id);
 
                 const jobId = ev.job.id;
                 let arr = byJob.get(jobId);
@@ -336,6 +350,8 @@ export class EventRepository {
                 }
 
                 if (!nextEv) break;
+                if (seenIds.has(nextEv.id)) continue;
+                seenIds.add(nextEv.id);
 
                 const jobId = nextEv.job.id;
                 let arr = byJob.get(jobId);

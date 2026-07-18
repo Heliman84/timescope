@@ -394,3 +394,46 @@ export function run_event_repository_replication_tests(): void {
 
     console.log("  ✓ single-owner write + index replication tests passed");
 }
+
+/**
+ * Regression: multi-store session reads must dedup by event id (#48 48c):
+ * - Target: EventRepository.loadSessions / loadLastNSessions ("both") in event_repository.ts
+ * - What: the same event id can exist in BOTH scratch and the workspace log — during
+ *   48a/48b events were dual-written to the global log AND the workspace log, and 48c
+ *   migration moved the global log into scratch. Reconstructing sessions over "both"
+ *   without deduping double-counts those events, so a closed session's duplicated
+ *   `start` is misread as a lone OPEN session (recovery then appends a bogus stop,
+ *   corrupting the log with two stops in a row).
+ * - Why: `loadAllEntries` already dedups by id; the session readers must match.
+ */
+export function run_event_repository_dup_store_dedup_tests(): void {
+    const paths = mkPaths("dup-store", true);
+    paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+    const repo = new EventRepository(paths);
+    const job = Job.create({ title: "alpha" });
+
+    const header = JSON.stringify({ _format_version: 2 });
+    const start = ev(job, "start", 100);
+    const stop = ev(job, "stop", 200);
+    const sessionLines = [header, start.toJSONL(), stop.toJSONL()].join("\n") + "\n";
+    // The identical closed session lives in BOTH owned stores (same event ids).
+    fs.writeFileSync(paths.scratch_path, sessionLines, "utf8");
+    fs.writeFileSync(paths.workspace_log_path!, sessionLines, "utf8");
+
+    const sessions = repo.loadSessions("both");
+    assert.strictEqual(sessions.length, 1, "duplicated closed session collapses to one");
+    assert.ok(!sessions[0].isOpen, "the reconstructed session is closed");
+
+    const last = repo.loadLastSession("both");
+    assert.ok(last, "last session found across both stores");
+    assert.ok(!last!.isOpen, "closed session must NOT be misread as an open session");
+
+    // A genuinely open tail (present in both stores) is still detected as open.
+    const openLines = [header, ev(job, "start", 300).toJSONL()].join("\n") + "\n";
+    fs.writeFileSync(paths.scratch_path, openLines, "utf8");
+    fs.writeFileSync(paths.workspace_log_path!, openLines, "utf8");
+    const openLast = repo.loadLastSession("both");
+    assert.ok(openLast && openLast.isOpen, "a real open session is still surfaced");
+
+    console.log("  ✓ multi-store dedup (recovery) tests passed");
+}

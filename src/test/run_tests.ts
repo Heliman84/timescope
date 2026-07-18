@@ -1,4 +1,4 @@
-import { run_event_repository_append_and_load_tests, run_event_repository_rename_tests, run_event_repository_validation_tests, run_event_repository_last_sessions_tests, run_event_repository_dedupe_tests, run_event_repository_malformed_preservation_tests, run_event_repository_line_index_tests, run_event_repository_replication_tests } from "./test_event_repository";
+import { run_event_repository_append_and_load_tests, run_event_repository_rename_tests, run_event_repository_validation_tests, run_event_repository_last_sessions_tests, run_event_repository_dedupe_tests, run_event_repository_malformed_preservation_tests, run_event_repository_line_index_tests, run_event_repository_replication_tests, run_event_repository_dup_store_dedup_tests } from "./test_event_repository";
 import { run_session_happy_path_tests, run_session_invalid_transition_tests, run_session_elapsed_open_segment_tests, run_session_equality_tests } from "./test_session";
 import { run_event_collection_tests } from "./test_event_collection";
 import { run_event_collection_extended_tests } from "./test_event_collection_extended";
@@ -27,6 +27,7 @@ async function main() {
         run_event_repository_malformed_preservation_tests();
         run_event_repository_line_index_tests();
         run_event_repository_replication_tests();
+        run_event_repository_dup_store_dedup_tests();
         run_session_happy_path_tests();
         run_session_invalid_transition_tests();
         run_session_elapsed_open_segment_tests();
