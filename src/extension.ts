@@ -9,6 +9,7 @@ import { Session } from "./core/session";
 // timer is now managed by Runtime
 import { Job } from "./core/job";
 import { format_build_info_full } from "./core/build_info";
+import { compact_log_file, has_repairable_damage } from "./core/log_sanitizer";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
@@ -168,6 +169,47 @@ export async function activate(context: vscode.ExtensionContext) {
         })
     );
 
+
+    //
+    // ────────────────────────────────────────────────────────────────
+    // COMMAND: Compact Log
+    // ────────────────────────────────────────────────────────────────
+    //
+    const run_compaction = () => {
+        const results = [runtime.paths.global_log_path, runtime.paths.workspace_log_path]
+            .filter((p): p is string => !!p)
+            .map(p => ({ path: p, result: compact_log_file(p) }));
+        const changed = results.filter(r => r.result.changed);
+        if (changed.length === 0) {
+            vscode.window.showInformationMessage("TimeScope: logs are already clean — nothing to compact.");
+        } else {
+            const detail = changed.map(r => `${r.path} (backup: ${r.result.backup_path})`).join("; ");
+            vscode.window.showInformationMessage(`TimeScope: compacted ${changed.length} log file(s). ${detail}`);
+        }
+    };
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand("timescope.compactLog", run_compaction)
+    );
+
+    // Load-time health check: heal-in-memory always happens on read; when
+    // repairable damage exists on disk, offer compaction once per session —
+    // never rewrite synced storage unprompted.
+    const damaged = runtime.logRepo.checkLogHealth().filter(h => has_repairable_damage(h.report));
+    if (damaged.length > 0) {
+        const total_splits = damaged.reduce((n, h) => n + h.report.concatenated_lines_split, 0);
+        const parts: string[] = [];
+        if (total_splits > 0) parts.push(`${total_splits} concatenated record line(s)`);
+        if (damaged.some(h => h.report.missing_header)) parts.push("missing format header");
+        const imbalance = damaged.find(h => h.report.pause_events !== h.report.resume_events);
+        if (imbalance) parts.push(`unbalanced pause/resume (${imbalance.report.pause_events}/${imbalance.report.resume_events})`);
+        vscode.window.showQuickPick(["Compact log now", "Ignore for now"], {
+            placeHolder: `TimeScope found log damage: ${parts.join(", ")}. Compacting writes a .bak first.`,
+            canPickMany: false,
+        }).then(picked => {
+            if (picked === "Compact log now") run_compaction();
+        });
+    }
 
     //
     // ────────────────────────────────────────────────────────────────

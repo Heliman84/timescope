@@ -61,6 +61,11 @@
                 "command": "timescope.showBuildInfo",
                 "title": "Show Build Info",
                 "category": "TimeScope"
+            },
+            {
+                "command": "timescope.compactLog",
+                "title": "Compact Log",
+                "category": "TimeScope"
             }
         ]
     },
