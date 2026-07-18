@@ -3,6 +3,8 @@
 > **Arc log**, not a spec. The *spine* above the per-issue [dev-logs](../dev-log/) — it holds
 > the decisions and structure that span multiple issues. Each issue keeps its own dev-log for
 > its own *why*; this file is the shared north star and the live map of the effort.
+> *(An "arc" both spans multiple issues and is short for architecture — which is what these
+> efforts usually are.)*
 
 **Milestone:** [focus](https://github.com/Heliman84/timescope/milestone/1)  ·  **Architecture issue:** [#48](https://github.com/Heliman84/timescope/issues/48)  ·  **Started:** 2026-07-17
 
