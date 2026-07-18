@@ -81,7 +81,15 @@ One-time per clone: `git config core.hooksPath .githooks` enables the tracked pr
 
 Press **F5** in VS Code to launch the Extension Development Host. It opens `test-workspace/`, whose settings pin TimeScope storage to `test-workspace/global-storage/` — F5 testing never touches your real tracking data.
 
-That storage is gitignored, so a fresh clone starts empty. Run `npm run seed-testdata` to generate 3 jobs and ~4 weeks of sessions (timestamps relative to now, so the dashboard presets always have data). Re-run any time to reset.
+That storage is gitignored, so a fresh clone starts empty. Seed it with `npm run seed-testdata` — re-run any time to reset:
+
+| Invocation | Seeds |
+| :--- | :--- |
+| `npm run seed-testdata` | Synthetic data, ~6 months: 5 jobs in the global store **plus** a workspace-local `.timescope/` store (last week of global events mirrored with identical IDs + a few workspace-only sessions) so F5 exercises the cross-file dedup/merge path (#39) |
+| `npm run seed-testdata -- --damaged` | Same, then damages the global log: two records glued onto one physical line, trailing newline stripped — F5 shows the damage prompt; **TimeScope: Compact Log** repairs it (#42) |
+| `npm run seed-testdata -- --from-real [dir]` | Copies your **real** global store (`jobs.json` + `logs.jsonl`) into the isolated test storage (source untouched, workspace store emptied); default source is your VS Code globalStorage, or pass a dir explicitly |
+
+The script header in [scripts/seed_test_data.js](scripts/seed_test_data.js) is the authoritative flag reference.
 
 ### Test layers
 
