@@ -11,7 +11,7 @@ import { Job } from "./core/job";
 import { format_build_info_full } from "./core/build_info";
 import { compact_log_file, has_repairable_damage } from "./core/log_sanitizer";
 import { is_workspace_opted_in, enable_local_logging, register_if_opted_in } from "./core/local_opt_in";
-import { rebuild_index, registry_log_paths } from "./core/global_index";
+import { migrate_legacy_global_log } from "./core/migration";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
@@ -64,9 +64,10 @@ export async function activate(context: vscode.ExtensionContext) {
     _runtime = runtime;
     await runtime.loadJobs();
 
-    // Update settings UI to show resolved global paths
+    // Update settings UI to show resolved global paths. The global-owned event
+    // store is now `scratch.jsonl` (#48 48c); the legacy `logs.jsonl` is retired.
     config.update("global_jobs_path", runtime.paths.global_jobs_path, vscode.ConfigurationTarget.Global);
-    config.update("global_log_path", runtime.paths.global_log_path, vscode.ConfigurationTarget.Global);
+    config.update("global_log_path", runtime.paths.scratch_path ?? runtime.paths.global_log_path, vscode.ConfigurationTarget.Global);
 
     // If this workspace is already opted in (a `.timescope` folder exists), make
     // sure it has a config.json and refresh its registry entry. Never blocks activation.
@@ -75,6 +76,23 @@ export async function activate(context: vscode.ExtensionContext) {
         register_if_opted_in(runtime.paths, folder0?.uri.fsPath, folder0?.name ?? "", runtime.registryRepo, Date.now());
     } catch (ex) {
         console.error("TimeScope: registry update on activation failed", ex);
+    }
+
+    // #48 48c: one-time migration of the legacy global `logs.jsonl` into the owned
+    // `scratch.jsonl`, then (re)build the derived index so the dashboard sees every
+    // owned source. The index is disposable, so rebuilding at activation is safe.
+    try {
+        if (runtime.paths.global_log_path && runtime.paths.scratch_path) {
+            const mig = migrate_legacy_global_log(runtime.paths.global_log_path, runtime.paths.scratch_path);
+            if (mig.migrated > 0) {
+                vscode.window.showInformationMessage(
+                    `TimeScope: migrated ${mig.migrated} legacy event(s) into local-first storage (backup: ${mig.backup_path}).`
+                );
+            }
+        }
+        runtime.rebuildIndex();
+    } catch (ex) {
+        console.error("TimeScope: local-first migration / index rebuild failed", ex);
     }
 
     // Initialize and register UI items
@@ -224,7 +242,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // ────────────────────────────────────────────────────────────────
     //
     const run_compaction = () => {
-        const results = [runtime.paths.global_log_path, runtime.paths.workspace_log_path]
+        const results = [runtime.paths.scratch_path, runtime.paths.workspace_log_path]
             .filter((p): p is string => !!p)
             .map(p => ({ path: p, result: compact_log_file(p) }));
         const changed = results.filter(r => r.result.changed);
@@ -251,16 +269,15 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.rebuildGlobalIndex", () => {
-            const index_path = runtime.paths.global_index_path;
-            if (!index_path) {
+            if (!runtime.paths.global_index_path) {
                 vscode.window.showErrorMessage("TimeScope: no global index path resolved.");
                 return;
             }
             try {
-                const registry = runtime.registryRepo.load();
-                const result = rebuild_index(index_path, registry_log_paths(registry), runtime.paths.scratch_path);
+                const result = runtime.rebuildIndex();
+                runtime.refreshEventCollection();
                 vscode.window.showInformationMessage(
-                    `TimeScope: rebuilt global index — ${result.event_count} event(s) from ${result.source_count} repo(s) + scratch.`
+                    `TimeScope: rebuilt global index — ${result.event_count} event(s) from ${result.source_count} source log(s) + scratch.`
                 );
             } catch (ex) {
                 vscode.window.showErrorMessage(`TimeScope: could not rebuild global index: ${String(ex)}`);

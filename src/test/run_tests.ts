@@ -15,6 +15,7 @@ import { run_repo_config_tests } from "./test_repo_config";
 import { run_registry_domain_tests, run_registry_repository_tests } from "./test_registry";
 import { run_local_opt_in_tests } from "./test_local_opt_in";
 import { run_append_owned_event_tests, run_rebuild_index_tests, run_registry_log_paths_tests } from "./test_global_index";
+import { run_migration_tests } from "./test_migration";
 
 async function main() {
     try {
@@ -57,6 +58,7 @@ async function main() {
         run_append_owned_event_tests();
         run_rebuild_index_tests();
         run_registry_log_paths_tests();
+        run_migration_tests();
         console.log("All tests passed.");
         process.exit(0);
     } catch (err) {

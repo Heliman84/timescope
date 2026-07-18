@@ -223,14 +223,16 @@ export function run_replaceEvent_global_tests(): void {
 }
 
 /**
- * Tests replaceEvent happy path — both global and workspace:
+ * Tests replaceEvent happy path — workspace-owned (#48 48c single-owner):
  * - Target: EventRepository.replaceEvent in src/core/event_repository.ts
- * - What: replaces across both log files.
- * - Does: appends events (which writes to both), loads, replaces, verifies both flags true.
- * - Why: dashboard edits must propagate to all log files.
+ * - What: when a workspace is opted in it owns the event; the edit rewrites the
+ *   workspace log only (the global-owned store is not a second copy).
+ * - Does: appends events (workspace-owned), loads, replaces, verifies the workspace
+ *   flag is true, the global flag is false, and the workspace file has the new value.
+ * - Why: local-first means one owner per event — dashboard edits target the owner.
  */
 export function run_replaceEvent_both_tests(): void {
-    const paths = mkPaths("replace-both", true);
+    const paths = mkPaths("replace-ws", true);
     const repo = new EventRepository(paths);
     const job = Job.create({ title: "alpha" });
 
@@ -241,25 +243,20 @@ export function run_replaceEvent_both_tests(): void {
 
     const collection = repo.loadAllEntries();
     const oldStop = collection.find(e => e.type === "stop")!;
-    assert.ok(oldStop.isInGlobal, "stop should be in global");
-    assert.ok(oldStop.isInWorkspace, "stop should be in workspace");
+    assert.ok(oldStop.isInWorkspace, "stop should be owned by the workspace log");
+    assert.ok(!oldStop.isInGlobal, "stop should NOT be in the global-owned store");
 
     const newStop = oldStop.withTimestamp(2500);
     const result = repo.replaceEvent(oldStop, newStop);
 
-    assert.ok(result.globalReplaced, "global replaced");
     assert.ok(result.workspaceReplaced, "workspace replaced");
+    assert.strictEqual(result.globalReplaced, false, "no global-owned copy to replace");
 
-    // Verify both files have the new timestamp
-    const checkFile = (p: string) => {
-        const raw = fs.readFileSync(p, "utf8");
-        assert.ok(raw.includes("2500"), `file ${p} should contain new timestamp`);
-        assert.ok(!raw.includes('"timestamp":2000'), `file ${p} should no longer have old timestamp`);
-    };
-    checkFile(paths.global_log_path);
-    checkFile(paths.workspace_log_path!);
+    const raw = fs.readFileSync(paths.workspace_log_path!, "utf8");
+    assert.ok(raw.includes("2500"), "workspace file should contain new timestamp");
+    assert.ok(!raw.includes('"timestamp":2000'), "workspace file should no longer have old timestamp");
 
-    console.log("  ✓ replaceEvent both-files tests passed");
+    console.log("  ✓ replaceEvent workspace-owned tests passed");
 }
 
 /**
@@ -413,10 +410,10 @@ export function run_editRoundTrip_tests(): void {
     // Step 3: build candidate with new timestamp (simulating what fromDTO would produce)
     const newPause = oldPause.withTimestamp(25000);
 
-    // Step 4: replace
+    // Step 4: replace (workspace-owned under #48 48c single-owner)
     const result = repo.replaceEvent(oldPause, newPause);
-    assert.ok(result.globalReplaced, "global replaced");
     assert.ok(result.workspaceReplaced, "workspace replaced");
+    assert.strictEqual(result.globalReplaced, false, "no global-owned copy");
 
     // Step 5: reload (same as controller refreshEventCollection)
     const refreshed = repo.loadAllEntries();

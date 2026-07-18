@@ -19,8 +19,9 @@ export interface TimeScopePaths {
      */
     global_index_path?: string;
     /**
-     * Global scratch log (#48 48b) — owned events for non-workspace (off-project)
-     * sessions. File created on first write.
+     * Global scratch log — the global-*owned* event store (#48 48c). Holds
+     * off-project (non-workspace) sessions plus the migrated legacy history; it
+     * supersedes the retired global `logs.jsonl`. File created on first write.
      */
     scratch_path?: string;
     /**

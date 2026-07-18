@@ -16,7 +16,7 @@ function ensureAfter(lastTimestamp: number, requested: number): number {
 
 export async function checkAndRecover(repo: EventRepository, shutdownTs?: number): Promise<Session | null> {
     try {
-        const session = repo.loadLastSession("global");
+        const session = repo.loadLastSession("both");
         if (!session || !session.isOpen) return null;
 
         const last = session.lastEvent;
@@ -77,7 +77,7 @@ export async function checkAndRecover(repo: EventRepository, shutdownTs?: number
             const pauseEvent = session.pause(ts);
             repo.appendValidated(pauseEvent);
             vscode.window.showInformationMessage(`Recovered: paused job '${job_title}'.`);
-            return repo.loadLastSession("global");
+            return repo.loadLastSession("both");
         }
 
         if (selection.startsWith("Resume timer with break")) {
@@ -94,7 +94,7 @@ export async function checkAndRecover(repo: EventRepository, shutdownTs?: number
                 repo.appendValidated(resumeEvent);
             }
             vscode.window.showInformationMessage(`Recovered: resumed job '${job_title}' (break inserted).`);
-            return repo.loadLastSession("global");
+            return repo.loadLastSession("both");
         }
 
         if (selection.startsWith("Resume timer with no break")) {
@@ -104,10 +104,10 @@ export async function checkAndRecover(repo: EventRepository, shutdownTs?: number
                 repo.appendValidated(resumeEvent);
             }
             vscode.window.showInformationMessage(`Recovered: resumed job '${job_title}'.`);
-            return repo.loadLastSession("global");
+            return repo.loadLastSession("both");
         }
 
-        return repo.loadLastSession("global");
+        return repo.loadLastSession("both");
     } catch (ex) {
         console.error("Recovery check failed:", ex);
         return null;

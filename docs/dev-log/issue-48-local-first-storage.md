@@ -56,7 +56,17 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
       `global_index.ts` (`append_owned_event`, `rebuild_index`, `registry_log_paths`); paths gain
       optional `global_index_path` / `scratch_path`. `processes.md` storage diagram still unchanged
       (model flips at 48c).
-- [ ] 48c — cutover + migration
+- [x] 48c — cutover + migration. **One owner per event**: `appendEvent` writes exactly one owned
+      log (workspace when opted in, else the global-owned `scratch.jsonl`) and replicates into the
+      derived `index.jsonl` — the old global dual-write is gone. The dashboard now reads the index
+      (`Runtime.loadEventCollection`/`refreshEventCollection` → `loadIndexEntries`); edits resolve
+      the target in the **owned** collection (`loadOwnedCollection`) and rewrite its owning log, then
+      the index is rebuilt. A one-shot activation migration moves the legacy global `logs.jsonl` into
+      scratch (`.migrated.bak` first, deduped by id, legacy file removed). `EventRepository`'s
+      "global" location now physically means the global-owned store via a `_global_owned_path` getter
+      (`scratch_path ?? global_log_path`), so unit tests that set only `global_log_path` are
+      unaffected. Recovery/`appendValidated` read the owned union (`"both"`). `processes.md` storage
+      diagram + I/O table flipped to local-first.
 
 ## Code-review findings (48a)
 
@@ -77,6 +87,26 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
 
 ## Rejected approaches
 
+- **Making the dashboard read the owned union (scratch + workspace) instead of `index.jsonl`.**
+  Simpler (no read/derived split), but it would show only the current window's data and never
+  exercise the replicated index — defeating the point of the cutover and the foundation #3 builds
+  on. Rejected: the dashboard reads the derived index; edits target the owned logs.
+- **Repointing the `global_log_path` field itself at `scratch.jsonl`.** Lowest churn, but it makes
+  the field name lie about the file and forces the many existing `global_log_path`-based tests to
+  change. Chose a private `_global_owned_path` getter (`scratch_path ?? global_log_path`) instead:
+  production uses scratch, and tests that set only `global_log_path` keep their exact behaviour.
+
 ## Retrospective
 
-Filled in at PR time.
+Shipped as 3 clean slices on one branch (48a foundation → 48b parallel index → 48c cutover), each
+leaving an F5-able extension. The strangler-fig order paid off: 48c's risky write-model flip landed
+against an already-populated, already-tested index and scratch.
+
+**What changed from the plan:** none materially. The one design call made during 48c (not pre-decided
+in the arc) was **edit scope after cutover** — the dashboard shows the global derived view of all
+hours, but editing is limited to events *owned by the current window* (this repo's log + scratch).
+Cross-repo editing needs the owning repo's log and is deferred to #43 (amend). For single-repo use
+(and the F5 fixtures) everything on screen is owned, so editing is unaffected.
+
+**Deferred (unchanged):** the two multi-writer registry races found in 48a review remain #47's; the
+index rebuild-on-activation shrinks but doesn't close concurrent-write windows — also #47.

@@ -3,11 +3,14 @@
 
 ## Storage layout (local-first, #48)
 
-Under the local-first model, a repo's committed `.timescope/logs.jsonl` **owns** its events; the
-global store holds a derived index plus a scratch log. This section documents the metadata files
-introduced across #48: `config.json` / `registry.json` (48a) and `index.jsonl` / `scratch.jsonl`
-(48b). In 48b the index and scratch are populated in parallel while the old global/workspace
-dual-write and merged read continue; the dashboard begins reading `index.jsonl` at 48c.
+Under the local-first model, a repo's committed `.timescope/logs.jsonl` **owns** its events; every
+off-project session is owned by the global `scratch.jsonl`. The global `index.jsonl` is a derived,
+rebuildable union of all owned sources and is the dashboard's read surface. There is **one owner
+per event** — `appendEvent` writes exactly one owned log, then replicates into the index (no
+dual-write). The legacy global `logs.jsonl` was migrated into scratch (backed up first) and retired.
+
+This section documents the metadata files introduced across #48: `config.json` / `registry.json`
+(48a) and `index.jsonl` / `scratch.jsonl` (48b/48c).
 
 ### Repo config — `.timescope/config.json`
 
@@ -51,17 +54,20 @@ event JSONL format as a log (header line + one event per line), sorted ascending
 
 - **Derived and disposable** — never a source of truth. Deleting it loses nothing; `TimeScope:
   Rebuild Global Index` reconstructs it from the owned sources (repos in `registry.json` + scratch).
-- Populated incrementally: `appendEvent` replicates each new event here (48b). The dashboard reads
-  it at 48c; until then it is written but not yet authoritative.
+- Populated incrementally: `appendEvent` replicates each new event here, and it is rebuilt from the
+  owned sources on activation and after edits/renames. The dashboard reads it (48c).
 
 ### Scratch log — `scratch.jsonl`
 
 An **owned** event log in the global storage dir, in the same JSONL format as a log. It holds
-sessions that don't belong to any repo — non-workspace (off-project) work.
+sessions that don't belong to any repo — non-workspace (off-project) work — plus the migrated
+legacy history. It is the successor to the retired global `logs.jsonl`.
 
-- Written by `appendEvent` only when the current session has no opted-in workspace log (48b).
-- Feeds the index rebuild alongside repo logs. At 48c the existing global `logs.jsonl` (historical,
-  repo-less hours) is backed up and migrated into scratch, and the global dual-write is dropped.
+- Written by `appendEvent` only when the current session has no opted-in workspace log.
+- Feeds the index rebuild alongside repo logs. On the first activation after the cutover, the
+  existing global `logs.jsonl` (historical, repo-less hours) is backed up to `logs.jsonl.migrated.bak`
+  and its events are moved into scratch (deduped by id); the legacy file is then removed so the
+  migration runs exactly once.
 
 
 ## Jobs Format

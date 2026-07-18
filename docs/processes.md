@@ -37,7 +37,7 @@ flowchart TD
 
 **Key points:**
 - `Runtime` is the single owner of paths, repositories, cached `EventCollection`, active `Session`, timer interval, and UI items.
-- `checkAndRecover` reads the last session from the global log via `EventRepository.loadLastSession`. If the session is open (last event is not `stop`), the user is prompted. Recovery events flow through the same `appendValidated` path as normal commands.
+- `checkAndRecover` reads the last session from this window's owned stores (workspace + scratch) via `EventRepository.loadLastSession("both")`. If the session is open (last event is not `stop`), the user is prompted. Recovery events flow through the same `appendValidated` path as normal commands.
 - No background timer starts unless a session is active after recovery.
 
 ---
@@ -89,7 +89,7 @@ sequenceDiagram
 
 All four session commands (start, pause, resume, stop) follow the same pattern:
 1. Mutate the in-memory `Session` (produces an `Event`).
-2. Persist via `EventRepository.appendValidated` (writes to global log + optional workspace mirror, with dedup check).
+2. Persist via `EventRepository.appendValidated` (writes to the single owning log — workspace when opted in, else scratch — replicates into the derived index, with a dedup check).
 3. Push the event into `Runtime`'s cached `EventCollection` (avoids a full file re-parse).
 4. Call `setActiveSession` to sync UI and timer.
 
@@ -102,7 +102,7 @@ All four session commands (start, pause, resume, stop) follow the same pattern:
 
 ```mermaid
 flowchart TD
-    A["checkAndRecover(repo, shutdownTs?)"] --> B["repo.loadLastSession<br>from global log"]
+    A["checkAndRecover(repo, shutdownTs?)"] --> B["repo.loadLastSession('both')<br>owned: workspace + scratch"]
     B --> C{"session<br>open?"}
     C -- No --> Z["return null"]
     C -- Yes --> TS["atShutdown =<br>shutdownTs ?? lastTimestamp + 1"]
@@ -298,10 +298,15 @@ See [Record Format Spec](record_format_spec.md) for the on-disk `EventDTO` / `Jo
 
 ## 6. File I/O
 
+**Local-first (#48):** one owner per event. An opted-in repo's committed `.timescope/logs.jsonl`
+owns its events; every off-project session is owned by the global `scratch.jsonl`. The global
+`index.jsonl` is a **derived, rebuildable** union of all owned sources and is the dashboard's read
+surface. The legacy global `logs.jsonl` was migrated into scratch and retired.
+
 ```mermaid
 flowchart LR
     subgraph Cache ["Runtime Cache"]
-        RC["_cachedCollection<br>(EventCollection)"]
+        RC["_cachedCollection<br>(index view)"]
     end
 
     subgraph Repos ["Repositories"]
@@ -311,34 +316,46 @@ flowchart LR
 
     subgraph Global ["Global Storage"]
         JF["jobs.json"]
-        LF["logs.jsonl<br>(header + events)"]
+        SC["scratch.jsonl<br>(OWNED: off-project<br>+ migrated legacy)"]
+        IX["index.jsonl<br>(DERIVED, rebuildable)"]
+        RG["registry.json"]
     end
 
-    subgraph WS ["Workspace Storage"]
-        WL[".timescope/<br>logs.jsonl"]
+    subgraph WS ["Workspace Storage (opted-in repo)"]
+        WL[".timescope/logs.jsonl<br>(OWNED)"]
     end
 
-    RC -. "load / refresh" .-> ER
-    ER -- "append / replace<br>renameJobInLog" --> LF
-    ER -- "append / replace<br>renameJobInLog" --> WL
-    ER -- "loadAllEntries<br>(merge + dedup)" --> LF & WL
-    ER -- "loadSessions<br>loadLastSession" --> LF
+    ER -- "append (opted-in owner)" --> WL
+    ER -- "append (off-project owner)" --> SC
+    ER -- "replicate every event" --> IX
+    WL -- "rebuild (walk registry)" --> IX
+    SC -- "rebuild" --> IX
+    RG -. "repo paths" .-> IX
+    RC -. "load / refresh (dashboard)" .-> IX
+    ER -- "loadAllEntries (owned: scratch+ws)" --> SC & WL
 
-    JR -- "save / update<br>/ delete" --> JF
+    JR -- "save / update / delete" --> JF
     JR -- "loadAll" --> JF
 ```
 
 | Operation | Reads | Writes |
 | :--- | :--- | :--- |
-| Session command (start/pause/resume/stop) | — | global log, workspace log |
-| Recovery | global log | global log, workspace log |
-| Dashboard `request_data` | global + workspace (merged) | — |
-| Dashboard edit | global + workspace (merged) | global log, workspace log |
-| Rename job | global log, workspace log | global log, workspace log, `jobs.json` |
+| Session command (start/pause/resume/stop) | owned (workspace **or** scratch) | owning log + `index.jsonl` |
+| Recovery | owned (workspace + scratch) | owning log + `index.jsonl` |
+| Dashboard `request_data` | `index.jsonl` (derived) | — |
+| Dashboard edit | owned (find) / `index.jsonl` (display) | owning log, then rebuild `index.jsonl` |
+| Rename job | owned logs | owned logs, `index.jsonl`, `jobs.json` |
+| Rebuild Global Index | registry repo logs + scratch | `index.jsonl` |
+| Migration (once, on activation) | legacy `logs.jsonl` | `scratch.jsonl` (+ `.migrated.bak`) |
 | Add/delete job | — | `jobs.json` |
 
-- `EventRepository.loadAllEntries()` merges both logs and de-duplicates by event ID, attaching `global_line_index` and `workspace_line_index` to each `Event`.
-- `Runtime` caches the `EventCollection`; `appendToCache` avoids a full re-parse after each write. `invalidateEventCollection` clears the cache after bulk rewrites (e.g. job rename).
+- **One owner per event.** `appendEvent` writes to exactly one owned log — the workspace log when
+  opted in, otherwise scratch — then replicates into the derived `index.jsonl` (no dual-write).
+- `EventRepository.loadAllEntries()` is the **owned** view (scratch + workspace, deduped by event
+  ID) used for recovery/edits; `loadIndexEntries()` is the **derived** view the dashboard displays.
+- Editing resolves the target event in the owned view and rewrites its owning log, then the index
+  is rebuilt. Editing events owned by *other* repos waits for #43 (amend).
+- `Runtime` caches the index view; `appendToCache` avoids a full re-parse after each write.
 - `JobRepository` has **no** workspace mirror — jobs are stored only in global `jobs.json`.
 
 ---

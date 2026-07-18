@@ -32,7 +32,8 @@ function ev(job: Job, type: "start" | "stop" | "pause" | "resume", ts: number, t
  * - Why: guarantees the repository’s canonical write/read path and session reconstruction are intact after OOP refactor.
  */
 export function run_event_repository_append_and_load_tests(): void {
-    const paths = mkPaths("basic");
+    // No workspace → events are owned by the global-owned store, so "global" reads apply.
+    const paths = mkPaths("basic", false);
     const repo = new EventRepository(paths);
     const jobA = Job.create({ title: "alpha" });
     const jobB = Job.create({ title: "beta" });
@@ -73,15 +74,18 @@ export function run_event_repository_rename_tests(): void {
     const jobAlpha = Job.create({ title: "alpha" });
     const jobBeta = Job.create({ title: "beta" });
 
-    repo.appendEvent(ev(jobAlpha, "start", 10));
-    repo.appendEvent(ev(jobAlpha, "stop", 20));
-    repo.appendEvent(ev(jobBeta, "start", 30));
-    repo.appendEvent(ev(jobBeta, "stop", 40));
-
-    // mirror into workspace
-    if (paths.workspace_log_path) {
-        fs.writeFileSync(paths.workspace_log_path, fs.readFileSync(paths.global_log_path, "utf8"), "utf8");
-    }
+    // renameJobInLogByJob rewrites both owned stores (global-owned + workspace); write
+    // the same events into each directly so both files carry the pre-rename data.
+    const header = JSON.stringify({ _format_version: 2 });
+    const seed = [
+        header,
+        ev(jobAlpha, "start", 10).toJSONL(),
+        ev(jobAlpha, "stop", 20).toJSONL(),
+        ev(jobBeta, "start", 30).toJSONL(),
+        ev(jobBeta, "stop", 40).toJSONL(),
+    ].join("\n") + "\n";
+    fs.writeFileSync(paths.global_log_path, seed, "utf8");
+    if (paths.workspace_log_path) fs.writeFileSync(paths.workspace_log_path, seed, "utf8");
 
     const renamed = jobAlpha.rename("gamma");
     repo.renameJobInLogByJob(renamed);
@@ -140,12 +144,15 @@ export function run_event_repository_last_sessions_tests(): void {
     const jobA = Job.create({ title: "alpha" });
     const jobB = Job.create({ title: "beta" });
 
-    // global
-    repo.appendEvent(ev(jobA, "start", 100));
-    repo.appendEvent(ev(jobA, "stop", 200));
-    // workspace log written directly
+    const header = JSON.stringify({ _format_version: 2 });
+    // global-owned store written directly (jobA)
+    fs.writeFileSync(
+        paths.global_log_path,
+        [header, ev(jobA, "start", 100).toJSONL(), ev(jobA, "stop", 200).toJSONL()].join("\n") + "\n",
+        "utf8"
+    );
+    // workspace log written directly (jobB)
     if (paths.workspace_log_path) {
-        const header = JSON.stringify({ _format_version: 2 });
         const lines = [header, ev(jobB, "start", 150).toJSONL(), ev(jobB, "stop", 250).toJSONL()];
         fs.writeFileSync(paths.workspace_log_path, lines.join("\n") + "\n", "utf8");
     }
@@ -214,7 +221,7 @@ export function run_event_repository_malformed_preservation_tests(): void {
  *   consumers (dashboard, replaceEvent) can find events in their file without reloading.
  */
 export function run_event_repository_line_index_tests(): void {
-    // ── Case 1: First append creates file — event lands on line 1 (header = 0) ──
+    // ── Case 1: Opted-in workspace owns the event (single-owner, #48 48c) ──
     {
         const paths = mkPaths("lineindex-fresh", true);
         const repo = new EventRepository(paths);
@@ -226,14 +233,15 @@ export function run_event_repository_line_index_tests(): void {
 
         repo.appendEvent(e);
 
-        assert.strictEqual(e.global_line_index, 1, "first event in new global file should be line 1");
+        // Owned solely by the workspace log — the global-owned store is untouched.
         assert.strictEqual(e.workspace_line_index, 1, "first event in new workspace file should be line 1");
+        assert.strictEqual(e.global_line_index, -1, "opted-in event is not written to the global-owned store");
         assert.ok(e.isPersisted, "event should be persisted");
-        assert.ok(e.isInGlobal, "event should be in global");
         assert.ok(e.isInWorkspace, "event should be in workspace");
+        assert.ok(!e.isInGlobal, "event should NOT be in the global-owned store");
     }
 
-    // ── Case 2: Subsequent append — index increments ──
+    // ── Case 2: Subsequent workspace-owned appends increment the workspace index ──
     {
         const paths = mkPaths("lineindex-multi", true);
         const repo = new EventRepository(paths);
@@ -241,17 +249,18 @@ export function run_event_repository_line_index_tests(): void {
 
         const e1 = ev(job, "start", 100);
         repo.appendEvent(e1);
-        assert.strictEqual(e1.global_line_index, 1, "e1 global at line 1");
+        assert.strictEqual(e1.workspace_line_index, 1, "e1 workspace at line 1");
+        assert.strictEqual(e1.global_line_index, -1, "e1 not in global-owned store");
 
         const e2 = ev(job, "stop", 200);
         repo.appendEvent(e2);
-        assert.strictEqual(e2.global_line_index, 2, "e2 global at line 2");
         assert.strictEqual(e2.workspace_line_index, 2, "e2 workspace at line 2");
+        assert.strictEqual(e2.global_line_index, -1, "e2 not in global-owned store");
 
         const e3 = ev(job, "start", 300);
         repo.appendEvent(e3);
-        assert.strictEqual(e3.global_line_index, 3, "e3 global at line 3");
         assert.strictEqual(e3.workspace_line_index, 3, "e3 workspace at line 3");
+        assert.strictEqual(e3.global_line_index, -1, "e3 not in global-owned store");
     }
 
     // ── Case 3: No workspace — workspace_line_index stays -1 ──
@@ -325,36 +334,41 @@ function count_events(file_path: string): number {
         .length;
 }
 
+/** Build 48c-style paths: scratch is the global-owned store, plus a derived index. */
+function mkOwnedPaths(suffix: string, withWorkspace: boolean): TimeScopePaths {
+    const paths = mkPaths(suffix, withWorkspace);
+    const dir = path.dirname(paths.global_log_path);
+    paths.scratch_path = path.join(dir, "scratch.jsonl");
+    paths.global_index_path = path.join(dir, "index.jsonl");
+    return paths;
+}
+
 /**
- * Tests that appendEvent replicates into the derived global index and scratch (#48 48b):
- * - Target: EventRepository.appendEvent replication in src/core/event_repository.ts
- * - What: every appended event lands in index.jsonl; non-workspace sessions also land in
- *   scratch.jsonl; opted-in (workspace) sessions do NOT touch scratch; dedupe writes neither twice.
- * - Why: 48b builds the derived index + owned scratch in parallel while the old dual-write and
- *   merged read continue — de-risking the 48c cutover.
+ * Tests single-owner writes + index replication after the cutover (#48 48c):
+ * - Target: EventRepository.appendEvent in src/core/event_repository.ts
+ * - What: an event lands in exactly ONE owned store — the workspace log when opted in,
+ *   otherwise the global-owned scratch — and always replicates into the derived index.
+ *   The legacy global `logs.jsonl` is never written. Dedupe writes neither twice.
+ * - Why: this is the local-first write model — one owner per event, global index derived.
  */
 export function run_event_repository_replication_tests(): void {
-    // ── Case 1: No workspace — event replicated to index AND scratch ──
+    // ── Case 1: No workspace — scratch owns the event; index mirrors it ──
     {
-        const paths = mkPaths("replicate-scratch", false);
-        paths.global_index_path = path.join(path.dirname(paths.global_log_path), "index.jsonl");
-        paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+        const paths = mkOwnedPaths("owned-scratch", false);
         const repo = new EventRepository(paths);
         const job = Job.create({ title: "alpha" });
 
         repo.appendEvent(ev(job, "start", 100));
         repo.appendEvent(ev(job, "stop", 200));
 
-        assert.strictEqual(count_events(paths.global_log_path), 2, "global still dual-written");
+        assert.strictEqual(count_events(paths.scratch_path!), 2, "scratch owns non-workspace events");
         assert.strictEqual(count_events(paths.global_index_path!), 2, "both events replicated to the index");
-        assert.strictEqual(count_events(paths.scratch_path!), 2, "non-workspace events land in scratch");
+        assert.strictEqual(count_events(paths.global_log_path), 0, "legacy global logs.jsonl is never written");
     }
 
-    // ── Case 2: Workspace opted in — index yes, scratch NO (workspace owns it) ──
+    // ── Case 2: Workspace opted in — workspace owns it; scratch untouched ──
     {
-        const paths = mkPaths("replicate-workspace", true);
-        paths.global_index_path = path.join(path.dirname(paths.global_log_path), "index.jsonl");
-        paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+        const paths = mkOwnedPaths("owned-workspace", true);
         const repo = new EventRepository(paths);
         const job = Job.create({ title: "alpha" });
 
@@ -365,20 +379,18 @@ export function run_event_repository_replication_tests(): void {
         assert.strictEqual(count_events(paths.scratch_path!), 0, "opted-in session must not write scratch");
     }
 
-    // ── Case 3: Dedupe — an equal re-append writes neither index nor scratch twice ──
+    // ── Case 3: Dedupe — an equal re-append writes neither owner nor index twice ──
     {
-        const paths = mkPaths("replicate-dedupe", false);
-        paths.global_index_path = path.join(path.dirname(paths.global_log_path), "index.jsonl");
-        paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+        const paths = mkOwnedPaths("owned-dedupe", false);
         const repo = new EventRepository(paths);
         const job = Job.create({ title: "alpha" });
 
         repo.appendEvent(ev(job, "start", 100));
         repo.appendEvent(ev(job, "start", 100)); // equal — deduped
 
+        assert.strictEqual(count_events(paths.scratch_path!), 1, "dedupe does not double-write the owner");
         assert.strictEqual(count_events(paths.global_index_path!), 1, "dedupe does not double-write the index");
-        assert.strictEqual(count_events(paths.scratch_path!), 1, "dedupe does not double-write scratch");
     }
 
-    console.log("  ✓ index/scratch replication tests passed");
+    console.log("  ✓ single-owner write + index replication tests passed");
 }

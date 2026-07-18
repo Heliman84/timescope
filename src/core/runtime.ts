@@ -10,6 +10,7 @@ import { Session } from "./session";
 import { Job } from "./job";
 import { updateTimerText, updateStatusBar, startTimerInterval, stopTimerInterval } from "./timer";
 import { load_build_info, BuildInfo } from "./build_info";
+import { rebuild_index, registry_log_paths } from "./global_index";
 
 export class Runtime {
   public readonly paths: TimeScopePaths;
@@ -44,21 +45,53 @@ export class Runtime {
   }
 
   /**
-   * Return a cached EventCollection, loading from disk only if the cache is empty.
+   * Return the cached dashboard view — the derived global index (#48 48c) — loading
+   * from disk only if the cache is empty. The index is the de-duplicated union of
+   * every repo's owned log plus scratch.
    */
   public loadEventCollection(): EventCollection {
     if (!this._cachedCollection) {
-      this._cachedCollection = this.logRepo.loadAllEntries();
+      this._cachedCollection = this.logRepo.loadIndexEntries();
     }
     return this._cachedCollection;
   }
 
   /**
-   * Force-reload the EventCollection from disk and update the cache.
+   * Force-reload the dashboard view (the derived index) from disk and update the cache.
    */
   public refreshEventCollection(): EventCollection {
-    this._cachedCollection = this.logRepo.loadAllEntries();
+    this._cachedCollection = this.logRepo.loadIndexEntries();
     return this._cachedCollection;
+  }
+
+  /**
+   * Load this window's *owned* events (workspace + global-owned scratch), fresh from
+   * disk. This is the editable surface — the dashboard displays the derived index but
+   * edits must target the owning log (#48 48c; cross-repo editing arrives with #43).
+   */
+  public loadOwnedCollection(): EventCollection {
+    return this.logRepo.loadAllEntries();
+  }
+
+  /**
+   * Rebuild the derived global index from the owned sources — every registered repo's
+   * committed log, the current workspace log, and scratch. Safe to call anytime; the
+   * index is disposable.
+   */
+  public rebuildIndex(): { event_count: number; source_count: number } {
+    const index_path = this.paths.global_index_path;
+    if (!index_path) return { event_count: 0, source_count: 0 };
+    const registry = this.registryRepo.load();
+    const sources = registry_log_paths(registry);
+    if (this.paths.workspace_log_path) sources.push(this.paths.workspace_log_path);
+    const seen = new Set<string>();
+    const unique = sources.filter(p => {
+      const key = process.platform === "win32" ? p.toLowerCase() : p;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return rebuild_index(index_path, unique, this.paths.scratch_path);
   }
 
   /**
@@ -76,7 +109,10 @@ export class Runtime {
    */
   public appendToCache(event: Event): void {
     if (!this._cachedCollection) {
-      this._cachedCollection = this.logRepo.loadAllEntries();
+      // Seed from the index, which already contains the just-replicated event —
+      // so don't add it again (that would double it in the view).
+      this._cachedCollection = this.logRepo.loadIndexEntries();
+      return;
     }
     this._cachedCollection.add(event);
   }
@@ -99,8 +135,10 @@ export class Runtime {
     // Update in-memory collection
     this.jobs = this.jobs.update(renamed);
 
-    // Rewrite logs to reference updated job fields (by id)
+    // Rewrite the owned logs to reference updated job fields (by id), then rebuild
+    // the derived index so the dashboard view reflects the rename.
     this.logRepo.renameJobInLogByJob(renamed);
+    this.rebuildIndex();
     this.invalidateEventCollection();
     // If an active session references the renamed job, update it in-memory so UI
     // and timers reflect the new title without requiring a full reload.
