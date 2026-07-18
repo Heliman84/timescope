@@ -39,4 +39,17 @@ This is Wave 1 of the focus-milestone re-architecture (see #48): the zero-regret
 
 ## Retrospective
 
-(filled at PR time)
+Shipped as planned plus three additions along the way:
+
+- **Code review caught real gaps** (all fixed): Windows rename-over-locked-file needed an
+  in-place-write fallback; `.bak` needed non-clobbering names; and the sanitizer's per-line
+  event parsing was too expensive for hot-path reads — split detection became a zero-parse
+  regex fast-path and full reports are computed only by `checkLogHealth`.
+- **`seed-testdata --damaged`** grew out of F5 testing: one command seeds the exact damage
+  the sanitizer targets. DEVELOPMENT.md's stale seeder section got a full mode table.
+- The biggest surprise vs the issue text: there was **no tolerant reader** — glued records
+  weren't being healed, they were silently dropped from analytics. This branch is a small
+  data-recovery fix, not just hygiene: the production log's two glued records re-enter stats.
+
+F5-verified with a damaged seed: prompt appears once, compaction repairs with `.bak`,
+appends to a newline-less file stay valid, clean logs show no prompt.
