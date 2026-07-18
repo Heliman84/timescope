@@ -136,7 +136,17 @@ Original Unix time in milliseconds used to generate `id`. This value is immutabl
 ---
 
 #### Malformed Lines
-Non-throwing parser: if a line cannot be parsed as valid JSON or does not match the event schema, it is skiped silently.
+Non-throwing parser: if a line cannot be parsed as valid JSON or does not match the event schema, it is skipped silently.
+
+#### Load-Time Sanitizer
+Every log read passes through a sanitizer (`src/core/log_sanitizer.ts`) that heals damage **in memory only** — disk is never rewritten on load:
+- A physical line containing multiple concatenated JSON objects (the signature of an append made while the file lacked its trailing newline) is split into its records, provided the split is clean (2+ objects, each valid JSON, no residue). No partial salvage.
+- Damage is reported (concatenated lines, missing header, malformed lines, pause/resume counts); when repairable damage exists on disk the user is offered the `TimeScope: Compact Log` command once per session.
+
+#### Append / Rewrite Discipline
+- **Appends are newline-safe**: before appending, the file's last byte is checked; a missing trailing `\n` is injected first so records can never concatenate (`append_line_safe` in `src/utils/fs_utils.ts`).
+- **All full-file rewrites are atomic**: content is written to a temp file in the same directory and landed with an atomic rename (`write_file_atomic`), so a crash mid-rewrite can never tear the log. This applies to session edits, job renames, and compaction.
+- **Compaction** (`TimeScope: Compact Log`) rewrites a log clean at the current format version: splits concatenated records, restores canonical field order and the header, preserves unparseable lines verbatim, writes `logs.jsonl.bak` first, and is idempotent.
 
 #### Event Validation
 After parsing, timescope validates:

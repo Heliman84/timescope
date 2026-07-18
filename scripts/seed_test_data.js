@@ -22,8 +22,15 @@
  *
  * Usage:
  *   npm run seed-testdata                        synthetic data (~6 months of history)
+ *   npm run seed-testdata -- --damaged           ...then damage the global log (issue #42)
  *   npm run seed-testdata -- --from-real         copy YOUR real global store instead
  *   npm run seed-testdata -- --from-real <dir>   ...from an explicit storage dir
+ *
+ * --damaged post-processes the synthetic global log to carry the damage the
+ * #42 sanitizer targets: two event records glued onto one physical line, and
+ * a missing trailing newline (so the next real append exercises the newline-
+ * safe path). F5 should show the damage QuickPick once; "TimeScope: Compact
+ * Log" repairs the file with a .bak alongside.
  *
  * --from-real COPIES {jobs.json,logs.jsonl} from the real global storage into
  * the isolated test-workspace global store (the originals are never touched)
@@ -121,6 +128,25 @@ function write_store(dir, jobList, events) {
     fs.writeFileSync(path.join(dir, "logs.jsonl"), lines.join("\n") + "\n");
 
     return { jobs: jobDTOs.length, events: sorted.length };
+}
+
+// --damaged: introduce the exact on-disk damage issue #42's sanitizer and
+// Compact Log command exist to handle. Glues one mid-file pair of event lines
+// onto a single physical line and strips the trailing newline.
+function damage_global_log() {
+    const logPath = path.join(GLOBAL_DIR, "logs.jsonl");
+    const lines = fs.readFileSync(logPath, "utf8").split("\n").filter((l) => l.length > 0);
+    if (lines.length < 4) {
+        console.error("--damaged: not enough events in the global log to damage.");
+        process.exit(1);
+    }
+    // Glue two adjacent event lines mid-file (index 0 is the header).
+    const glueAt = Math.floor(lines.length / 2);
+    const glued = [...lines.slice(0, glueAt), lines[glueAt] + lines[glueAt + 1], ...lines.slice(glueAt + 2)];
+    // No trailing newline: the next append must inject one (append_line_safe).
+    fs.writeFileSync(logPath, glued.join("\n"), "utf8");
+    console.log(`Damaged   → glued records on line ${glueAt + 1}, trailing newline stripped (${logPath})`);
+    console.log("            F5 should show the damage QuickPick; 'TimeScope: Compact Log' repairs it (.bak written).");
 }
 
 // --from-real: copy the user's actual global store into the isolated
@@ -257,6 +283,8 @@ function main() {
     console.log(`Workspace → ${workspace.jobs} jobs, ${workspace.events} events  (${WORKSPACE_DIR})`);
     console.log(`            ${duplicates.length} duplicate the last week of global (dedup on merge), ${uniqueEvents.length} unique.`);
     console.log("Press F5 — totals should be unchanged by the duplicates; the 'Meridian' job and the unique sessions appear once.");
+
+    if (process.argv.includes("--damaged")) damage_global_log();
 }
 
 main();

@@ -6,10 +6,8 @@ import { EventCollection } from "./event_collection";
 import { Session } from "./session";
 import { EventDTO } from "./event_dto";
 import { Job } from "./job";
-import { ensureDirExists, readJSONLSafe } from "../utils/fs_utils";
-
-const HEADER_KEY = "_format_version";
-const HEADER_LINE = JSON.stringify({ _format_version: 2 });
+import { ensure_dir_sync, readJSONLSafe, append_line_safe, write_file_atomic } from "../utils/fs_utils";
+import { HEADER_KEY, HEADER_LINE, sanitize_lines, SanitizeReport } from "./log_sanitizer";
 
 export class EventRepository {
     private readonly paths: TimeScopePaths;
@@ -18,13 +16,37 @@ export class EventRepository {
         this.paths = paths;
     }
 
+    /**
+     * Single choke point for log reads: physical lines are healed in memory
+     * (concatenated records split) so every consumer — analytics, dedupe,
+     * line indices, rewrites — sees the same logical view. Disk is untouched.
+     */
+    private read_log_lines(file_path: string | null | undefined): string[] {
+        if (!file_path) return [];
+        // Hot path: heal concatenated records but skip per-line event parsing;
+        // the damage report is only needed by checkLogHealth (full read).
+        const { lines } = sanitize_lines(readJSONLSafe(file_path), { count_events: false });
+        return lines;
+    }
+
+    /** Full sanitize reports for both logs (used for the load-time damage prompt). */
+    checkLogHealth(): { file_path: string; report: SanitizeReport }[] {
+        const results: { file_path: string; report: SanitizeReport }[] = [];
+        for (const p of [this.paths.global_log_path, this.paths.workspace_log_path]) {
+            if (!p) continue;
+            const { report } = sanitize_lines(readJSONLSafe(p));
+            results.push({ file_path: p, report });
+        }
+        return results;
+    }
+
     private readLinesForLocation(location: "workspace" | "global" | "both" = "global"): string[] {
         const all: string[] = [];
         if (location === "global" || location === "both") {
-            all.push(...readJSONLSafe(this.paths.global_log_path));
+            all.push(...this.read_log_lines(this.paths.global_log_path));
         }
         if (location === "workspace" || location === "both") {
-            all.push(...readJSONLSafe(this.paths.workspace_log_path));
+            all.push(...this.read_log_lines(this.paths.workspace_log_path));
         }
         return all;
     }
@@ -32,13 +54,13 @@ export class EventRepository {
     appendEvent(event: Event): void {
         const line = event.toJSONL() + "\n";
 
-        ensureDirExists(this.paths.global_log_path);
-        if (this.paths.workspace_log_path) ensureDirExists(this.paths.workspace_log_path);
+        ensure_dir_sync(this.paths.global_log_path);
+        if (this.paths.workspace_log_path) ensure_dir_sync(this.paths.workspace_log_path);
 
         // Read global file once — used for both dedupe check and line count.
         let globalLines: string[] = [];
         try {
-            globalLines = readJSONLSafe(this.paths.global_log_path);
+            globalLines = this.read_log_lines(this.paths.global_log_path);
             for (let i = globalLines.length - 1; i >= 0; i--) {
                 const parsedEvent = Event.fromJSONL(globalLines[i]);
                 if (!parsedEvent) continue;
@@ -59,19 +81,19 @@ export class EventRepository {
             fs.writeFileSync(this.paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
             event.setGlobalLineIndex(1);
         } else {
-            // Appending: event lands after existing lines
-            fs.appendFileSync(this.paths.global_log_path, line, "utf8");
+            // Appending: newline-safe so a torn earlier write can never glue records
+            append_line_safe(this.paths.global_log_path, event.toJSONL());
             event.setGlobalLineIndex(globalLines.length);
         }
 
         if (this.paths.workspace_log_path) {
             // Read workspace file once for line count.
-            const wsLines = readJSONLSafe(this.paths.workspace_log_path);
+            const wsLines = this.read_log_lines(this.paths.workspace_log_path);
             if (wsLines.length === 0) {
                 fs.writeFileSync(this.paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
                 event.setWorkspaceLineIndex(1);
             } else {
-                fs.appendFileSync(this.paths.workspace_log_path, line, "utf8");
+                append_line_safe(this.paths.workspace_log_path, event.toJSONL());
                 event.setWorkspaceLineIndex(wsLines.length);
             }
         }
@@ -104,7 +126,7 @@ export class EventRepository {
     }
 
     loadEventCollectionForJob(job?: Job): EventCollection {
-        const lines = readJSONLSafe(this.paths.global_log_path);
+        const lines = this.read_log_lines(this.paths.global_log_path);
         const col = EventCollection.parse_lines(lines);
         if (job) return col.filterByJob(job);
         return col;
@@ -315,13 +337,13 @@ export class EventRepository {
         };
 
         if (location === "global") {
-            scanSingleN(readJSONLSafe(this.paths.global_log_path));
+            scanSingleN(this.read_log_lines(this.paths.global_log_path));
         } else if (location === "workspace") {
-            scanSingleN(readJSONLSafe(this.paths.workspace_log_path));
+            scanSingleN(this.read_log_lines(this.paths.workspace_log_path));
         } else {
             scanBothN(
-                readJSONLSafe(this.paths.global_log_path),
-                readJSONLSafe(this.paths.workspace_log_path)
+                this.read_log_lines(this.paths.global_log_path),
+                this.read_log_lines(this.paths.workspace_log_path)
             );
         }
 
@@ -337,7 +359,7 @@ export class EventRepository {
         if (!job) return;
         const rewriteFile = (filePath: string | null | undefined) => {
             if (!filePath || !fs.existsSync(filePath)) return;
-            const lines = readJSONLSafe(filePath);
+            const lines = this.read_log_lines(filePath);
             const parsed: string[] = [];
             for (const l of lines) {
                 // Skip header lines — we prepend a fresh header at the end
@@ -360,8 +382,8 @@ export class EventRepository {
                 }
             }
             const toWrite = [HEADER_LINE, ...parsed];
-            ensureDirExists(filePath);
-            fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
+            // write_file_atomic ensures the parent directory itself.
+            write_file_atomic(filePath, toWrite.join("\n") + "\n");
         };
 
         rewriteFile(this.paths.global_log_path);
@@ -383,7 +405,7 @@ export class EventRepository {
             setIndex: (ev: Event, line: number) => void
         ) => {
             if (!filePath || !fs.existsSync(filePath)) return;
-            const lines = readJSONLSafe(filePath);
+            const lines = this.read_log_lines(filePath);
             for (let i = 0; i < lines.length; i++) {
                 const ev = Event.fromJSONL(lines[i]);
                 if (!ev) continue;
@@ -421,7 +443,7 @@ export class EventRepository {
 
         const rewrite = (filePath: string | null | undefined, key: "globalReplaced" | "workspaceReplaced") => {
             if (!filePath || !fs.existsSync(filePath)) return;
-            const lines = readJSONLSafe(filePath);
+            const lines = this.read_log_lines(filePath);
             let replaced = false;
             const output: string[] = [];
 
@@ -442,8 +464,8 @@ export class EventRepository {
 
             if (replaced) {
                 const toWrite = [HEADER_LINE, ...output];
-                ensureDirExists(filePath);
-                fs.writeFileSync(filePath, toWrite.join("\n") + "\n", "utf8");
+                // write_file_atomic ensures the parent directory itself.
+                write_file_atomic(filePath, toWrite.join("\n") + "\n");
                 result[key] = true;
             }
         };
