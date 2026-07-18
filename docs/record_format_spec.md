@@ -1,6 +1,48 @@
 # TimeScope Record Format Specification
 
 
+## Storage layout (local-first, #48)
+
+Under the local-first model, a repo's committed `.timescope/logs.jsonl` **owns** its events; the
+global store holds a derived index plus a scratch log. This section documents the metadata files
+introduced in #48 phase 48a; `index.jsonl` / `scratch.jsonl` and the replication flow are
+documented as 48b/48c land.
+
+### Repo config — `.timescope/config.json`
+
+A repo's authority about itself, committed with the repository. In 48a it carries only a stable
+repo id (Client/Project binding + pinned task-types arrive with #15):
+
+```json
+{
+  "repo_id": "a1b2c3d4e5f6",
+  "format_version": 1
+}
+```
+
+- `repo_id` — 12-char hex, generated once at opt-in and never regenerated (clone → same id).
+- `.timescope/` is created **only** when the user opts in (first Start → "Track here?"), or when a
+  `.timescope` folder already exists (existing folder ⇒ assume opted-in). This closes #2.
+
+### Global registry — `registry.json`
+
+A rebuildable cache of known repos (lives in the global storage dir alongside `logs.jsonl`). Used
+to rebuild the global index efficiently and to dedup repos by id:
+
+```json
+{
+  "format_version": 1,
+  "repos": [
+    { "id": "a1b2c3d4e5f6", "name": "lantern-fw", "path": "/work/lantern-fw", "last_seen": 1721000000000 }
+  ]
+}
+```
+
+- Entities (clients / projects / task-types) join the registry in #15; 48a tracks repos only.
+- A malformed `registry.json` is a hard error (losing repo paths would defeat a rebuild); a
+  missing file is treated as an empty registry.
+
+
 ## Jobs Format
 
 **File:** `jobs.json`

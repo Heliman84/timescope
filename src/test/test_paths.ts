@@ -1,6 +1,7 @@
 import * as path from "path";
 import * as assert from "assert";
 import { resolve_storage_dir } from "../core/resolve_storage_dir";
+import { workspace_timescope_paths } from "../core/workspace_paths";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // resolve_storage_dir
@@ -70,9 +71,28 @@ export function run_resolve_storage_dir_fallback_tests(): void {
 // Exported runner
 // ═══════════════════════════════════════════════════════════════════════════
 
+/**
+ * Tests workspace_timescope_paths:
+ * - Target: workspace_timescope_paths in src/core/paths.ts
+ * - What: derives the `.timescope` dir + jobs/log/config paths under a repo root.
+ * - Why: the opt-in flow (#48) needs these candidate paths without touching disk.
+ */
+export function run_workspace_timescope_paths_tests(): void {
+    const wsRoot = path.resolve(path.sep === "\\" ? "C:\\work\\lantern" : "/work/lantern");
+    const ws = workspace_timescope_paths(wsRoot);
+
+    assert.strictEqual(ws.dir, path.join(wsRoot, ".timescope"), "dir is <root>/.timescope");
+    assert.strictEqual(ws.jobs_path, path.join(wsRoot, ".timescope", "jobs.json"), "jobs.json under .timescope");
+    assert.strictEqual(ws.log_path, path.join(wsRoot, ".timescope", "logs.jsonl"), "logs.jsonl under .timescope");
+    assert.strictEqual(ws.config_path, path.join(wsRoot, ".timescope", "config.json"), "config.json under .timescope");
+
+    console.log("  ✓ workspace_timescope_paths tests passed");
+}
+
 export function run_resolve_storage_dir_tests(): void {
     console.log("paths: resolve_storage_dir");
     run_resolve_storage_dir_absolute_tests();
     run_resolve_storage_dir_relative_tests();
     run_resolve_storage_dir_fallback_tests();
+    run_workspace_timescope_paths_tests();
 }

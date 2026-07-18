@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { resolve_paths, TimeScopePaths } from "./paths";
 import { JobRepository } from "./job_repository";
 import { EventRepository } from "./event_repository";
+import { RegistryRepository } from "./registry_repository";
 import { Event } from "./event";
 import { EventCollection } from "./event_collection";
 import { JobCollection } from "./job_collection";
@@ -15,6 +16,7 @@ export class Runtime {
   public jobs: JobCollection;
   public readonly jobRepo: JobRepository;
   public readonly logRepo: EventRepository;
+  public readonly registryRepo: RegistryRepository;
   public readonly buildInfo: BuildInfo | null;
 
   public activeSession: Session | null = null;
@@ -35,6 +37,7 @@ export class Runtime {
     this.paths = resolve_paths(context);
     this.jobRepo = new JobRepository(this.paths);
     this.logRepo = new EventRepository(this.paths);
+    this.registryRepo = new RegistryRepository(this.paths.registry_path);
     this.jobs = JobCollection.fromArray([]);
     this.buildInfo = load_build_info(context.extensionUri.fsPath);
     // UI is created when `initializeUI()` is called by the extension activation flow.

@@ -10,6 +10,7 @@ import { Session } from "./core/session";
 import { Job } from "./core/job";
 import { format_build_info_full } from "./core/build_info";
 import { compact_log_file, has_repairable_damage } from "./core/log_sanitizer";
+import { is_workspace_opted_in, enable_local_logging, register_if_opted_in } from "./core/local_opt_in";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
@@ -18,6 +19,40 @@ let _heartbeatInterval: NodeJS.Timeout | null = null;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const STATE_KEY_LAST_SEEN = "timescope.lastSeen";
 const STATE_KEY_LAST_SHUTDOWN = "timescope.lastShutdown";
+const STATE_KEY_OPT_IN_NEVER = "timescope.localOptIn.neverForFolder";
+
+// Prompt about local logging at most once per window session.
+let _optInPromptedThisSession = false;
+
+/**
+ * Offer to log the open workspace's time into a committed `.timescope/` folder.
+ * Nothing is created unless the user says yes (#2). Asked at most once per
+ * session, and never again for a folder the user declined permanently.
+ */
+async function maybe_prompt_local_opt_in(runtime: Runtime, context: vscode.ExtensionContext): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return;                                              // no workspace → global-only
+    if (is_workspace_opted_in(runtime.paths)) return;                // already opted in
+    if (_optInPromptedThisSession) return;
+    if (context.workspaceState.get<boolean>(STATE_KEY_OPT_IN_NEVER)) return;
+    _optInPromptedThisSession = true;
+
+    const choice = await vscode.window.showInformationMessage(
+        "Track this workspace's time in a committed .timescope/ folder too? Global tracking continues either way.",
+        "Track here", "Not now", "Never for this folder"
+    );
+    if (choice === "Track here") {
+        try {
+            enable_local_logging(runtime.paths, folder.uri.fsPath, folder.name, runtime.registryRepo, Date.now());
+            vscode.window.showInformationMessage("TimeScope: now logging this workspace in .timescope/.");
+        } catch (ex) {
+            vscode.window.showErrorMessage(`TimeScope: could not enable local logging: ${String(ex)}`);
+        }
+    } else if (choice === "Never for this folder") {
+        await context.workspaceState.update(STATE_KEY_OPT_IN_NEVER, true);
+    }
+    // "Not now" / dismissed: leave as-is; the once-per-session flag prevents nagging.
+}
 
 export async function activate(context: vscode.ExtensionContext) {
     _context = context;
@@ -31,6 +66,15 @@ export async function activate(context: vscode.ExtensionContext) {
     // Update settings UI to show resolved global paths
     config.update("global_jobs_path", runtime.paths.global_jobs_path, vscode.ConfigurationTarget.Global);
     config.update("global_log_path", runtime.paths.global_log_path, vscode.ConfigurationTarget.Global);
+
+    // If this workspace is already opted in (a `.timescope` folder exists), make
+    // sure it has a config.json and refresh its registry entry. Never blocks activation.
+    try {
+        const folder0 = vscode.workspace.workspaceFolders?.[0];
+        register_if_opted_in(runtime.paths, folder0?.uri.fsPath, folder0?.name ?? "", runtime.registryRepo, Date.now());
+    } catch (ex) {
+        console.error("TimeScope: registry update on activation failed", ex);
+    }
 
     // Initialize and register UI items
     runtime.initializeUI();
@@ -67,6 +111,9 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.start", async () => {
+            // First Start in an un-opted-in workspace offers local logging (#2/#48).
+            await maybe_prompt_local_opt_in(runtime, context);
+
             const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
             if (!job) return;
 
