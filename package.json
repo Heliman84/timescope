@@ -66,6 +66,11 @@
                 "command": "timescope.compactLog",
                 "title": "Compact Log",
                 "category": "TimeScope"
+            },
+            {
+                "command": "timescope.rebuildGlobalIndex",
+                "title": "Rebuild Global Index",
+                "category": "TimeScope"
             }
         ]
     },

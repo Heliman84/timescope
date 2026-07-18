@@ -13,6 +13,17 @@ export interface TimeScopePaths {
     /** Global registry of known repos (#48). Always set; file created on first write. */
     registry_path: string;
     /**
+     * Derived global index (#48 48b) — the rebuildable union of every repo's owned
+     * log plus scratch, deduped by id. Populated in parallel in 48b; the dashboard
+     * begins reading it at 48c. File created on first write.
+     */
+    global_index_path?: string;
+    /**
+     * Global scratch log (#48 48b) — owned events for non-workspace (off-project)
+     * sessions. File created on first write.
+     */
+    scratch_path?: string;
+    /**
      * Workspace log/jobs paths — set only when the workspace is *opted in*
      * (a `.timescope` folder exists). Left undefined otherwise so no write
      * ever creates `.timescope` speculatively (#2).
@@ -47,6 +58,8 @@ export function resolve_paths(context: vscode.ExtensionContext): TimeScopePaths 
         global_jobs_path: path.join(global_dir, "jobs.json"),
         global_log_path: path.join(global_dir, "logs.jsonl"),
         registry_path: path.join(global_dir, "registry.json"),
+        global_index_path: path.join(global_dir, "index.jsonl"),
+        scratch_path: path.join(global_dir, "scratch.jsonl"),
     };
 
     if (workspace_folder) {

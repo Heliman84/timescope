@@ -5,8 +5,9 @@
 
 Under the local-first model, a repo's committed `.timescope/logs.jsonl` **owns** its events; the
 global store holds a derived index plus a scratch log. This section documents the metadata files
-introduced in #48 phase 48a; `index.jsonl` / `scratch.jsonl` and the replication flow are
-documented as 48b/48c land.
+introduced across #48: `config.json` / `registry.json` (48a) and `index.jsonl` / `scratch.jsonl`
+(48b). In 48b the index and scratch are populated in parallel while the old global/workspace
+dual-write and merged read continue; the dashboard begins reading `index.jsonl` at 48c.
 
 ### Repo config — `.timescope/config.json`
 
@@ -41,6 +42,26 @@ to rebuild the global index efficiently and to dedup repos by id:
 - Entities (clients / projects / task-types) join the registry in #15; 48a tracks repos only.
 - A malformed `registry.json` is a hard error (losing repo paths would defeat a rebuild); a
   missing file is treated as an empty registry.
+
+### Derived global index — `index.jsonl`
+
+A rebuildable cache in the global storage dir. It is the de-duplicated union (by event `id`) of
+every registered repo's owned `.timescope/logs.jsonl` plus the global `scratch.jsonl`, in the same
+event JSONL format as a log (header line + one event per line), sorted ascending by `timestamp`.
+
+- **Derived and disposable** — never a source of truth. Deleting it loses nothing; `TimeScope:
+  Rebuild Global Index` reconstructs it from the owned sources (repos in `registry.json` + scratch).
+- Populated incrementally: `appendEvent` replicates each new event here (48b). The dashboard reads
+  it at 48c; until then it is written but not yet authoritative.
+
+### Scratch log — `scratch.jsonl`
+
+An **owned** event log in the global storage dir, in the same JSONL format as a log. It holds
+sessions that don't belong to any repo — non-workspace (off-project) work.
+
+- Written by `appendEvent` only when the current session has no opted-in workspace log (48b).
+- Feeds the index rebuild alongside repo logs. At 48c the existing global `logs.jsonl` (historical,
+  repo-less hours) is backed up and migrated into scratch, and the global dual-write is dropped.
 
 
 ## Jobs Format

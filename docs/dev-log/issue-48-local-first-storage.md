@@ -48,7 +48,14 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
       shared `TimeScopePaths` object in place so `EventRepository`/`JobRepository` (which hold it
       by reference) pick up the workspace log with no repo recreation. `processes.md` storage
       diagram unchanged (still dual-write in 48a) — updated at 48c when the model flips.
-- [ ] 48b — parallel index + rebuild
+- [x] 48b — parallel index + rebuild. `appendEvent` replicates each new event into the derived
+      global `index.jsonl` (deduped by id), and — for non-workspace sessions only — into the owned
+      `scratch.jsonl`. New `TimeScope: Rebuild Global Index` command reconstructs the index from the
+      owned sources (registered repo logs + scratch). All additive: the old global/workspace
+      dual-write and merged dashboard read are untouched (de-risks the 48c swap). New pure module
+      `global_index.ts` (`append_owned_event`, `rebuild_index`, `registry_log_paths`); paths gain
+      optional `global_index_path` / `scratch_path`. `processes.md` storage diagram still unchanged
+      (model flips at 48c).
 - [ ] 48c — cutover + migration
 
 ## Code-review findings (48a)

@@ -313,3 +313,72 @@ export function run_event_repository_line_index_tests(): void {
 
     console.log("  ✓ line index tracking tests passed");
 }
+
+/** Count non-header event lines in a JSONL file (0 if the file is absent). */
+function count_events(file_path: string): number {
+    if (!fs.existsSync(file_path)) return 0;
+    return fs.readFileSync(file_path, "utf8")
+        .split(/\r?\n/)
+        .filter(l => l.trim().length > 0)
+        .map(l => JSON.parse(l))
+        .filter(o => o._format_version === undefined)
+        .length;
+}
+
+/**
+ * Tests that appendEvent replicates into the derived global index and scratch (#48 48b):
+ * - Target: EventRepository.appendEvent replication in src/core/event_repository.ts
+ * - What: every appended event lands in index.jsonl; non-workspace sessions also land in
+ *   scratch.jsonl; opted-in (workspace) sessions do NOT touch scratch; dedupe writes neither twice.
+ * - Why: 48b builds the derived index + owned scratch in parallel while the old dual-write and
+ *   merged read continue — de-risking the 48c cutover.
+ */
+export function run_event_repository_replication_tests(): void {
+    // ── Case 1: No workspace — event replicated to index AND scratch ──
+    {
+        const paths = mkPaths("replicate-scratch", false);
+        paths.global_index_path = path.join(path.dirname(paths.global_log_path), "index.jsonl");
+        paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+        const repo = new EventRepository(paths);
+        const job = Job.create({ title: "alpha" });
+
+        repo.appendEvent(ev(job, "start", 100));
+        repo.appendEvent(ev(job, "stop", 200));
+
+        assert.strictEqual(count_events(paths.global_log_path), 2, "global still dual-written");
+        assert.strictEqual(count_events(paths.global_index_path!), 2, "both events replicated to the index");
+        assert.strictEqual(count_events(paths.scratch_path!), 2, "non-workspace events land in scratch");
+    }
+
+    // ── Case 2: Workspace opted in — index yes, scratch NO (workspace owns it) ──
+    {
+        const paths = mkPaths("replicate-workspace", true);
+        paths.global_index_path = path.join(path.dirname(paths.global_log_path), "index.jsonl");
+        paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+        const repo = new EventRepository(paths);
+        const job = Job.create({ title: "alpha" });
+
+        repo.appendEvent(ev(job, "start", 100));
+
+        assert.strictEqual(count_events(paths.workspace_log_path!), 1, "workspace log owns the event");
+        assert.strictEqual(count_events(paths.global_index_path!), 1, "event replicated to the index");
+        assert.strictEqual(count_events(paths.scratch_path!), 0, "opted-in session must not write scratch");
+    }
+
+    // ── Case 3: Dedupe — an equal re-append writes neither index nor scratch twice ──
+    {
+        const paths = mkPaths("replicate-dedupe", false);
+        paths.global_index_path = path.join(path.dirname(paths.global_log_path), "index.jsonl");
+        paths.scratch_path = path.join(path.dirname(paths.global_log_path), "scratch.jsonl");
+        const repo = new EventRepository(paths);
+        const job = Job.create({ title: "alpha" });
+
+        repo.appendEvent(ev(job, "start", 100));
+        repo.appendEvent(ev(job, "start", 100)); // equal — deduped
+
+        assert.strictEqual(count_events(paths.global_index_path!), 1, "dedupe does not double-write the index");
+        assert.strictEqual(count_events(paths.scratch_path!), 1, "dedupe does not double-write scratch");
+    }
+
+    console.log("  ✓ index/scratch replication tests passed");
+}

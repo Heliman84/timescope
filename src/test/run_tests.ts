@@ -1,4 +1,4 @@
-import { run_event_repository_append_and_load_tests, run_event_repository_rename_tests, run_event_repository_validation_tests, run_event_repository_last_sessions_tests, run_event_repository_dedupe_tests, run_event_repository_malformed_preservation_tests, run_event_repository_line_index_tests } from "./test_event_repository";
+import { run_event_repository_append_and_load_tests, run_event_repository_rename_tests, run_event_repository_validation_tests, run_event_repository_last_sessions_tests, run_event_repository_dedupe_tests, run_event_repository_malformed_preservation_tests, run_event_repository_line_index_tests, run_event_repository_replication_tests } from "./test_event_repository";
 import { run_session_happy_path_tests, run_session_invalid_transition_tests, run_session_elapsed_open_segment_tests, run_session_equality_tests } from "./test_session";
 import { run_event_collection_tests } from "./test_event_collection";
 import { run_event_collection_extended_tests } from "./test_event_collection_extended";
@@ -14,6 +14,7 @@ import { run_split_concatenated_jsonl_tests, run_sanitize_lines_tests, run_appen
 import { run_repo_config_tests } from "./test_repo_config";
 import { run_registry_domain_tests, run_registry_repository_tests } from "./test_registry";
 import { run_local_opt_in_tests } from "./test_local_opt_in";
+import { run_append_owned_event_tests, run_rebuild_index_tests, run_registry_log_paths_tests } from "./test_global_index";
 
 async function main() {
     try {
@@ -24,6 +25,7 @@ async function main() {
         run_event_repository_dedupe_tests();
         run_event_repository_malformed_preservation_tests();
         run_event_repository_line_index_tests();
+        run_event_repository_replication_tests();
         run_session_happy_path_tests();
         run_session_invalid_transition_tests();
         run_session_elapsed_open_segment_tests();
@@ -52,6 +54,9 @@ async function main() {
         run_registry_domain_tests();
         run_registry_repository_tests();
         run_local_opt_in_tests();
+        run_append_owned_event_tests();
+        run_rebuild_index_tests();
+        run_registry_log_paths_tests();
         console.log("All tests passed.");
         process.exit(0);
     } catch (err) {

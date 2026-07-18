@@ -8,6 +8,7 @@ import { EventDTO } from "./event_dto";
 import { Job } from "./job";
 import { ensure_dir_sync, readJSONLSafe, append_line_safe, write_file_atomic } from "../utils/fs_utils";
 import { HEADER_KEY, HEADER_LINE, sanitize_lines, SanitizeReport } from "./log_sanitizer";
+import { append_owned_event } from "./global_index";
 
 export class EventRepository {
     private readonly paths: TimeScopePaths;
@@ -96,6 +97,17 @@ export class EventRepository {
                 append_line_safe(this.paths.workspace_log_path, event.toJSONL());
                 event.setWorkspaceLineIndex(wsLines.length);
             }
+        }
+
+        // #48 48b: replicate into the derived global index, and — for non-workspace
+        // (off-project) sessions only — into the owned scratch log. Reached only for
+        // genuinely new events; the dedupe branch above returns before here. These
+        // are additive: the old global/workspace dual-write and merged read continue.
+        if (this.paths.global_index_path) {
+            append_owned_event(this.paths.global_index_path, event);
+        }
+        if (!this.paths.workspace_log_path && this.paths.scratch_path) {
+            append_owned_event(this.paths.scratch_path, event);
         }
     }
 

@@ -11,6 +11,7 @@ import { Job } from "./core/job";
 import { format_build_info_full } from "./core/build_info";
 import { compact_log_file, has_repairable_damage } from "./core/log_sanitizer";
 import { is_workspace_opted_in, enable_local_logging, register_if_opted_in } from "./core/local_opt_in";
+import { rebuild_index, registry_log_paths } from "./core/global_index";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
@@ -237,6 +238,34 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.compactLog", run_compaction)
+    );
+
+    //
+    // ────────────────────────────────────────────────────────────────
+    // COMMAND: Rebuild Global Index (#48 48b)
+    // ────────────────────────────────────────────────────────────────
+    //
+    // Rebuilds the derived global index.jsonl from the owned sources — every
+    // registered repo's committed log plus the global scratch log. The index is
+    // disposable/rebuildable, so this is always safe to run.
+    //
+    context.subscriptions.push(
+        vscode.commands.registerCommand("timescope.rebuildGlobalIndex", () => {
+            const index_path = runtime.paths.global_index_path;
+            if (!index_path) {
+                vscode.window.showErrorMessage("TimeScope: no global index path resolved.");
+                return;
+            }
+            try {
+                const registry = runtime.registryRepo.load();
+                const result = rebuild_index(index_path, registry_log_paths(registry), runtime.paths.scratch_path);
+                vscode.window.showInformationMessage(
+                    `TimeScope: rebuilt global index — ${result.event_count} event(s) from ${result.source_count} repo(s) + scratch.`
+                );
+            } catch (ex) {
+                vscode.window.showErrorMessage(`TimeScope: could not rebuild global index: ${String(ex)}`);
+            }
+        })
     );
 
     // Load-time health check: heal-in-memory always happens on read; when
