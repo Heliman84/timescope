@@ -18,7 +18,7 @@ patch each symptom, we re-architect to **local-first**, which dissolves them.
 
 Two user-critical outcomes drive the sequence: **(1)** multiple VS Code windows working in
 parallel without interference, **(2)** hierarchical jobs — Client → Project → Task-type
-(e.g. Lantern → firmware → EE CAD).
+(e.g. Lantern → Speaker System → EE CAD).
 
 ## Target architecture — one owner per event; global is derived
 
