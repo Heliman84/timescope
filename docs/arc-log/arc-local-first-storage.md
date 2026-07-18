@@ -71,9 +71,9 @@ is the highest-collision file — the storage-track branch owns it each wave.
 
 | Wave | Issue | Track | Dev-log | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Log hygiene (storage) | storage | [issue-42-log-hygiene](../dev-log/issue-42-log-hygiene.md) | PR [#49](https://github.com/Heliman84/timescope/pull/49) — in review |
-| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Malformed-stream coverage (webview) | webview | [issue-42-webview-malformed-streams](../dev-log/issue-42-webview-malformed-streams.md) | PR [#50](https://github.com/Heliman84/timescope/pull/50) — in review |
-| 2 | [#48](https://github.com/Heliman84/timescope/issues/48) Local-first storage architecture | storage (solo) | — | not started |
+| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Log hygiene (storage) | storage | [issue-42-log-hygiene](../dev-log/issue-42-log-hygiene.md) | ✅ merged (PR [#49](https://github.com/Heliman84/timescope/pull/49), v0.5.0) |
+| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Malformed-stream coverage (webview) | webview | [issue-42-webview-malformed-streams](../dev-log/issue-42-webview-malformed-streams.md) | ✅ merged (PR [#50](https://github.com/Heliman84/timescope/pull/50), v0.5.1) |
+| 2 | [#48](https://github.com/Heliman84/timescope/issues/48) Local-first storage architecture | storage (solo) | [issue-48-local-first-storage](../dev-log/issue-48-local-first-storage.md) | 🚧 in progress |
 | 3 | [#47](https://github.com/Heliman84/timescope/issues/47) Multi-instance verification | storage | — | not started |
 | 3 | [#15](https://github.com/Heliman84/timescope/issues/15) Hierarchical jobs | webview | — | not started |
 | 4 | [#43](https://github.com/Heliman84/timescope/issues/43) Amend events | storage | — | not started |
