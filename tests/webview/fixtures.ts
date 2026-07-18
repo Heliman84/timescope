@@ -209,3 +209,71 @@ function shift_day(now: Date, delta_days: number): string {
     d.setDate(now.getDate() + delta_days);
     return local_day(d.getTime());
 }
+
+export interface MalformedFixtureData {
+    payload: FixtureEvent[];
+    /** Jobs that must produce at least one session row. */
+    jobs_with_sessions: string[];
+    /** Jobs whose events must produce no session at all. */
+    jobs_without_sessions: string[];
+}
+
+/**
+ * Malformed / unbalanced event streams — production reality (the real log
+ * carries 145 pause vs 122 resume events). One single-purpose job per
+ * scenario so each state machine is isolated (all "today", inside the
+ * default Last-4-Weeks preset):
+ *
+ * - Dangle: start with no stop            → session dropped (intentional)
+ * - Orphan: pause never resumed, then stop → paused tail excluded, no pair
+ * - Skip:   resume without a pause         → resume ignored
+ * - Ghost:  stop without a start           → ignored
+ * - Twice:  double start, then stop        → first session finalized at the
+ *                                            second start's timestamp
+ */
+export function build_malformed_fixture(now: Date = FIXED_NOW): MalformedFixtureData {
+    let line = 0;
+    const ev = (
+        event: string,
+        job: string,
+        job_id: string,
+        hours: number,
+        minutes: number,
+        task = ""
+    ): FixtureEvent => ({
+        event,
+        job,
+        timestamp: at_local_time(now, hours, minutes),
+        task,
+        id: `mf-${++line}`,
+        job_id,
+        time_seed: at_local_time(now, hours, minutes),
+        global_line_index: line,
+        workspace_line_index: line,
+    });
+
+    const events: FixtureEvent[] = [
+        // Dangle: start with no stop — the dashboard drops open sessions
+        ev("start", "Dangle", "dangle", 8, 0, "dangle work"),
+        // Orphan: 09:00–10:00 with a pause at 09:30 never resumed → 0.50h active, 0 pairs
+        ev("start", "Orphan", "orphan", 9, 0),
+        ev("pause", "Orphan", "orphan", 9, 30),
+        ev("stop", "Orphan", "orphan", 10, 0, "orphan work"),
+        // Skip: 10:00–11:00 with a resume at 10:30 that had no pause → 1.00h, 0 pairs
+        ev("start", "Skip", "skip", 10, 0),
+        ev("resume", "Skip", "skip", 10, 30),
+        ev("stop", "Skip", "skip", 11, 0, "skip work"),
+        // Ghost: stop with no start — ignored
+        ev("stop", "Ghost", "ghost", 12, 30, "ghost work"),
+        // Twice: starts at 13:00 and again at 14:00, stop at 15:30
+        ev("start", "Twice", "twice", 13, 0, "twice-first"),
+        ev("start", "Twice", "twice", 14, 0, "twice-second"),
+        ev("stop", "Twice", "twice", 15, 30, "twice-stop"),
+    ];
+
+    return {
+        payload: events.slice().sort((a, b) => b.timestamp - a.timestamp),
+        jobs_with_sessions: ["Orphan", "Skip", "Twice"],
+        jobs_without_sessions: ["Dangle", "Ghost"],
+    };
+}
