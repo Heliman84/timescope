@@ -1,7 +1,7 @@
 # Issue #42 — Webview malformed-stream coverage (42b: webview track)
 
 > Decision log, not a spec. Started at plan time, finalized as a retrospective at PR time.
-> Part of the [Local-First Storage arc](../arc-log/local-first-storage.md) (Wave 1).
+> Part of the [Local-First Storage arc](../arc-log/arc-local-first-storage.md) (Wave 1).
 
 **Issue:** https://github.com/Heliman84/timescope/issues/42  ·  **PR:** https://github.com/Heliman84/timescope/pull/50
 
