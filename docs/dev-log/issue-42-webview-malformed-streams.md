@@ -2,7 +2,7 @@
 
 > Decision log, not a spec. Started at plan time, finalized as a retrospective at PR time.
 
-**Issue:** https://github.com/Heliman84/timescope/issues/42  ·  **PR:** (pending)
+**Issue:** https://github.com/Heliman84/timescope/issues/42  ·  **PR:** https://github.com/Heliman84/timescope/pull/50
 
 ## Problem
 
