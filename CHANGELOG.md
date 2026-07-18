@@ -5,6 +5,7 @@ One line per merged PR, added at PR time under **Unreleased**. At release, entri
 
 ## Unreleased
 
+- Playwright coverage pinning how the dashboard renders malformed/unbalanced event streams (dangling start, unresumed pause, orphan resume, stop-without-start, double start) — production reality per the real log's 145/122 pause/resume imbalance (#42)
 - Docs: introduce `docs/arc-log/` for multi-issue development arcs (spine above the per-issue dev-logs); first entry documents the local-first storage re-architecture (#42, #48)
 - Log hygiene: newline-safe appends (concatenated-record bug class closed), load-time sanitizer that heals glued records in memory and reports damage, atomic temp-file+rename for all full-file rewrites, and a **TimeScope: Compact Log** command (`.bak` first, idempotent) offered via prompt when disk damage is found; `npm run seed-testdata -- --damaged` seeds a damaged log for F5 testing (#42)
 - Summary view redesign: sidebar replaced by integrated filtering — date presets (default Last 14 Days, now actually applied) with native start/end date pickers, a checkbox job legend synced with a table job dropdown, inclusive duration and pause/resume range filters, sortable columns, an explicit empty state, and a validated colorblind-safe chart palette; all filters drive the charts and table together (#5)
