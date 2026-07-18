@@ -53,7 +53,18 @@ Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEM
 
 ## 6. Hand off for F5
 
-STOP here. Tell the user the branch is ready for their Extension Development Host check (F5). Do NOT create the PR until they ask.
+**Default to feature-complete testing.** The user prefers to F5 **once, when the whole issue's scope works end-to-end** — not at each intermediate slice (testing half-built states wastes their time). When an issue is sliced, keep building toward feature-complete and self-verify each slice yourself (test suite, the `run`/`verify` skills, driving the flow). Only request an intermediate F5 when you genuinely need a second set of eyes — and say so explicitly ("I need your eyes on X because …"). See the `user-testing-cadence` memory.
+
+When you do hand off, STOP and tell the user the branch is ready. Do NOT create the PR until they ask.
+
+**Every F5 handoff must open with a context header** so the user doesn't have to reconstruct where we are:
+
+- First line: **`Step X/N — <mission in ≤15 words>`** in bold (X/N only if the work is sliced; otherwise just the bold mission line).
+- Then the concrete test steps.
+
+The mission line states what *this* handoff is testing, in the user's terms. Example: **`Step 1/3 — confirm .timescope is opt-in and no folder is created until you say yes`**. Put this ABOVE any large "how to test" header — a big header with no orientation above it has burned the user's time before.
+
+Do NOT create the PR until they ask.
 
 ## 7. Create the PR (on request)
 
