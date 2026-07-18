@@ -24,6 +24,7 @@ This is Wave 1 of the focus-milestone re-architecture (see #48): the zero-regret
 
 ## Code-review findings (fixed)
 
+Local `/code-review` (pre-PR):
 - `write_file_atomic` rename can throw EPERM/EBUSY on Windows when a sync client/AV holds the
   target → now falls back to an in-place write (non-atomic, but succeeds where the old code did
   instead of crashing dashboard edits/renames/compaction).
@@ -32,6 +33,18 @@ This is Wave 1 of the focus-milestone re-architecture (see #48): the zero-regret
 - Every read paid a full per-line `Event` parse for a report nobody used → hot-path reads use
   `count_events: false` (split detection is a regex fast-path with zero parsing on clean lines);
   only `checkLogHealth` computes the full report.
+
+Copilot review on PR #49:
+- **Dir-safety pushed into the low-level helpers** (altitude fix for three of its comments):
+  `append_line_safe` and `write_file_atomic` now `mkdirSync` the parent themselves via
+  `ensure_dir_sync`. This removes the ENOENT race from the two unawaited-`ensureDirExists`
+  rewrite sites *and* the same latent bug in `appendEvent` (Copilot flagged the rewrite sites;
+  the append path had it too).
+- `write_file_atomic` now only falls back for lock-style errors (EPERM/EACCES/EBUSY) and
+  rethrows anything else — the earlier bare `catch` masked real failures.
+- Removed the `_sanitize_reports` map: dead state after `checkLogHealth` was changed to compute
+  reports directly (regression from the efficiency fix above).
+- Doc typo `skiped` → `skipped`.
 
 ## Rejected approaches
 

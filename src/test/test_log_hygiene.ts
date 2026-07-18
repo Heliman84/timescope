@@ -167,6 +167,25 @@ export function run_write_file_atomic_tests(): void {
 
     const leftovers = fs.readdirSync(root).filter(f => f !== "logs.jsonl");
     assert.deepStrictEqual(leftovers, [], "no temp files left behind");
+
+    // Parent directory need not pre-exist — the helper creates it.
+    const nested = path.join(root, "a", "b", "c", "logs.jsonl");
+    write_file_atomic(nested, "deep\n");
+    assert.strictEqual(fs.readFileSync(nested, "utf8"), "deep\n", "atomic write creates missing parent dirs");
+}
+
+/**
+ * Tests append_line_safe / write_file_atomic create missing parent directories:
+ * - Target: src/utils/fs_utils.ts
+ * - Why: the low-level write helpers are self-sufficient — callers need not
+ *   pre-create the directory (closes an ENOENT race on first write).
+ */
+export function run_write_helpers_mkdir_tests(): void {
+    const root = path.join(__dirname, "..", "..", "test-output", `mkdir-${Date.now()}`);
+
+    const appendTarget = path.join(root, "x", "y", "append.jsonl");
+    append_line_safe(appendTarget, '{"a":1}');
+    assert.strictEqual(fs.readFileSync(appendTarget, "utf8"), '{"a":1}\n', "append_line_safe creates missing parent dirs");
 }
 
 /**

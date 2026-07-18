@@ -136,7 +136,7 @@ Original Unix time in milliseconds used to generate `id`. This value is immutabl
 ---
 
 #### Malformed Lines
-Non-throwing parser: if a line cannot be parsed as valid JSON or does not match the event schema, it is skiped silently.
+Non-throwing parser: if a line cannot be parsed as valid JSON or does not match the event schema, it is skipped silently.
 
 #### Load-Time Sanitizer
 Every log read passes through a sanitizer (`src/core/log_sanitizer.ts`) that heals damage **in memory only** — disk is never rewritten on load:

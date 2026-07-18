@@ -10,7 +10,7 @@ import { run_job_collection_tests } from "./test_job_collection";
 import { run_build_info_tests } from "./test_build_info";
 import { run_resolve_storage_dir_tests } from "./test_paths";
 import { run_filter_state_tests } from "./test_filter_state";
-import { run_split_concatenated_jsonl_tests, run_sanitize_lines_tests, run_append_line_safe_tests, run_write_file_atomic_tests, run_repository_sanitized_load_tests, run_compact_log_tests } from "./test_log_hygiene";
+import { run_split_concatenated_jsonl_tests, run_sanitize_lines_tests, run_append_line_safe_tests, run_write_file_atomic_tests, run_write_helpers_mkdir_tests, run_repository_sanitized_load_tests, run_compact_log_tests } from "./test_log_hygiene";
 
 async function main() {
     try {
@@ -42,6 +42,7 @@ async function main() {
         run_sanitize_lines_tests();
         run_append_line_safe_tests();
         run_write_file_atomic_tests();
+        run_write_helpers_mkdir_tests();
         run_repository_sanitized_load_tests();
         run_compact_log_tests();
         console.log("All tests passed.");

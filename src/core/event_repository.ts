@@ -6,13 +6,11 @@ import { EventCollection } from "./event_collection";
 import { Session } from "./session";
 import { EventDTO } from "./event_dto";
 import { Job } from "./job";
-import { ensureDirExists, readJSONLSafe, append_line_safe, write_file_atomic } from "../utils/fs_utils";
+import { ensure_dir_sync, readJSONLSafe, append_line_safe, write_file_atomic } from "../utils/fs_utils";
 import { HEADER_KEY, HEADER_LINE, sanitize_lines, SanitizeReport } from "./log_sanitizer";
 
 export class EventRepository {
     private readonly paths: TimeScopePaths;
-    // file path → report from the most recent sanitized read
-    private readonly _sanitize_reports = new Map<string, SanitizeReport>();
 
     constructor(paths: TimeScopePaths) {
         this.paths = paths;
@@ -25,10 +23,9 @@ export class EventRepository {
      */
     private read_log_lines(file_path: string | null | undefined): string[] {
         if (!file_path) return [];
-        // Hot path: skip per-line event parsing — repair detection (splits,
-        // header) is all the cached report needs.
-        const { lines, report } = sanitize_lines(readJSONLSafe(file_path), { count_events: false });
-        this._sanitize_reports.set(file_path, report);
+        // Hot path: heal concatenated records but skip per-line event parsing;
+        // the damage report is only needed by checkLogHealth (full read).
+        const { lines } = sanitize_lines(readJSONLSafe(file_path), { count_events: false });
         return lines;
     }
 
@@ -57,8 +54,8 @@ export class EventRepository {
     appendEvent(event: Event): void {
         const line = event.toJSONL() + "\n";
 
-        ensureDirExists(this.paths.global_log_path);
-        if (this.paths.workspace_log_path) ensureDirExists(this.paths.workspace_log_path);
+        ensure_dir_sync(this.paths.global_log_path);
+        if (this.paths.workspace_log_path) ensure_dir_sync(this.paths.workspace_log_path);
 
         // Read global file once — used for both dedupe check and line count.
         let globalLines: string[] = [];
@@ -385,7 +382,7 @@ export class EventRepository {
                 }
             }
             const toWrite = [HEADER_LINE, ...parsed];
-            ensureDirExists(filePath);
+            // write_file_atomic ensures the parent directory itself.
             write_file_atomic(filePath, toWrite.join("\n") + "\n");
         };
 
@@ -467,7 +464,7 @@ export class EventRepository {
 
             if (replaced) {
                 const toWrite = [HEADER_LINE, ...output];
-                ensureDirExists(filePath);
+                // write_file_atomic ensures the parent directory itself.
                 write_file_atomic(filePath, toWrite.join("\n") + "\n");
                 result[key] = true;
             }

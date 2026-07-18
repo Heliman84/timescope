@@ -13,12 +13,18 @@ export async function ensureDirExists(filePath: string): Promise<void> {
     }
 }
 
+/** Synchronous parent-directory ensure, for the sync write paths. */
+export function ensure_dir_sync(file_path: string): void {
+    fs.mkdirSync(path.dirname(file_path), { recursive: true });
+}
+
 /**
  * Append one line to a JSONL file, guaranteeing it lands on its own line:
  * if the file's last byte is not "\n" (torn earlier write), a newline is
  * injected first. Closes the concatenated-records bug class permanently.
  */
 export function append_line_safe(file_path: string, line: string): void {
+    ensure_dir_sync(file_path);
     if (!fs.existsSync(file_path)) {
         fs.writeFileSync(file_path, line + "\n", "utf8");
         return;
@@ -44,16 +50,23 @@ export function append_line_safe(file_path: string, line: string): void {
  * directory (same volume) so the rename is atomic.
  */
 export function write_file_atomic(file_path: string, content: string): void {
+    ensure_dir_sync(file_path);
     const dir = path.dirname(file_path);
     const tmp = path.join(dir, `.${path.basename(file_path)}.${process.pid}.${Date.now()}.tmp`);
     fs.writeFileSync(tmp, content, "utf8");
     try {
         fs.renameSync(tmp, file_path);
-    } catch {
+    } catch (ex) {
         // Windows: renaming over a file another process holds open (sync
-        // client, AV, indexer) can throw EPERM/EBUSY. Fall back to an
-        // in-place write — non-atomic, but succeeds where the old code did
-        // instead of crashing the caller.
+        // client, AV, indexer) throws a lock-style error. Fall back to an
+        // in-place write for those, so we succeed where the old code did.
+        // Any other error (bad path, out of space, real permission problem)
+        // is a genuine failure — clean up the temp file and rethrow.
+        const code = (ex as NodeJS.ErrnoException).code;
+        if (code !== "EPERM" && code !== "EACCES" && code !== "EBUSY") {
+            try { fs.unlinkSync(tmp); } catch { /* best effort cleanup */ }
+            throw ex;
+        }
         try {
             fs.writeFileSync(file_path, content, "utf8");
         } finally {
