@@ -106,8 +106,16 @@
         if (state.pauses_min !== null && session.pause_pairs < state.pauses_min) return false;
         if (state.pauses_max !== null && session.pause_pairs > state.pauses_max) return false;
 
-        if (state.source === "global" && !session.has_global) return false;
-        if (state.source === "workspace" && !session.has_workspace) return false;
+        // Source filter (issue #3 seam). Post local-first cutover (#48 48c) the
+        // dashboard reads the derived index, whose events carry no global/workspace
+        // line index, so sessions come through unclassified — treat those as present
+        // in the merged view so the filter is inert rather than hiding everything.
+        // #3 redefines "source" as per-repo and reintroduces real classification.
+        const classified = session.has_global || session.has_workspace;
+        if (classified) {
+            if (state.source === "global" && !session.has_global) return false;
+            if (state.source === "workspace" && !session.has_workspace) return false;
+        }
 
         return true;
     }
