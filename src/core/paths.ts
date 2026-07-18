@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 import { resolve_storage_dir } from "./resolve_storage_dir";
-import { workspace_timescope_paths } from "./workspace_paths";
+import { workspace_timescope_paths, timescope_dir_opted_in } from "./workspace_paths";
 
 export { workspace_timescope_paths } from "./workspace_paths";
 export type { WorkspaceTimeScopePaths } from "./workspace_paths";
@@ -53,9 +53,9 @@ export function resolve_paths(context: vscode.ExtensionContext): TimeScopePaths 
         const ws = workspace_timescope_paths(workspace_folder.uri.fsPath);
         // Candidate config path is always exposed so the opt-in flow can write it.
         paths.repo_config_path = ws.config_path;
-        // Opt-in is signalled by an existing `.timescope` folder (#2 edge case:
-        // an existing folder means "log here"). We never create it here.
-        if (fs.existsSync(ws.dir)) {
+        // Opt-in is signalled by an existing `.timescope` *directory* (#2 edge
+        // case: an existing folder means "log here"). We never create it here.
+        if (timescope_dir_opted_in(ws.dir)) {
             paths.workspace_jobs_path = ws.jobs_path;
             paths.workspace_log_path = ws.log_path;
         }

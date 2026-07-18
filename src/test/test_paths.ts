@@ -1,7 +1,8 @@
+import * as fs from "fs";
 import * as path from "path";
 import * as assert from "assert";
 import { resolve_storage_dir } from "../core/resolve_storage_dir";
-import { workspace_timescope_paths } from "../core/workspace_paths";
+import { workspace_timescope_paths, timescope_dir_opted_in } from "../core/workspace_paths";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // resolve_storage_dir
@@ -89,10 +90,35 @@ export function run_workspace_timescope_paths_tests(): void {
     console.log("  ✓ workspace_timescope_paths tests passed");
 }
 
+/**
+ * Tests timescope_dir_opted_in:
+ * - Target: timescope_dir_opted_in in src/core/workspace_paths.ts
+ * - What: opt-in requires a `.timescope` *directory*; absent or a stray file → not opted in.
+ * - Why: treating a file named `.timescope` as opt-in would make later writes fail.
+ */
+export function run_timescope_dir_opted_in_tests(): void {
+    const root = path.join(__dirname, "..", "..", "test-output", `optin-dir-${Date.now()}`);
+    fs.mkdirSync(root, { recursive: true });
+
+    const missing = path.join(root, "missing", ".timescope");
+    assert.strictEqual(timescope_dir_opted_in(missing), false, "absent .timescope → not opted in");
+
+    const as_dir = path.join(root, "as_dir");
+    fs.mkdirSync(as_dir, { recursive: true });
+    assert.strictEqual(timescope_dir_opted_in(as_dir), true, ".timescope directory → opted in");
+
+    const as_file = path.join(root, "as_file");
+    fs.writeFileSync(as_file, "not a dir", "utf8");
+    assert.strictEqual(timescope_dir_opted_in(as_file), false, "stray .timescope file → NOT opted in");
+
+    console.log("  ✓ timescope_dir_opted_in tests passed");
+}
+
 export function run_resolve_storage_dir_tests(): void {
     console.log("paths: resolve_storage_dir");
     run_resolve_storage_dir_absolute_tests();
     run_resolve_storage_dir_relative_tests();
     run_resolve_storage_dir_fallback_tests();
     run_workspace_timescope_paths_tests();
+    run_timescope_dir_opted_in_tests();
 }

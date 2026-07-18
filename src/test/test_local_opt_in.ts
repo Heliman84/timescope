@@ -69,4 +69,12 @@ export function run_local_opt_in_tests(): void {
     assert.ok(healed_id, "opted-in activation returns a repo id");
     assert.ok(fs.existsSync(bws.config_path), "missing config.json is self-healed at activation");
     assert.strictEqual(b.registry_repo.load().find_by_id(healed_id!)!.last_seen, 600, "registered at activation");
+
+    // Activation is idempotent: an unchanged repo does NOT rewrite the registry
+    // (no per-startup global write, and a narrower concurrent-write window).
+    const mtime_before = fs.statSync(b.paths.registry_path).mtimeMs;
+    register_if_opted_in(b.paths, b.ws_root, "workspace", b.registry_repo, 700);
+    const mtime_after = fs.statSync(b.paths.registry_path).mtimeMs;
+    assert.strictEqual(mtime_after, mtime_before, "unchanged repo must not rewrite registry.json");
+    assert.strictEqual(b.registry_repo.load().find_by_id(healed_id!)!.last_seen, 600, "last_seen not churned on unchanged activation");
 }

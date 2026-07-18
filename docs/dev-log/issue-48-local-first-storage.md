@@ -51,6 +51,23 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
 - [ ] 48b — parallel index + rebuild
 - [ ] 48c — cutover + migration
 
+## Code-review findings (48a)
+
+`/code-review` (medium) surfaced four:
+- **Fixed now — registry write churn:** `register_if_opted_in` rewrote `registry.json` on every
+  activation just to refresh `last_seen`; now it writes only when the repo is new or its
+  name/path changed (also shrinks the concurrent-write window).
+- **Fixed now — `.timescope`-as-file:** opt-in detection now requires a *directory*
+  (`timescope_dir_opted_in`), so a stray file named `.timescope` can't be mistaken for opt-in
+  and crash the first write.
+- **Deferred to #47 — registry read-modify-write race:** two windows registering *different*
+  new repos concurrently can drop one entry (load→upsert→save, last-writer-wins). This is the
+  cross-process concurrency class #47 owns; the registry is rebuildable (48b), and robust
+  multi-writer safety (locking or rebuild-from-repos) belongs with that work, not 48a.
+- **Deferred to #47 — concurrent first-opt-in:** two windows opting a brand-new repo in
+  simultaneously can mint divergent repo_ids. Same concurrency class; narrow (first-ever opt-in
+  only).
+
 ## Rejected approaches
 
 ## Retrospective

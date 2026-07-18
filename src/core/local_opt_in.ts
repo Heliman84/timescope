@@ -75,6 +75,16 @@ export function register_if_opted_in(
     if (!ws_root || !is_workspace_opted_in(paths)) return null;
     const ws = workspace_timescope_paths(ws_root);
     const repo_id = ensure_repo_config(ws.config_path);
-    register_repo(registry_repo, repo_id, ws_name, ws_root, now);
+
+    // Activation runs on every window open — only rewrite the registry when the
+    // repo is new or its name/path actually changed, not to refresh last_seen.
+    // Avoids a global-storage write on every startup and shrinks (does not
+    // close) the concurrent read-modify-write window; robust multi-writer
+    // registry safety is #47's concern.
+    const registry = registry_repo.load();
+    const existing = registry.find_by_id(repo_id);
+    if (!existing || existing.name !== ws_name || existing.path !== ws_root) {
+        registry_repo.save(registry.upsert_repo({ id: repo_id, name: ws_name, path: ws_root, last_seen: now }));
+    }
     return repo_id;
 }
