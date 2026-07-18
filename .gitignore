@@ -36,3 +36,10 @@ npm-debug.log*
 test-workspace/global-storage/*
 !test-workspace/global-storage/.gitkeep
 test-workspace/.timescope/
+
+# Test-workspace-empty: isolated F5 fixture for the opt-in flow (#48);
+# track its pinned settings, never commit its tracking data
+!test-workspace-empty/.vscode/settings.json
+test-workspace-empty/global-storage/*
+!test-workspace-empty/global-storage/.gitkeep
+test-workspace-empty/.timescope/

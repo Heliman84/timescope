@@ -5,7 +5,7 @@ One line per merged PR, added at PR time under **Unreleased**. At release, entri
 
 ## Unreleased
 
-- Local-first storage, phase 48a (foundation for #48): TimeScope no longer creates a `.timescope` folder speculatively — the first Start in an un-opted-in workspace offers to log locally, and only then is `.timescope/` created with a committed `config.json` (a stable repo id); an existing `.timescope` is treated as already opted-in. A global `registry.json` now tracks known repos for the upcoming derived index. Fixes #2. (#48)
+- Local-first storage, phase 48a (foundation for #48): TimeScope no longer creates a `.timescope` folder speculatively — the first Start in an un-opted-in workspace offers to log locally, and only then is `.timescope/` created with a committed `config.json` (a stable repo id); an existing `.timescope` directory is treated as already opted-in. A global `registry.json` now tracks known repos for the upcoming derived index. Adds an isolated `test-workspace-empty/` F5 fixture for exercising the opt-in prompt. Fixes #2. (#48)
 
 - Playwright coverage pinning how the dashboard renders malformed/unbalanced event streams (dangling start, unresumed pause, orphan resume, stop-without-start, double start) — production reality per the real log's 145/122 pause/resume imbalance (#42)
 - Docs: introduce `docs/arc-log/` for multi-issue development arcs (spine above the per-issue dev-logs); first entry documents the local-first storage re-architecture (#42, #48)
