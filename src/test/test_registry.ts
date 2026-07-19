@@ -116,3 +116,90 @@ export function run_registry_declined_tests(): void {
     assert.strictEqual(Registry.from_dto({ repos: [] }).declined_paths.length, 0, "missing declined → empty");
     assert.strictEqual(Registry.from_dto({ declined: "nope" }).declined_paths.length, 0, "non-array declined ignored");
 }
+
+/**
+ * Tests the #15 hierarchical entity vocabulary (clients/projects/task-types) on Registry:
+ * - Target: Registry.upsert_client/upsert_project/upsert_task_type/add_task_type_alias,
+ *   from_dto/to_dto in src/core/registry.ts
+ * - Why: clients, projects, and task-types are global entities that must round-trip
+ *   through registry.json additively (format_version stays 1) and tolerate malformed rows.
+ */
+export function run_registry_entity_tests(): void {
+    const empty = Registry.empty();
+    assert.strictEqual(empty.clients.length, 0, "empty registry has no clients");
+    assert.strictEqual(empty.projects.length, 0, "empty registry has no projects");
+    assert.strictEqual(empty.task_types.length, 0, "empty registry has no task-types");
+
+    // upsert_client is immutable and dedups by id.
+    const r1 = empty.upsert_client({ id: "c1", name: "Acme" });
+    assert.strictEqual(empty.clients.length, 0, "upsert_client must not mutate the source");
+    assert.strictEqual(r1.clients.length, 1, "upsert_client adds a client");
+    const r2 = r1.upsert_client({ id: "c1", name: "Acme Corp" });
+    assert.strictEqual(r2.clients.length, 1, "same-id upsert_client does not duplicate");
+    assert.strictEqual(r2.clients[0].name, "Acme Corp", "same-id upsert_client updates fields");
+
+    // upsert_project is immutable and dedups by id.
+    const r3 = r2.upsert_project({ id: "p1", name: "Website", client_id: "c1" });
+    assert.strictEqual(r3.projects.length, 1, "upsert_project adds a project");
+    const r4 = r3.upsert_project({ id: "p1", name: "Website Redesign", client_id: "c1" });
+    assert.strictEqual(r4.projects.length, 1, "same-id upsert_project does not duplicate");
+    assert.strictEqual(r4.projects[0].name, "Website Redesign", "same-id upsert_project updates fields");
+
+    // upsert_task_type is immutable and dedups by id.
+    const r5 = r4.upsert_task_type({ id: "t1", name: "Development" });
+    assert.strictEqual(r5.task_types.length, 1, "upsert_task_type adds a task-type");
+    const r6 = r5.upsert_task_type({ id: "t1", name: "Dev" });
+    assert.strictEqual(r6.task_types.length, 1, "same-id upsert_task_type does not duplicate");
+    assert.strictEqual(r6.task_types[0].name, "Dev", "same-id upsert_task_type updates fields");
+
+    // add_task_type_alias is immutable, additive, and idempotent.
+    const r7 = r6.add_task_type_alias("t1", "legacy-job-a");
+    assert.deepStrictEqual(r7.task_types[0].aliases, ["legacy-job-a"], "alias added");
+    assert.strictEqual(r6.task_types[0].aliases, undefined, "add_task_type_alias must not mutate the source");
+    const r8 = r7.add_task_type_alias("t1", "legacy-job-a");
+    assert.strictEqual(r8.task_types[0].aliases!.length, 1, "duplicate alias does not duplicate");
+    const r9 = r8.add_task_type_alias("t1", "legacy-job-b");
+    assert.deepStrictEqual(r9.task_types[0].aliases, ["legacy-job-a", "legacy-job-b"], "second alias appends");
+
+    // Unknown task-type id: no-op (tolerant, doesn't throw).
+    const r10 = r9.add_task_type_alias("does-not-exist", "whatever");
+    assert.strictEqual(r10, r9, "alias on unknown task-type id is a no-op");
+
+    // DTO round-trip: format_version stays 1, entities all survive.
+    const dto = r9.to_dto();
+    assert.strictEqual(dto.format_version, 1, "format_version stays 1");
+    const back = Registry.from_dto(dto);
+    assert.strictEqual(back.clients.length, 1, "clients survive round-trip");
+    assert.strictEqual(back.projects.length, 1, "projects survive round-trip");
+    assert.strictEqual(back.task_types.length, 1, "task_types survive round-trip");
+    assert.deepStrictEqual(back.task_types[0].aliases, ["legacy-job-a", "legacy-job-b"], "aliases survive round-trip");
+    assert.strictEqual(back.projects[0].client_id, "c1", "project client_id survives round-trip");
+
+    // Registries without the arrays load as empty (additive: older registry.json files).
+    const legacy = Registry.from_dto({ format_version: 1, repos: [], declined: [] });
+    assert.strictEqual(legacy.clients.length, 0, "no clients array → empty");
+    assert.strictEqual(legacy.projects.length, 0, "no projects array → empty");
+    assert.strictEqual(legacy.task_types.length, 0, "no task_types array → empty");
+
+    // Malformed entity rows are dropped, same tolerance style as repos.
+    const malformed = Registry.from_dto({
+        clients: [{ id: "c1", name: "Ok" }, { id: "" }, { name: "no id" }, null],
+        projects: [{ id: "p1", name: "Ok", client_id: "c1" }, { id: "p2", name: "no client_id" }, { id: "p3", client_id: "c1" }],
+        task_types: [{ id: "t1", name: "Ok" }, { id: "t2" }, { name: "no id" }],
+    });
+    assert.strictEqual(malformed.clients.length, 1, "malformed client rows dropped");
+    assert.strictEqual(malformed.projects.length, 1, "malformed project rows dropped");
+    assert.strictEqual(malformed.task_types.length, 1, "malformed task_type rows dropped");
+
+    // Unknown extra fields on a task_type row must not cause rejection.
+    const extra = Registry.from_dto({
+        task_types: [{ id: "t1", name: "Development", aliases: ["a"], owner_project: "future-field", extra_junk: 42 }],
+    });
+    assert.strictEqual(extra.task_types.length, 1, "task_type with unknown extra fields is kept");
+    assert.strictEqual(extra.task_types[0].name, "Development", "known fields still read correctly");
+    assert.deepStrictEqual(extra.task_types[0].aliases, ["a"], "aliases still read correctly alongside unknown fields");
+
+    // Non-array / malformed aliases on a task_type are tolerated (dropped to undefined).
+    const badAliases = Registry.from_dto({ task_types: [{ id: "t1", name: "Dev", aliases: "nope" }] });
+    assert.strictEqual(badAliases.task_types[0].aliases, undefined, "non-array aliases dropped");
+}

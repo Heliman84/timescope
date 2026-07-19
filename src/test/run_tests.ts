@@ -13,7 +13,7 @@ import { run_filter_state_tests } from "./test_filter_state";
 import { run_split_concatenated_jsonl_tests, run_sanitize_lines_tests, run_append_line_safe_tests, run_write_file_atomic_tests, run_write_helpers_mkdir_tests, run_repository_sanitized_load_tests, run_compact_log_tests } from "./test_log_hygiene";
 import { run_repo_config_tests } from "./test_repo_config";
 import { run_derive_repo_jobs_tests, run_ensure_repo_jobs_cache_tests } from "./test_repo_jobs";
-import { run_registry_domain_tests, run_registry_repository_tests, run_registry_declined_tests } from "./test_registry";
+import { run_registry_domain_tests, run_registry_repository_tests, run_registry_declined_tests, run_registry_entity_tests } from "./test_registry";
 import { run_local_opt_in_tests, run_local_opt_in_decline_tests } from "./test_local_opt_in";
 import { run_append_owned_event_tests, run_rebuild_index_tests, run_registry_log_paths_tests } from "./test_global_index";
 import { run_migration_tests } from "./test_migration";
@@ -59,6 +59,7 @@ async function main() {
         run_registry_domain_tests();
         run_registry_repository_tests();
         run_registry_declined_tests();
+        run_registry_entity_tests();
         run_local_opt_in_tests();
         run_local_opt_in_decline_tests();
         run_append_owned_event_tests();
