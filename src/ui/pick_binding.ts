@@ -1,7 +1,6 @@
 import * as vscode from "vscode";
 import { Runtime } from "../core/runtime";
-import { ClientEntity, ProjectEntity, Registry } from "../core/registry";
-import { compute_seeded_id } from "../core/id_gen";
+import { ClientEntity, ProjectEntity, Registry, mint_client_id, mint_project_id } from "../core/registry";
 
 const NEW_CLIENT_SENTINEL = "__new_client__";
 const NEW_PROJECT_SENTINEL = "__new_project__";
@@ -22,7 +21,7 @@ async function pick_or_create_client(registry: Registry): Promise<ClientEntity |
         const trimmed = name.trim();
         const existing = clients.find(c => c.name === trimmed);
         if (existing) return existing;
-        return { id: compute_seeded_id(trimmed), name: trimmed };
+        return { id: mint_client_id(registry, trimmed), name: trimmed };
     }
 
     return clients.find(c => c.id === picked.description) ?? null;
@@ -44,7 +43,7 @@ async function pick_or_create_project(registry: Registry, client: ClientEntity):
         const trimmed = name.trim();
         const existing = projects.find(p => p.name === trimmed);
         if (existing) return existing;
-        return { id: compute_seeded_id(`${client.id}::${trimmed}`), name: trimmed, client_id: client.id };
+        return { id: mint_project_id(registry, client.id, trimmed), name: trimmed, client_id: client.id };
     }
 
     return projects.find(p => p.id === picked.description) ?? null;

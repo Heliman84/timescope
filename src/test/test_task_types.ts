@@ -101,6 +101,13 @@ export function run_convert_legacy_job_tests(): void {
     const { registry: registry3, config: config3 } = convert_legacy_job(registry2, config2, "other-legacy", "t1");
     assert.deepStrictEqual(registry3.find_task_type_by_id("t1")!.aliases, ["16lor", "other-legacy"], "second legacy job appends alias");
     assert.deepStrictEqual(config3.pinned_task_types, ["t1"], "pin stays deduped");
+
+    // Unknown target: full no-op — the registry is unaliased AND the config is not
+    // pinned to a dangling id (reviewer finding B).
+    const { registry: registry4, config: config4 } = convert_legacy_job(registry3, config3, "yet-another-legacy", "does-not-exist");
+    assert.strictEqual(registry4, registry3, "unknown target: registry unchanged");
+    assert.strictEqual(config4, config3, "unknown target: config unchanged (no dangling pin)");
+    assert.strictEqual(config4.pinned_task_types!.includes("does-not-exist"), false, "unknown target id never gets pinned");
 }
 
 export function run_task_types_tests(): void {

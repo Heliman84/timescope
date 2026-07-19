@@ -1,8 +1,7 @@
 import * as vscode from "vscode";
 import { Runtime } from "../core/runtime";
-import { TaskTypeEntity } from "../core/registry";
+import { TaskTypeEntity, mint_task_type_id } from "../core/registry";
 import { resolve_task_type, convert_legacy_job } from "../core/task_types";
-import { compute_seeded_id } from "../core/id_gen";
 
 const NEW_TASK_TYPE_SENTINEL = "__new_task_type__";
 const OTHER_SENTINEL = "__other__";
@@ -33,7 +32,7 @@ async function pick_or_create_task_type(
         const registry = runtime.registryRepo.load();
         const existing = registry.task_types.find(t => t.name === trimmed);
         if (existing) return existing;
-        const created: TaskTypeEntity = { id: compute_seeded_id(trimmed), name: trimmed };
+        const created: TaskTypeEntity = { id: mint_task_type_id(registry, trimmed), name: trimmed };
         runtime.registryRepo.save(registry.upsert_task_type(created));
         return created;
     }

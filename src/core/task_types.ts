@@ -46,6 +46,11 @@ export function pickable_task_types(registry: Registry, config: RepoConfig): Tas
  * `target_task_type_id` (idempotent — no duplicate alias) and pins the target in the
  * repo's `pinned_task_types` (idempotent — no duplicate pin). Pure: returns new
  * `registry`/`config` instances; the caller persists them.
+ *
+ * When `target_task_type_id` doesn't resolve in the registry, this is a full no-op
+ * (both `registry` and `config` returned unchanged) — `add_task_type_alias` already
+ * no-ops on an unknown target, and pinning it anyway would otherwise leave a dangling
+ * pin in the config pointing at an id that doesn't exist.
  */
 export function convert_legacy_job(
     registry: Registry,
@@ -53,6 +58,10 @@ export function convert_legacy_job(
     legacy_job_id: string,
     target_task_type_id: string,
 ): { registry: Registry; config: RepoConfig } {
+    if (!registry.find_task_type_by_id(target_task_type_id)) {
+        return { registry, config };
+    }
+
     const next_registry = registry.add_task_type_alias(target_task_type_id, legacy_job_id);
 
     const pinned = config.pinned_task_types ?? [];

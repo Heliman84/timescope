@@ -1,4 +1,5 @@
 import * as path from "path";
+import { mint_unique_id } from "./id_gen";
 
 export const REGISTRY_FORMAT_VERSION = 1;
 
@@ -45,6 +46,36 @@ export interface RegistryDTO {
     clients?: ClientEntity[];
     projects?: ProjectEntity[];
     task_types?: TaskTypeEntity[];
+}
+
+/**
+ * Mint an id for a brand-new client named `name`. Deterministic (same name → same id)
+ * except when that id already belongs to a *different*-named client already in
+ * `registry` — a hash collision — in which case it disambiguates (#15 reviewer finding
+ * A). The legitimate same-id-new-name path (rename) goes through `upsert_client`
+ * directly and is unaffected by this guard.
+ */
+export function mint_client_id(registry: Registry, name: string): string {
+    return mint_unique_id(name, 5, id => {
+        const existing = registry.find_client_by_id(id);
+        return existing !== undefined && existing.name !== name;
+    });
+}
+
+/** Mint an id for a brand-new project named `name` under `client_id`. See `mint_client_id`. */
+export function mint_project_id(registry: Registry, client_id: string, name: string): string {
+    return mint_unique_id(`${client_id}::${name}`, 5, id => {
+        const existing = registry.find_project_by_id(id);
+        return existing !== undefined && (existing.name !== name || existing.client_id !== client_id);
+    });
+}
+
+/** Mint an id for a brand-new task-type named `name`. See `mint_client_id`. */
+export function mint_task_type_id(registry: Registry, name: string): string {
+    return mint_unique_id(name, 5, id => {
+        const existing = registry.find_task_type_by_id(id);
+        return existing !== undefined && existing.name !== name;
+    });
 }
 
 /** Normalize a filesystem path for stable comparison (case-insensitive on Windows). */

@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as assert from "assert";
-import { Registry } from "../core/registry";
+import { Registry, mint_client_id, mint_project_id, mint_task_type_id } from "../core/registry";
 import { RegistryRepository } from "../core/registry_repository";
+import { compute_seeded_id } from "../core/id_gen";
 
 function mkdir_tmp(suffix: string): string {
     const root = path.join(__dirname, "..", "..", "test-output", `registry-${suffix}-${Date.now()}`);
@@ -202,4 +203,48 @@ export function run_registry_entity_tests(): void {
     // Non-array / malformed aliases on a task_type are tolerated (dropped to undefined).
     const badAliases = Registry.from_dto({ task_types: [{ id: "t1", name: "Dev", aliases: "nope" }] });
     assert.strictEqual(badAliases.task_types[0].aliases, undefined, "non-array aliases dropped");
+}
+
+/**
+ * Tests the id-minting guard for NEW entities (reviewer finding A on #15):
+ * - Target: mint_client_id/mint_project_id/mint_task_type_id in src/core/registry.ts
+ * - What: minting for a brand-new entity must not silently reuse an id that already
+ *   belongs to a DIFFERENT existing entity (a hash collision, since compute_seeded_id
+ *   truncates to 5 base36 chars) — it disambiguates deterministically instead.
+ * - Why: the legitimate same-id-new-name path is a rename via upsert_* directly (see
+ *   run_registry_entity_tests); this guard belongs at the minting layer, not inside
+ *   upsert, so upsert-as-rename keeps working unguarded.
+ */
+export function run_registry_mint_id_tests(): void {
+    // No collision: mint_* returns the plain seeded id.
+    const empty = Registry.empty();
+    assert.strictEqual(mint_client_id(empty, "Acme"), compute_seeded_id("Acme"), "client: no collision → plain seeded id");
+    assert.strictEqual(mint_project_id(empty, "c1", "Website"), compute_seeded_id("c1::Website"), "project: no collision → plain seeded id");
+    assert.strictEqual(mint_task_type_id(empty, "Development"), compute_seeded_id("Development"), "task_type: no collision → plain seeded id");
+
+    // Force a collision: manufacture a registry where a DIFFERENT client already
+    // owns the id that "Acme" would naturally hash to.
+    const colliding_id = compute_seeded_id("Acme");
+    const with_collision = empty.upsert_client({ id: colliding_id, name: "Totally Different Co" });
+    const minted = mint_client_id(with_collision, "Acme");
+    assert.notStrictEqual(minted, colliding_id, "client mint disambiguates away from a colliding different-named entity");
+    assert.strictEqual(mint_client_id(with_collision, "Acme"), minted, "client mint disambiguation is deterministic");
+
+    // Same guard for projects (keyed by client_id::name in this test's seed convention).
+    const proj_id = compute_seeded_id("c1::Website");
+    const proj_collision = empty.upsert_project({ id: proj_id, name: "Unrelated Project", client_id: "c9" });
+    const mintedProj = mint_project_id(proj_collision, "c1", "Website");
+    assert.notStrictEqual(mintedProj, proj_id, "project mint disambiguates away from a colliding different entity");
+
+    // Same guard for task-types.
+    const tt_id = compute_seeded_id("Development");
+    const tt_collision = empty.upsert_task_type({ id: tt_id, name: "Totally Unrelated" });
+    const mintedTt = mint_task_type_id(tt_collision, "Development");
+    assert.notStrictEqual(mintedTt, tt_id, "task_type mint disambiguates away from a colliding different entity");
+
+    // A repeat mint for the SAME name still resolves to the SAME already-disambiguated
+    // id (idempotent — a caller re-minting "Acme" a second time, e.g. after the first
+    // disambiguated id is now itself in the registry, must not chase it further).
+    const with_disambiguated = with_collision.upsert_client({ id: minted, name: "Acme" });
+    assert.strictEqual(mint_client_id(with_disambiguated, "Acme"), minted, "re-minting the same seed lands back on its own disambiguated id");
 }
