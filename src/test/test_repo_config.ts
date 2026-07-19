@@ -85,4 +85,11 @@ export function run_repo_config_exclusive_tests(): void {
     const created_again = try_create_repo_config(cfg_path, { repo_id: second_id, format_version: REPO_CONFIG_FORMAT_VERSION });
     assert.strictEqual(created_again, false, "second call against an existing config returns false");
     assert.strictEqual(read_repo_config(cfg_path)!.repo_id, first_id, "on-disk repo_id remains the first writer's, not overwritten");
+
+    // #47 F4: the winner's content is always complete/parseable (never a partial write a
+    // loser could observe), and no leftover temp file remains after either outcome.
+    const winner = read_repo_config(cfg_path)!;
+    assert.strictEqual(winner.format_version, REPO_CONFIG_FORMAT_VERSION, "winner's content is fully-formed, not partial");
+    const leftover = fs.readdirSync(root).filter(f => f !== path.basename(cfg_path));
+    assert.deepStrictEqual(leftover, [], "no leftover temp files after a winning create + a losing create");
 }
