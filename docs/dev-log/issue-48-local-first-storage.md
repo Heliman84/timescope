@@ -156,5 +156,14 @@ hours, but editing is limited to events *owned by the current window* (this repo
 Cross-repo editing needs the owning repo's log and is deferred to #43 (amend). For single-repo use
 (and the F5 fixtures) everything on screen is owned, so editing is unaffected.
 
+**Grew during F5 (all justified by "local-first has to actually work"):** the recovery double-stop
+bug (multi-store reads now dedup by id); **US-06** pulled in from #15 — repo jobs cached in
+`config.json` + unioned into the picker, so an opened repo shows its jobs (the earlier "defer to #15"
+call was reversed because local-first was unusable without it); the per-folder **opt-out moved into
+`registry.json`** (only the reversal UI stays with #6); and a **Show Storage Status** command so
+migration/state is observable on demand instead of via a fleeting activation toast. Ships as v0.6.0.
+
 **Deferred (unchanged):** the two multi-writer registry races found in 48a review remain #47's; the
-index rebuild-on-activation shrinks but doesn't close concurrent-write windows — also #47.
+index rebuild-on-activation shrinks but doesn't close concurrent-write windows — also #47. During
+multi-window F5, running two *different* extension versions (installed vs. dev build) mimics the
+old dual-write — a testing-setup gotcha, not a code path.
