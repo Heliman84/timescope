@@ -94,10 +94,9 @@ is the highest-collision file — the storage-track branch owns it each wave.
 - **Legacy data migration:** existing global `logs.jsonl` events (flat job strings, no owning
   repo) become global-owned legacy/scratch; flat strings map to Client/Project/Task-type entities
   during #15 (user-assisted). Optional later: "adopt into repo".
-- **Repo-log job conversion (#15):** a committed `.timescope/logs.jsonl` references jobs by
-  id+title, but jobs load only from global `jobs.json`, so opening an existing/cloned repo shows an
-  empty Start picker. Surfacing/adopting a repo's jobs into the entity model is #15's job (found
-  during #48 48c F5; noted on the issue).
+- **Repo-log jobs → entity model (#15):** basic pickability shipped in **#48** (US-06 — a repo caches
+  its jobs in `config.json`, auto-upgrading an older log-only repo, unioned into the Start picker).
+  What remains for #15 is restructuring that flat cache into the Client/Project/Task-type entities.
 
 ## Related documents
 

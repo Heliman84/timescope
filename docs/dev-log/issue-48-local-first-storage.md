@@ -123,15 +123,19 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
   id — so the reader-level dedup is the correct, general safeguard rather than special-
   casing migration.
 
-## Deferred to #15
+## Job picker on repo open — first deferred to #15, then built in #48 (US-06)
 
-- **Repo-log jobs aren't pickable on a fresh/cloned repo.** Jobs load only from the global
-  `jobs.json`; a committed `.timescope/logs.jsonl` references jobs by id+title but nothing surfaces
-  them, so opening an existing repo shows an empty/partial Start picker and forces manual re-typing.
-  This is the legacy→local-first *job conversion* case. `Job.fromEventFields` already reconstructs
-  partial jobs from events, but the real fix belongs in #15's entity model (Client/Project/Task-type
-  + repo binding + global vocabulary). Noted on the issue:
-  https://github.com/Heliman84/timescope/issues/15#issuecomment-5012746866
+- **The problem:** jobs loaded only from the global `jobs.json`, so opening a fresh/cloned repo whose
+  jobs live in its committed `.timescope/logs.jsonl` showed an empty/partial Start picker and forced
+  manual re-typing.
+- **First call — defer to #15** (noted on the issue:
+  https://github.com/Heliman84/timescope/issues/15#issuecomment-5012746866), on the grounds that the
+  entity model belonged there.
+- **Reversed during F5 and built here (US-06).** Local-first is unusable if opening a repo can't show
+  its jobs. The repo now caches its jobs in `config.json` (auto-upgrading an older log-only repo) and
+  the Start picker unions them with the global list — see the US-06 entry above. What actually remains
+  for **#15** is only the *entity-model* restructure (Client/Project/Task-type + binding + global
+  vocabulary), **not** basic pickability, which ships in #48.
 
 ## Rejected approaches
 
