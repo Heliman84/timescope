@@ -4,7 +4,7 @@ import * as assert from "assert";
 import { TimeScopePaths } from "../core/paths";
 import { workspace_timescope_paths } from "../core/workspace_paths";
 import { RegistryRepository } from "../core/registry_repository";
-import { read_repo_config } from "../core/repo_config";
+import { read_repo_config, write_repo_config, REPO_CONFIG_FORMAT_VERSION } from "../core/repo_config";
 import {
     is_workspace_opted_in,
     enable_local_logging,
@@ -122,4 +122,29 @@ export function run_local_opt_in_decline_tests(): void {
     const reg = a.registry_repo.load();
     assert.strictEqual(reg.repos.length, 1, "repo still registered");
     assert.ok(reg.is_declined(path.join(a.root, "other-folder")), "decline recorded alongside the repo");
+}
+
+/**
+ * Tests the first-opt-in repo_id race (#47):
+ * - Target: enable_local_logging / ensure_repo_config in src/core/local_opt_in.ts
+ * - What: when a config.json already exists on disk (another window won the race), a fresh
+ *   call to enable_local_logging adopts the winner's id instead of minting a second identity.
+ * - Why: two windows opting in a never-before-seen folder at the same instant must converge
+ *   on one repo id, not each write their own config over the other.
+ */
+export function run_local_opt_in_first_opt_in_race_tests(): void {
+    const a = fixture("race");
+    const ws = workspace_timescope_paths(a.ws_root);
+
+    // Simulate another window winning the race: it already created .timescope + config.json
+    // with its own repo_id before this window calls enable_local_logging.
+    fs.mkdirSync(ws.dir, { recursive: true });
+    const winner_id = "winnerwin01";
+    write_repo_config(ws.config_path, { repo_id: winner_id, format_version: REPO_CONFIG_FORMAT_VERSION });
+
+    const adopted_id = enable_local_logging(a.paths, a.ws_root, "workspace", a.registry_repo, 1000);
+    assert.strictEqual(adopted_id, winner_id, "enable_local_logging adopts the pre-existing winner's repo_id");
+    assert.strictEqual(read_repo_config(ws.config_path)!.repo_id, winner_id, "config.json is untouched — no second identity minted");
+    assert.strictEqual(a.registry_repo.load().repos.length, 1, "only the winner's single identity is registered");
+    assert.strictEqual(a.registry_repo.load().find_by_id(winner_id)!.path, a.ws_root, "registered under the winner's id");
 }

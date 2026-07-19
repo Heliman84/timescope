@@ -4,7 +4,7 @@ import { workspace_timescope_paths } from "./workspace_paths";
 import { RegistryRepository } from "./registry_repository";
 import {
     read_repo_config,
-    write_repo_config,
+    try_create_repo_config,
     generate_repo_id,
     REPO_CONFIG_FORMAT_VERSION,
 } from "./repo_config";
@@ -14,13 +14,23 @@ export function is_workspace_opted_in(paths: TimeScopePaths): boolean {
     return typeof paths.workspace_log_path === "string";
 }
 
-/** Read the repo's existing config, or mint + persist a fresh one. */
+/**
+ * Read the repo's existing config, or mint + persist a fresh one. Uses an exclusive
+ * create (`try_create_repo_config`) rather than a plain write: if another window wins
+ * the race to create `.timescope/config.json` for this never-before-seen folder between
+ * our existence check and our write, we lose the race gracefully and adopt the winner's
+ * repo_id instead of overwriting it with a second identity (#47).
+ */
 function ensure_repo_config(config_path: string): string {
     const existing = read_repo_config(config_path);
     if (existing) return existing.repo_id;
-    const repo_id = generate_repo_id();
-    write_repo_config(config_path, { repo_id, format_version: REPO_CONFIG_FORMAT_VERSION });
-    return repo_id;
+    const candidate_id = generate_repo_id();
+    const created = try_create_repo_config(config_path, { repo_id: candidate_id, format_version: REPO_CONFIG_FORMAT_VERSION });
+    if (created) return candidate_id;
+    // Lost the race — re-read and adopt whoever won.
+    const winner = read_repo_config(config_path);
+    if (!winner) throw new Error(`Failed to create or read repo config at '${config_path}'`);
+    return winner.repo_id;
 }
 
 /**

@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as crypto from "crypto";
-import { write_file_atomic } from "../utils/fs_utils";
+import { write_file_atomic, ensure_dir_sync } from "../utils/fs_utils";
 
 export const REPO_CONFIG_FORMAT_VERSION = 2;
 
@@ -61,6 +61,29 @@ export function read_repo_config(config_path: string): RepoConfig | null {
     }
 
     return { repo_id: rec.repo_id, format_version, jobs };
+}
+
+/**
+ * Attempt to create `.timescope/config.json` exclusively (fails if it already exists).
+ * Returns true when this call won the race and created the file; false when another
+ * writer got there first — the caller should then re-read and adopt the winner's id.
+ * Deliberately NOT `write_file_atomic` (temp+rename would silently clobber the winner);
+ * `wx` gives the OS-level exclusive-create guarantee we need instead (#47).
+ */
+export function try_create_repo_config(config_path: string, config: RepoConfig): boolean {
+    const body: { repo_id: string; format_version: number; jobs?: RepoConfigJob[] } = {
+        repo_id: config.repo_id,
+        format_version: config.format_version,
+    };
+    if (config.jobs) body.jobs = config.jobs.map(j => ({ job_id: j.job_id, job_title: j.job_title }));
+    ensure_dir_sync(config_path);
+    try {
+        fs.writeFileSync(config_path, JSON.stringify(body, null, 2) + "\n", { flag: "wx" });
+        return true;
+    } catch (ex) {
+        if ((ex as NodeJS.ErrnoException).code === "EEXIST") return false;
+        throw ex;
+    }
 }
 
 /** Write `.timescope/config.json` atomically, with repo_id first for readability. */

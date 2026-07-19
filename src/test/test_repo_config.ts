@@ -5,6 +5,7 @@ import {
     generate_repo_id,
     read_repo_config,
     write_repo_config,
+    try_create_repo_config,
     REPO_CONFIG_FORMAT_VERSION,
 } from "../core/repo_config";
 
@@ -61,4 +62,27 @@ export function run_repo_config_tests(): void {
     assert.throws(() => read_repo_config(cfg_path), /Malformed repo config/, "malformed JSON throws");
     fs.writeFileSync(cfg_path, JSON.stringify({ format_version: 1 }) + "\n", "utf8");
     assert.throws(() => read_repo_config(cfg_path), /Invalid repo config/, "missing repo_id throws");
+}
+
+/**
+ * Tests try_create_repo_config's exclusive-create semantics (#47 first-opt-in race):
+ * - Target: try_create_repo_config in src/core/repo_config.ts
+ * - What: creates on the first call (returns true); a second call against the same path
+ *   returns false and does NOT overwrite — the on-disk repo_id stays the first writer's.
+ * - Why: two windows racing to opt in the same never-before-seen folder must converge on a
+ *   single repo identity instead of each minting (and briefly writing) their own.
+ */
+export function run_repo_config_exclusive_tests(): void {
+    const root = mkdir_tmp("exclusive");
+    const cfg_path = path.join(root, "config.json");
+
+    const first_id = generate_repo_id();
+    const created = try_create_repo_config(cfg_path, { repo_id: first_id, format_version: REPO_CONFIG_FORMAT_VERSION });
+    assert.strictEqual(created, true, "first call creates the config");
+    assert.strictEqual(read_repo_config(cfg_path)!.repo_id, first_id, "first writer's repo_id is on disk");
+
+    const second_id = generate_repo_id();
+    const created_again = try_create_repo_config(cfg_path, { repo_id: second_id, format_version: REPO_CONFIG_FORMAT_VERSION });
+    assert.strictEqual(created_again, false, "second call against an existing config returns false");
+    assert.strictEqual(read_repo_config(cfg_path)!.repo_id, first_id, "on-disk repo_id remains the first writer's, not overwritten");
 }
