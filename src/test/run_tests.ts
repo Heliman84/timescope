@@ -18,6 +18,7 @@ import { run_local_opt_in_tests, run_local_opt_in_decline_tests } from "./test_l
 import { run_append_owned_event_tests, run_rebuild_index_tests, run_registry_log_paths_tests } from "./test_global_index";
 import { run_migration_tests } from "./test_migration";
 import { run_task_types_tests } from "./test_task_types";
+import { run_attribution_tests } from "./test_attribution";
 
 async function main() {
     try {
@@ -69,6 +70,7 @@ async function main() {
         run_registry_log_paths_tests();
         run_migration_tests();
         run_task_types_tests();
+        run_attribution_tests();
         console.log("All tests passed.");
         process.exit(0);
     } catch (err) {
