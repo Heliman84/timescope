@@ -62,6 +62,11 @@ flowchart LR
   renaming a client/project/task-type never rewrites the log and history follows automatically.
 - **Init flow is the #2 fix.** No `.timescope` folder until the user confirms "Track time here?"
   at first Start.
+- **Decision storage — travels → repo; machine-local → registry.** A repo's **opt-in** is the
+  committed `.timescope/` (portable: clone = tracked). Everything machine-local — the known-repos
+  cache and per-folder **declines** ("Never for this folder") — lives in `registry.json`, not VS
+  Code `workspaceState`. Declines are intentionally not committed (that would force one person's
+  choice on everyone who clones). The #6 Settings tab manages declines from the registry.
 
 ## Build order & status
 
