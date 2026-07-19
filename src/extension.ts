@@ -20,9 +20,13 @@ let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
 let _heartbeatInterval: NodeJS.Timeout | null = null;
 
-// Per-activation instance-lock identity (#47). Set only when this window holds the lock
-// for the opted-in repo it activated in; both null otherwise (no repo, or lock not held).
+// Per-activation instance-lock identity (#47). `_lockRepoId` is set only while this
+// window currently holds the lock; `_lockTargetRepoId` is set once at activation (for
+// the opted-in repo this window activated in) and never cleared, so a lock lost via
+// refresh back-off (F3) can be silently re-attempted on later heartbeat ticks (N3)
+// instead of leaving this window permanently invisible to the registry of lock holders.
 let _lockRepoId: string | null = null;
+let _lockTargetRepoId: string | null = null;
 let _instanceId: string | null = null;
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
@@ -103,6 +107,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (activation_repo_id && runtime.paths.locks_dir) {
         try {
             _instanceId = crypto.randomUUID();
+            _lockTargetRepoId = activation_repo_id;
             const lock_result = acquire_lock(
                 runtime.paths.locks_dir,
                 activation_repo_id,
@@ -176,7 +181,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Start heartbeat: periodically persist a "last seen" timestamp so that
     // crash-recovery can approximate when VSCode was last alive. Also refreshes our
-    // instance lock's heartbeat (#47), so a live window's lock never looks stale.
+    // instance lock's heartbeat (#47), so a live window's lock never looks stale — and
+    // if we've lost it, silently retries acquisition (#47 N3) rather than leaving this
+    // window permanently lockless/invisible once the foreign holder releases or goes stale.
     _heartbeatInterval = setInterval(() => {
         context.globalState.update(STATE_KEY_LAST_SEEN, Date.now());
         if (_lockRepoId && _instanceId && runtime.paths.locks_dir) {
@@ -191,6 +198,23 @@ export async function activate(context: vscode.ExtensionContext) {
                 }
             } catch (ex) {
                 console.error("TimeScope: instance lock refresh failed", ex);
+            }
+        } else if (_lockTargetRepoId && _instanceId && runtime.paths.locks_dir) {
+            // Lockless (lost it, or never got it at activation) — retry silently. No new
+            // warning here: the original "already tracked elsewhere" warning already fired
+            // at activation, and we don't want to re-nag every heartbeat tick.
+            try {
+                const retry = acquire_lock(
+                    runtime.paths.locks_dir,
+                    _lockTargetRepoId,
+                    { pid: process.pid, instance_id: _instanceId, now: Date.now() },
+                    LOCK_STALE_MS
+                );
+                if (retry.acquired) {
+                    _lockRepoId = _lockTargetRepoId;
+                }
+            } catch (ex) {
+                console.error("TimeScope: instance lock re-acquisition failed", ex);
             }
         }
     }, HEARTBEAT_INTERVAL_MS);
@@ -484,6 +508,7 @@ export function deactivate() {
         }
     }
     _lockRepoId = null;
+    _lockTargetRepoId = null;
     _instanceId = null;
 
     // Ensure any running interval is stopped and session cleared

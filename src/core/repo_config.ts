@@ -74,6 +74,13 @@ export function read_repo_config(config_path: string): RepoConfig | null {
  * content is written in full *before* the exclusive link is attempted, so a loser who
  * loses the race can never observe (and throw on) a partially-written config — the link
  * either doesn't happen at all (EEXIST) or happens against fully-formed content (#47 F4).
+ *
+ * `linkSync` needs hardlink support, which some volumes lack (network shares, exFAT/FAT
+ * removable media) — there it throws something other than EEXIST (EPERM/ENOTSUP/EACCES).
+ * On any such error we fall back to a plain `wx`-flagged exclusive write: still an
+ * OS-exclusive create (so the race-safety guarantee holds), just not content-atomic on
+ * that degraded path — mirrors `write_file_atomic`'s own platform-fallback philosophy
+ * (#47 N1).
  */
 export function try_create_repo_config(config_path: string, config: RepoConfig): boolean {
     const body: { repo_id: string; format_version: number; jobs?: RepoConfigJob[] } = {
@@ -81,16 +88,26 @@ export function try_create_repo_config(config_path: string, config: RepoConfig):
         format_version: config.format_version,
     };
     if (config.jobs) body.jobs = config.jobs.map(j => ({ job_id: j.job_id, job_title: j.job_title }));
+    const content = JSON.stringify(body, null, 2) + "\n";
     ensure_dir_sync(config_path);
     const dir = path.dirname(config_path);
     const tmp = path.join(dir, `.${path.basename(config_path)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify(body, null, 2) + "\n", "utf8");
+    fs.writeFileSync(tmp, content, "utf8");
     try {
         fs.linkSync(tmp, config_path);
         return true;
     } catch (ex) {
-        if ((ex as NodeJS.ErrnoException).code === "EEXIST") return false;
-        throw ex;
+        const code = (ex as NodeJS.ErrnoException).code;
+        if (code === "EEXIST") return false;
+        // Volume doesn't support hardlinks (or another link-specific failure) — fall back
+        // to a plain exclusive-create write. Still OS-exclusive, just not content-atomic.
+        try {
+            fs.writeFileSync(config_path, content, { flag: "wx" });
+            return true;
+        } catch (fallback_ex) {
+            if ((fallback_ex as NodeJS.ErrnoException).code === "EEXIST") return false;
+            throw fallback_ex;
+        }
     } finally {
         try { fs.unlinkSync(tmp); } catch { /* best effort cleanup */ }
     }

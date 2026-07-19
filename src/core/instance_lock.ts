@@ -66,18 +66,34 @@ export function is_stale(lock: LockInfo, now: number, stale_ms: number): boolean
  * `EEXIST` if the destination already exists, and the link only succeeds once the temp
  * file's content is complete, so a reader can never observe a partial lock file (#47 F2).
  * Returns true iff this call created the lock file (i.e. none existed a moment ago).
+ *
+ * `linkSync` needs hardlink support, which some volumes lack (network shares, exFAT/FAT
+ * removable media) — there it throws something other than EEXIST (EPERM/ENOTSUP/EACCES).
+ * On any such error we fall back to a plain `wx`-flagged exclusive write: still an
+ * OS-exclusive create (the race-safety guarantee holds), just not content-atomic on that
+ * degraded path — mirrors `write_file_atomic`'s own platform-fallback philosophy (#47 N1).
  */
 function try_create_lock_exclusive(lock_path: string, lock: LockInfo): boolean {
     ensure_dir_sync(lock_path);
+    const content = JSON.stringify(lock, null, 2) + "\n";
     const dir = path.dirname(lock_path);
     const tmp = path.join(dir, `.${path.basename(lock_path)}.${process.pid}.${crypto.randomBytes(4).toString("hex")}.tmp`);
-    fs.writeFileSync(tmp, JSON.stringify(lock, null, 2) + "\n", "utf8");
+    fs.writeFileSync(tmp, content, "utf8");
     try {
         fs.linkSync(tmp, lock_path);
         return true;
     } catch (ex) {
-        if ((ex as NodeJS.ErrnoException).code === "EEXIST") return false;
-        throw ex;
+        const code = (ex as NodeJS.ErrnoException).code;
+        if (code === "EEXIST") return false;
+        // Volume doesn't support hardlinks (or another link-specific failure) — fall back
+        // to a plain exclusive-create write. Still OS-exclusive, just not content-atomic.
+        try {
+            fs.writeFileSync(lock_path, content, { flag: "wx" });
+            return true;
+        } catch (fallback_ex) {
+            if ((fallback_ex as NodeJS.ErrnoException).code === "EEXIST") return false;
+            throw fallback_ex;
+        }
     } finally {
         try { fs.unlinkSync(tmp); } catch { /* best effort cleanup */ }
     }

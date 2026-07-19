@@ -127,3 +127,47 @@ export function run_instance_lock_exclusive_first_acquire_tests(): void {
     const lock_path = path.join(locks_dir, `${repo_id}.lock.json`);
     assert.strictEqual(read_lock(lock_path)!.instance_id, "inst-A", "exactly one instance holds the lock after the race");
 }
+
+/**
+ * Tests acquire_lock's fallback when the volume doesn't support hardlinks (#47 N1 —
+ * network shares / exFAT / FAT removable media raise a non-EEXIST error from
+ * `fs.linkSync`, not "already exists"):
+ * - Target: acquire_lock (via try_create_lock_exclusive) in src/core/instance_lock.ts
+ * - What: a non-EEXIST linkSync failure falls back to a plain `wx`-flagged exclusive
+ *   write, which still succeeds (still OS-exclusive create, just not content-atomic on
+ *   that degraded path) and leaves no leftover temp file.
+ * - Why: the old plain read-then-write worked on these volumes; the F2 exclusive-create
+ *   upgrade must not hard-regress first acquisition there.
+ * - How: `fs.linkSync` is monkey-patched (Node's CommonJS module object is a live
+ *   singleton, so this affects the same reference `instance_lock.ts` calls through) to
+ *   throw EPERM once, simulating a volume without hardlink support; restored in `finally`.
+ */
+export function run_instance_lock_fallback_tests(): void {
+    const locks_dir = mkdir_tmp("fallback");
+    const repo_id = "repo-fallback";
+    const now = Date.parse("2026-07-19T12:00:00.000Z");
+    const stale_ms = 30_000;
+
+    const original_link_sync = fs.linkSync;
+    let link_sync_called = false;
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = ((..._args: Parameters<typeof fs.linkSync>) => {
+        link_sync_called = true;
+        const err = new Error("EPERM: operation not permitted, link") as NodeJS.ErrnoException;
+        err.code = "EPERM";
+        throw err;
+    }) as typeof fs.linkSync;
+
+    try {
+        const result = acquire_lock(locks_dir, repo_id, { pid: 111, instance_id: "inst-A", now }, stale_ms);
+        assert.ok(link_sync_called, "the stub was actually exercised");
+        assert.strictEqual(result.acquired, true, "a non-EEXIST linkSync error falls back to a successful wx-flagged acquisition");
+
+        const lock_path = path.join(locks_dir, `${repo_id}.lock.json`);
+        assert.strictEqual(read_lock(lock_path)!.instance_id, "inst-A", "the fallback write's content is on disk");
+
+        const leftover = fs.readdirSync(locks_dir).filter(f => f !== path.basename(lock_path));
+        assert.deepStrictEqual(leftover, [], "no leftover temp file after the fallback path");
+    } finally {
+        (fs as { linkSync: typeof fs.linkSync }).linkSync = original_link_sync;
+    }
+}

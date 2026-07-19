@@ -93,3 +93,44 @@ export function run_repo_config_exclusive_tests(): void {
     const leftover = fs.readdirSync(root).filter(f => f !== path.basename(cfg_path));
     assert.deepStrictEqual(leftover, [], "no leftover temp files after a winning create + a losing create");
 }
+
+/**
+ * Tests try_create_repo_config's fallback when the volume doesn't support hardlinks
+ * (#47 N1 — network shares / exFAT / FAT removable media raise a non-EEXIST error from
+ * `fs.linkSync`, not "already exists"):
+ * - Target: try_create_repo_config in src/core/repo_config.ts
+ * - What: a non-EEXIST linkSync failure falls back to a plain `wx`-flagged exclusive
+ *   write, which still succeeds (still OS-exclusive create, just not content-atomic on
+ *   that degraded path) and leaves no leftover temp file.
+ * - Why: the old plain `wx` write worked on these volumes; the F4 content-atomic upgrade
+ *   must not hard-regress opt-in there.
+ * - How: `fs.linkSync` is monkey-patched (Node's CommonJS module object is a live
+ *   singleton, so this affects the same reference `repo_config.ts` calls through) to throw
+ *   EPERM once, simulating a volume without hardlink support; restored in a `finally`.
+ */
+export function run_repo_config_fallback_tests(): void {
+    const root = mkdir_tmp("fallback");
+    const cfg_path = path.join(root, "config.json");
+    const repo_id = generate_repo_id();
+
+    const original_link_sync = fs.linkSync;
+    let link_sync_called = false;
+    (fs as { linkSync: typeof fs.linkSync }).linkSync = ((..._args: Parameters<typeof fs.linkSync>) => {
+        link_sync_called = true;
+        const err = new Error("EPERM: operation not permitted, link") as NodeJS.ErrnoException;
+        err.code = "EPERM";
+        throw err;
+    }) as typeof fs.linkSync;
+
+    try {
+        const created = try_create_repo_config(cfg_path, { repo_id, format_version: REPO_CONFIG_FORMAT_VERSION });
+        assert.ok(link_sync_called, "the stub was actually exercised");
+        assert.strictEqual(created, true, "a non-EEXIST linkSync error falls back to a successful wx write");
+        assert.strictEqual(read_repo_config(cfg_path)!.repo_id, repo_id, "the fallback write's content is on disk");
+
+        const leftover = fs.readdirSync(root).filter(f => f !== path.basename(cfg_path));
+        assert.deepStrictEqual(leftover, [], "no leftover temp file after the fallback path");
+    } finally {
+        (fs as { linkSync: typeof fs.linkSync }).linkSync = original_link_sync;
+    }
+}

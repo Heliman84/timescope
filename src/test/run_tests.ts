@@ -11,13 +11,13 @@ import { run_build_info_tests } from "./test_build_info";
 import { run_resolve_storage_dir_tests } from "./test_paths";
 import { run_filter_state_tests } from "./test_filter_state";
 import { run_split_concatenated_jsonl_tests, run_sanitize_lines_tests, run_append_line_safe_tests, run_write_file_atomic_tests, run_write_helpers_mkdir_tests, run_repository_sanitized_load_tests, run_compact_log_tests } from "./test_log_hygiene";
-import { run_repo_config_tests, run_repo_config_exclusive_tests } from "./test_repo_config";
+import { run_repo_config_tests, run_repo_config_exclusive_tests, run_repo_config_fallback_tests } from "./test_repo_config";
 import { run_derive_repo_jobs_tests, run_ensure_repo_jobs_cache_tests } from "./test_repo_jobs";
 import { run_registry_domain_tests, run_registry_repository_tests, run_registry_declined_tests, run_registry_remove_declined_noop_tests, run_registry_repository_update_tests } from "./test_registry";
 import { run_local_opt_in_tests, run_local_opt_in_decline_tests, run_local_opt_in_first_opt_in_race_tests, run_local_opt_in_concurrent_writer_tests } from "./test_local_opt_in";
 import { run_append_owned_event_tests, run_rebuild_index_tests, run_registry_log_paths_tests } from "./test_global_index";
 import { run_migration_tests } from "./test_migration";
-import { run_instance_lock_tests, run_instance_lock_exclusive_first_acquire_tests } from "./test_instance_lock";
+import { run_instance_lock_tests, run_instance_lock_exclusive_first_acquire_tests, run_instance_lock_fallback_tests } from "./test_instance_lock";
 import { run_multi_instance_no_crosstalk_tests, run_multi_instance_index_convergence_tests } from "./test_multi_instance";
 
 async function main() {
@@ -57,6 +57,7 @@ async function main() {
         run_compact_log_tests();
         run_repo_config_tests();
         run_repo_config_exclusive_tests();
+        run_repo_config_fallback_tests();
         run_derive_repo_jobs_tests();
         run_ensure_repo_jobs_cache_tests();
         run_registry_domain_tests();
@@ -74,6 +75,7 @@ async function main() {
         run_migration_tests();
         run_instance_lock_tests();
         run_instance_lock_exclusive_first_acquire_tests();
+        run_instance_lock_fallback_tests();
         run_multi_instance_no_crosstalk_tests();
         run_multi_instance_index_convergence_tests();
         console.log("All tests passed.");
