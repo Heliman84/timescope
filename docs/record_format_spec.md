@@ -1,6 +1,89 @@
 # TimeScope Record Format Specification
 
 
+## Storage layout (local-first, #48)
+
+Under the local-first model, a repo's committed `.timescope/logs.jsonl` **owns** its events; every
+off-project session is owned by the global `scratch.jsonl`. The global `index.jsonl` is a derived,
+rebuildable union of all owned sources and is the dashboard's read surface. There is **one owner
+per event** — `appendEvent` writes exactly one owned log, then replicates into the index (no
+dual-write). The legacy global `logs.jsonl` was migrated into scratch (backed up first) and retired.
+
+This section documents the metadata files introduced across #48: `config.json` / `registry.json`
+(48a) and `index.jsonl` / `scratch.jsonl` (48b/48c).
+
+### Repo config — `.timescope/config.json`
+
+A repo's authority about itself, committed with the repository. It carries a stable repo id and
+(US-06) a cache of the repo's jobs so a fresh clone can populate the Start picker without a global
+job list. Client/Project binding + pinned task-types arrive with #15.
+
+```json
+{
+  "repo_id": "a1b2c3d4e5f6",
+  "format_version": 2,
+  "jobs": [
+    { "job_id": "16lor", "job_title": "Lantern - Speaker - EE CAD" }
+  ]
+}
+```
+
+- `repo_id` — 12-char hex, generated once at opt-in and never regenerated (clone → same id).
+- `jobs` — cached `{ job_id, job_title }` derived from the repo's owned log (US-06). Absent in v1
+  configs; an older log-only repo is auto-upgraded (config written with `jobs`) on open. Additive —
+  the current title wins after a rename; the registry stays the cross-repo owner (#15).
+- `.timescope/` is created **only** when the user opts in (first Start → "Track here?"), or when a
+  `.timescope` folder already exists (existing folder ⇒ assume opted-in). This closes #2.
+
+### Global registry — `registry.json`
+
+A rebuildable cache of known repos (lives in the global storage dir alongside `logs.jsonl`). Used
+to rebuild the global index efficiently and to dedup repos by id:
+
+```json
+{
+  "format_version": 1,
+  "repos": [
+    { "id": "a1b2c3d4e5f6", "name": "lantern-fw", "path": "/work/lantern-fw", "last_seen": 1721000000000 }
+  ],
+  "declined": [ "/work/scratch-repo" ]
+}
+```
+
+- `declined` — folders the user opted **out** of ("Never for this folder"). Per-machine (the
+  registry is not committed); paths are matched case/separator-insensitively. This replaces the
+  old VS Code `workspaceState` storage so the decision lives in TimeScope's own inspectable store
+  (rule: *travels → repo; machine-local → registry*). The reversal UI is #6; the underlying
+  `add`/`remove` functions ship now.
+- Entities (clients / projects / task-types) join the registry in #15; today it tracks repos +
+  declines. `declined` is additive — older registries without it load as an empty list.
+- A malformed `registry.json` is a hard error (losing repo paths would defeat a rebuild); a
+  missing file is treated as an empty registry.
+
+### Derived global index — `index.jsonl`
+
+A rebuildable cache in the global storage dir. It is the de-duplicated union (by event `id`) of
+every registered repo's owned `.timescope/logs.jsonl` plus the global `scratch.jsonl`, in the same
+event JSONL format as a log (header line + one event per line), sorted ascending by `timestamp`.
+
+- **Derived and disposable** — never a source of truth. Deleting it loses nothing; `TimeScope:
+  Rebuild Global Index` reconstructs it from the owned sources (repos in `registry.json` + scratch).
+- Populated incrementally: `appendEvent` replicates each new event here, and it is rebuilt from the
+  owned sources on activation and after edits/renames. The dashboard reads it (48c).
+
+### Scratch log — `scratch.jsonl`
+
+An **owned** event log in the global storage dir, in the same JSONL format as a log. It holds
+sessions that don't belong to any repo — non-workspace (off-project) work — plus the migrated
+legacy history. It is the successor to the retired global `logs.jsonl`.
+
+- Written by `appendEvent` only when the current session has no opted-in workspace log.
+- Feeds the index rebuild alongside repo logs. On the first activation after the cutover, the
+  existing global `logs.jsonl` (historical, repo-less hours) is backed up to `logs.jsonl.migrated.bak`
+  and its events are moved into scratch (deduped by id); the legacy file is then removed so the
+  migration runs exactly once.
+
+
 ## Jobs Format
 
 **File:** `jobs.json`

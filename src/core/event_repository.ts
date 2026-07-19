@@ -8,12 +8,24 @@ import { EventDTO } from "./event_dto";
 import { Job } from "./job";
 import { ensure_dir_sync, readJSONLSafe, append_line_safe, write_file_atomic } from "../utils/fs_utils";
 import { HEADER_KEY, HEADER_LINE, sanitize_lines, SanitizeReport } from "./log_sanitizer";
+import { append_owned_event } from "./global_index";
 
 export class EventRepository {
     private readonly paths: TimeScopePaths;
 
     constructor(paths: TimeScopePaths) {
         this.paths = paths;
+    }
+
+    /**
+     * The global-*owned* event store. Post-cutover (#48 48c) this is `scratch.jsonl`
+     * — the legacy global `logs.jsonl` has been migrated into it and retired. Unit
+     * tests that set only `global_log_path` (no `scratch_path`) fall back to it, so
+     * their behaviour is unchanged. The "global" location label throughout this
+     * repository refers to this owned store.
+     */
+    private get _global_owned_path(): string | undefined {
+        return this.paths.scratch_path ?? this.paths.global_log_path;
     }
 
     /**
@@ -32,7 +44,7 @@ export class EventRepository {
     /** Full sanitize reports for both logs (used for the load-time damage prompt). */
     checkLogHealth(): { file_path: string; report: SanitizeReport }[] {
         const results: { file_path: string; report: SanitizeReport }[] = [];
-        for (const p of [this.paths.global_log_path, this.paths.workspace_log_path]) {
+        for (const p of [this._global_owned_path, this.paths.workspace_log_path]) {
             if (!p) continue;
             const { report } = sanitize_lines(readJSONLSafe(p));
             results.push({ file_path: p, report });
@@ -43,7 +55,7 @@ export class EventRepository {
     private readLinesForLocation(location: "workspace" | "global" | "both" = "global"): string[] {
         const all: string[] = [];
         if (location === "global" || location === "both") {
-            all.push(...this.read_log_lines(this.paths.global_log_path));
+            all.push(...this.read_log_lines(this._global_owned_path));
         }
         if (location === "workspace" || location === "both") {
             all.push(...this.read_log_lines(this.paths.workspace_log_path));
@@ -52,22 +64,30 @@ export class EventRepository {
     }
 
     appendEvent(event: Event): void {
-        const line = event.toJSONL() + "\n";
+        // #48 48c — one owner per event. An opted-in workspace owns its events; every
+        // other (off-project) session is owned by the global store (scratch). There is
+        // no dual-write: the event lands in exactly one owned log, then replicates into
+        // the derived global index (the dashboard's read surface).
+        const is_workspace = !!this.paths.workspace_log_path;
+        const owned_path = is_workspace ? this.paths.workspace_log_path! : this._global_owned_path;
+        if (!owned_path) return; // no owned store resolved — nothing to persist to
 
-        ensure_dir_sync(this.paths.global_log_path);
-        if (this.paths.workspace_log_path) ensure_dir_sync(this.paths.workspace_log_path);
+        const set_index = (i: number) =>
+            is_workspace ? event.setWorkspaceLineIndex(i) : event.setGlobalLineIndex(i);
 
-        // Read global file once — used for both dedupe check and line count.
-        let globalLines: string[] = [];
+        ensure_dir_sync(owned_path);
+
+        // Read the owned log once — dedupe check + line count.
+        let lines: string[] = [];
         try {
-            globalLines = this.read_log_lines(this.paths.global_log_path);
-            for (let i = globalLines.length - 1; i >= 0; i--) {
-                const parsedEvent = Event.fromJSONL(globalLines[i]);
-                if (!parsedEvent) continue;
-                if (event.equals(parsedEvent)) {
-                    // Already in the global log — set the index so the caller
-                    // knows it's persisted, then return without double-writing.
-                    event.setGlobalLineIndex(i);
+            lines = this.read_log_lines(owned_path);
+            for (let i = lines.length - 1; i >= 0; i--) {
+                const parsed = Event.fromJSONL(lines[i]);
+                if (!parsed) continue;
+                if (event.equals(parsed)) {
+                    // Already persisted — set the index and return without re-writing
+                    // (and without re-replicating into the index).
+                    set_index(i);
                     return;
                 }
                 break;
@@ -76,31 +96,27 @@ export class EventRepository {
             // ignore and proceed to append
         }
 
-        if (globalLines.length === 0) {
-            // New file: header on line 0, event on line 1
-            fs.writeFileSync(this.paths.global_log_path, HEADER_LINE + "\n" + line, "utf8");
-            event.setGlobalLineIndex(1);
+        if (lines.length === 0) {
+            // New file: header on line 0, event on line 1.
+            fs.writeFileSync(owned_path, HEADER_LINE + "\n" + event.toJSONL() + "\n", "utf8");
+            set_index(1);
         } else {
-            // Appending: newline-safe so a torn earlier write can never glue records
-            append_line_safe(this.paths.global_log_path, event.toJSONL());
-            event.setGlobalLineIndex(globalLines.length);
+            // Newline-safe so a torn earlier write can never glue records.
+            append_line_safe(owned_path, event.toJSONL());
+            set_index(lines.length);
         }
 
-        if (this.paths.workspace_log_path) {
-            // Read workspace file once for line count.
-            const wsLines = this.read_log_lines(this.paths.workspace_log_path);
-            if (wsLines.length === 0) {
-                fs.writeFileSync(this.paths.workspace_log_path, HEADER_LINE + "\n" + line, "utf8");
-                event.setWorkspaceLineIndex(1);
-            } else {
-                append_line_safe(this.paths.workspace_log_path, event.toJSONL());
-                event.setWorkspaceLineIndex(wsLines.length);
-            }
+        // Replicate into the derived global index. Reached only for genuinely new
+        // events; the dedupe branch above returns before here.
+        if (this.paths.global_index_path) {
+            append_owned_event(this.paths.global_index_path, event);
         }
     }
 
     appendValidated(event: Event): void {
-        const sessions = this.loadSessions("global").filter(s => s.job.equals(event.job));
+        // Validate against this window's owned events (workspace + global-owned),
+        // since an opted-in session's open events live in the workspace log now.
+        const sessions = this.loadSessions("both").filter(s => s.job.equals(event.job));
         const lastSession = sessions.length > 0 ? sessions[sessions.length - 1] : null;
 
         if (event.isStart()) {
@@ -126,16 +142,34 @@ export class EventRepository {
     }
 
     loadEventCollectionForJob(job?: Job): EventCollection {
-        const lines = this.read_log_lines(this.paths.global_log_path);
+        const lines = this.read_log_lines(this._global_owned_path);
         const col = EventCollection.parse_lines(lines);
         if (job) return col.filterByJob(job);
         return col;
     }
 
+    /**
+     * Load the derived global index (`index.jsonl`) — the dashboard's read surface
+     * (#48 48c). It is the de-duplicated union of every repo's owned log plus
+     * scratch; rebuildable via `TimeScope: Rebuild Global Index`.
+     */
+    loadIndexEntries(): EventCollection {
+        const lines = this.read_log_lines(this.paths.global_index_path);
+        return EventCollection.parse_lines(lines);
+    }
+
     loadSessions(location: "workspace" | "global" | "both" = "global"): Session[] {
         const lines = this.readLinesForLocation(location);
         const col = EventCollection.parse_lines(lines);
-        const events = col.sorted();
+        // Dedup by event id: the same event can live in both owned stores (dual-written
+        // during 48a/48b, then the global log migrated into scratch), and reconstructing
+        // sessions from duplicated events yields phantom/broken sessions. Matches loadAllEntries.
+        const seenIds = new Set<string>();
+        const events = col.sorted().filter(ev => {
+            if (seenIds.has(ev.id)) return false;
+            seenIds.add(ev.id);
+            return true;
+        });
 
         // Map job_id → Event[]
         const openByJob = new Map<string, Event[]>();
@@ -197,6 +231,10 @@ export class EventRepository {
         if (!Number.isInteger(n) || n <= 0) return [];
 
         const finalized: Session[] = [];
+        // Dedup by event id across the scan: the same event can exist in both owned
+        // stores (dual-written during 48a/48b, then the global log migrated into
+        // scratch). Reconstructing from duplicates yields a phantom open session.
+        const seenIds = new Set<string>();
 
         // Pick the most recent incomplete session across jobs
         const tryFinalize = (map: Map<string, Event[]>) => {
@@ -237,6 +275,8 @@ export class EventRepository {
             for (let i = lines.length - 1; i >= 0; i--) {
                 const ev = Event.fromJSONL(lines[i]);
                 if (!ev) continue;
+                if (seenIds.has(ev.id)) continue;
+                seenIds.add(ev.id);
 
                 const jobId = ev.job.id;
                 let arr = byJob.get(jobId);
@@ -310,6 +350,8 @@ export class EventRepository {
                 }
 
                 if (!nextEv) break;
+                if (seenIds.has(nextEv.id)) continue;
+                seenIds.add(nextEv.id);
 
                 const jobId = nextEv.job.id;
                 let arr = byJob.get(jobId);
@@ -337,12 +379,12 @@ export class EventRepository {
         };
 
         if (location === "global") {
-            scanSingleN(this.read_log_lines(this.paths.global_log_path));
+            scanSingleN(this.read_log_lines(this._global_owned_path));
         } else if (location === "workspace") {
             scanSingleN(this.read_log_lines(this.paths.workspace_log_path));
         } else {
             scanBothN(
-                this.read_log_lines(this.paths.global_log_path),
+                this.read_log_lines(this._global_owned_path),
                 this.read_log_lines(this.paths.workspace_log_path)
             );
         }
@@ -386,7 +428,7 @@ export class EventRepository {
             write_file_atomic(filePath, toWrite.join("\n") + "\n");
         };
 
-        rewriteFile(this.paths.global_log_path);
+        rewriteFile(this._global_owned_path);
         if (this.paths.workspace_log_path) rewriteFile(this.paths.workspace_log_path);
     }
 
@@ -421,7 +463,7 @@ export class EventRepository {
             }
         };
 
-        scan(this.paths.global_log_path, (ev, i) => ev.setGlobalLineIndex(i));
+        scan(this._global_owned_path, (ev, i) => ev.setGlobalLineIndex(i));
         scan(this.paths.workspace_log_path, (ev, i) => ev.setWorkspaceLineIndex(i));
 
         const events = ordered.map(id => byId.get(id)!);
@@ -471,7 +513,7 @@ export class EventRepository {
         };
 
         if (oldEvent.isInGlobal) {
-            rewrite(this.paths.global_log_path, "globalReplaced");
+            rewrite(this._global_owned_path, "globalReplaced");
         }
         if (oldEvent.isInWorkspace) {
             rewrite(this.paths.workspace_log_path, "workspaceReplaced");

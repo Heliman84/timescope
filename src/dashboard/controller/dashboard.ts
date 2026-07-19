@@ -58,7 +58,9 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
         }
 
         if (msg.type === "edit_log_entry") {
-            const collection = runtime.loadEventCollection();
+            // Edits target the owning log (workspace or scratch), so resolve the event
+            // against the owned collection — not the derived index the dashboard displays.
+            const collection = runtime.loadOwnedCollection();
             const targetId: string | undefined = msg.payload?.id;
             const new_record = msg.payload.new_record;
 
@@ -71,7 +73,7 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 try { candidate = Event.fromDTO(new_record); }
                 catch (err) {
                     summary.errors.push(`Edit failed: could not construct event from record — ${err instanceof Error ? err.message : String(err)}`);
-                    const updated = runtime.loadEventCollection();
+                    const updated = runtime.refreshEventCollection();
                     panel.webview.postMessage({
                         type: "edit_result",
                         payload: { summary, payload: buildPayload(updated.toEvents()) }
@@ -102,6 +104,8 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                         if (!result.globalReplaced && !result.workspaceReplaced) {
                             summary.errors.push("Edit failed: the event was found in the collection but could not be matched in the log file on disk. The log file may have been modified externally or contain formatting inconsistencies.");
                         } else {
+                            // Owned log changed — rebuild the derived index before redisplay.
+                            runtime.rebuildIndex();
                             const updatedCollection = runtime.refreshEventCollection();
                             const errors = updatedCollection.validate();
                             summary.errors.push(...filterRelevantErrors(errors, [oldEvent]));
@@ -118,7 +122,7 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
         }
 
         if (msg.type === "edit_log_entries") {
-            const collection = runtime.loadEventCollection();
+            const collection = runtime.loadOwnedCollection();
             const edits = msg.payload?.edits ?? [];
 
             const summary = { globalReplaced: false, workspaceReplaced: false, errors: [] as string[], warnings: [] as string[] };
@@ -172,6 +176,8 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
             }
 
             if (anyReplaced) {
+                // Owned log(s) changed — rebuild the derived index before redisplay.
+                runtime.rebuildIndex();
                 const updatedCollection = runtime.refreshEventCollection();
                 const errors = updatedCollection.validate();
                 summary.errors.push(...filterRelevantErrors(errors, editedEvents));

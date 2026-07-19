@@ -62,6 +62,11 @@ flowchart LR
   renaming a client/project/task-type never rewrites the log and history follows automatically.
 - **Init flow is the #2 fix.** No `.timescope` folder until the user confirms "Track time here?"
   at first Start.
+- **Decision storage — travels → repo; machine-local → registry.** A repo's **opt-in** is the
+  committed `.timescope/` (portable: clone = tracked). Everything machine-local — the known-repos
+  cache and per-folder **declines** ("Never for this folder") — lives in `registry.json`, not VS
+  Code `workspaceState`. Declines are intentionally not committed (that would force one person's
+  choice on everyone who clones). The #6 Settings tab manages declines from the registry.
 
 ## Build order & status
 
@@ -71,9 +76,9 @@ is the highest-collision file — the storage-track branch owns it each wave.
 
 | Wave | Issue | Track | Dev-log | Status |
 | :--- | :--- | :--- | :--- | :--- |
-| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Log hygiene (storage) | storage | [issue-42-log-hygiene](../dev-log/issue-42-log-hygiene.md) | PR [#49](https://github.com/Heliman84/timescope/pull/49) — in review |
-| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Malformed-stream coverage (webview) | webview | [issue-42-webview-malformed-streams](../dev-log/issue-42-webview-malformed-streams.md) | PR [#50](https://github.com/Heliman84/timescope/pull/50) — in review |
-| 2 | [#48](https://github.com/Heliman84/timescope/issues/48) Local-first storage architecture | storage (solo) | — | not started |
+| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Log hygiene (storage) | storage | [issue-42-log-hygiene](../dev-log/issue-42-log-hygiene.md) | ✅ merged (PR [#49](https://github.com/Heliman84/timescope/pull/49), v0.5.0) |
+| 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Malformed-stream coverage (webview) | webview | [issue-42-webview-malformed-streams](../dev-log/issue-42-webview-malformed-streams.md) | ✅ merged (PR [#50](https://github.com/Heliman84/timescope/pull/50), v0.5.1) |
+| 2 | [#48](https://github.com/Heliman84/timescope/issues/48) Local-first storage architecture | storage (solo) | [issue-48-local-first-storage](../dev-log/issue-48-local-first-storage.md) | 🚧 feature-complete (48a+48b+48c on branch; awaiting F5 + PR) |
 | 3 | [#47](https://github.com/Heliman84/timescope/issues/47) Multi-instance verification | storage | — | not started |
 | 3 | [#15](https://github.com/Heliman84/timescope/issues/15) Hierarchical jobs | webview | — | not started |
 | 4 | [#43](https://github.com/Heliman84/timescope/issues/43) Amend events | storage | — | not started |
@@ -89,6 +94,9 @@ is the highest-collision file — the storage-track branch owns it each wave.
 - **Legacy data migration:** existing global `logs.jsonl` events (flat job strings, no owning
   repo) become global-owned legacy/scratch; flat strings map to Client/Project/Task-type entities
   during #15 (user-assisted). Optional later: "adopt into repo".
+- **Repo-log jobs → entity model (#15):** basic pickability shipped in **#48** (US-06 — a repo caches
+  its jobs in `config.json`, auto-upgrading an older log-only repo, unioned into the Start picker).
+  What remains for #15 is restructuring that flat cache into the Client/Project/Task-type entities.
 
 ## Related documents
 

@@ -19,6 +19,7 @@ export async function run_job_repository_tests(): Promise<void> {
     const paths: TimeScopePaths = {
         global_jobs_path: path.join(testRoot, "jobs.json"),
         global_log_path: path.join(testRoot, "logs.jsonl"),
+        registry_path: path.join(testRoot, "registry.json"),
     };
 
     const repo = new JobRepository(paths);

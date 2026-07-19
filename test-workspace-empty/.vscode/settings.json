@@ -1,0 +1,8 @@
+{
+    // Isolated F5 fixture for the local-first opt-in flow (#48) and future
+    // multi-instance testing (#47). Pins TimeScope storage to this folder's own
+    // global-storage so dev testing NEVER touches real tracking data. This
+    // folder intentionally has NO .timescope — open it in the Extension
+    // Development Host and hit Start to exercise the "Track here?" opt-in prompt.
+    "timescope.global_storage_dir": "global-storage"
+}

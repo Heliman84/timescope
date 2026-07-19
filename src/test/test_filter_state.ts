@@ -369,6 +369,14 @@ export function run_apply_filters_source_tests(): void {
         fs_module.apply_filters(sessions, state_with({ source: "workspace" })).map(s => s.job),
         ["Both", "WorkspaceOnly"]);
 
+    // #48 48c: index-loaded sessions are unclassified (no global/workspace line
+    // index). The source filter must be inert for them — never hide them — until #3
+    // reintroduces per-repo classification.
+    const unclassified = [make_session({ job: "Indexed", has_global: false, has_workspace: false })];
+    assert.strictEqual(fs_module.apply_filters(unclassified, state_with({ source: "merged" })).length, 1, "unclassified shown in merged");
+    assert.strictEqual(fs_module.apply_filters(unclassified, state_with({ source: "global" })).length, 1, "unclassified not hidden by global filter");
+    assert.strictEqual(fs_module.apply_filters(unclassified, state_with({ source: "workspace" })).length, 1, "unclassified not hidden by workspace filter");
+
     console.log("  ✓ apply_filters source tests passed");
 }
 

@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import { resolve_paths, TimeScopePaths } from "./paths";
 import { JobRepository } from "./job_repository";
 import { EventRepository } from "./event_repository";
+import { RegistryRepository } from "./registry_repository";
 import { Event } from "./event";
 import { EventCollection } from "./event_collection";
 import { JobCollection } from "./job_collection";
@@ -9,16 +10,23 @@ import { Session } from "./session";
 import { Job } from "./job";
 import { updateTimerText, updateStatusBar, startTimerInterval, stopTimerInterval } from "./timer";
 import { load_build_info, BuildInfo } from "./build_info";
+import { rebuild_index, registry_log_paths } from "./global_index";
+import { RepoConfigJob } from "./repo_config";
+import { ensure_repo_jobs_cache } from "./repo_jobs";
 
 export class Runtime {
   public readonly paths: TimeScopePaths;
   public jobs: JobCollection;
   public readonly jobRepo: JobRepository;
   public readonly logRepo: EventRepository;
+  public readonly registryRepo: RegistryRepository;
   public readonly buildInfo: BuildInfo | null;
 
   public activeSession: Session | null = null;
   public timerInterval: NodeJS.Timeout | null = null;
+
+  /** The repo's cached jobs (US-06), from `.timescope/config.json`. Empty when no workspace. */
+  public repoJobs: RepoConfigJob[] = [];
 
   private _cachedCollection: EventCollection | null = null;
 
@@ -35,27 +43,60 @@ export class Runtime {
     this.paths = resolve_paths(context);
     this.jobRepo = new JobRepository(this.paths);
     this.logRepo = new EventRepository(this.paths);
+    this.registryRepo = new RegistryRepository(this.paths.registry_path);
     this.jobs = JobCollection.fromArray([]);
     this.buildInfo = load_build_info(context.extensionUri.fsPath);
     // UI is created when `initializeUI()` is called by the extension activation flow.
   }
 
   /**
-   * Return a cached EventCollection, loading from disk only if the cache is empty.
+   * Return the cached dashboard view — the derived global index (#48 48c) — loading
+   * from disk only if the cache is empty. The index is the de-duplicated union of
+   * every repo's owned log plus scratch.
    */
   public loadEventCollection(): EventCollection {
     if (!this._cachedCollection) {
-      this._cachedCollection = this.logRepo.loadAllEntries();
+      this._cachedCollection = this.logRepo.loadIndexEntries();
     }
     return this._cachedCollection;
   }
 
   /**
-   * Force-reload the EventCollection from disk and update the cache.
+   * Force-reload the dashboard view (the derived index) from disk and update the cache.
    */
   public refreshEventCollection(): EventCollection {
-    this._cachedCollection = this.logRepo.loadAllEntries();
+    this._cachedCollection = this.logRepo.loadIndexEntries();
     return this._cachedCollection;
+  }
+
+  /**
+   * Load this window's *owned* events (workspace + global-owned scratch), fresh from
+   * disk. This is the editable surface — the dashboard displays the derived index but
+   * edits must target the owning log (#48 48c; cross-repo editing arrives with #43).
+   */
+  public loadOwnedCollection(): EventCollection {
+    return this.logRepo.loadAllEntries();
+  }
+
+  /**
+   * Rebuild the derived global index from the owned sources — every registered repo's
+   * committed log, the current workspace log, and scratch. Safe to call anytime; the
+   * index is disposable.
+   */
+  public rebuildIndex(): { event_count: number; source_count: number } {
+    const index_path = this.paths.global_index_path;
+    if (!index_path) return { event_count: 0, source_count: 0 };
+    const registry = this.registryRepo.load();
+    const sources = registry_log_paths(registry);
+    if (this.paths.workspace_log_path) sources.push(this.paths.workspace_log_path);
+    const seen = new Set<string>();
+    const unique = sources.filter(p => {
+      const key = process.platform === "win32" ? p.toLowerCase() : p;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return rebuild_index(index_path, unique, this.paths.scratch_path);
   }
 
   /**
@@ -73,7 +114,10 @@ export class Runtime {
    */
   public appendToCache(event: Event): void {
     if (!this._cachedCollection) {
-      this._cachedCollection = this.logRepo.loadAllEntries();
+      // Seed from the index, which already contains the just-replicated event —
+      // so don't add it again (that would double it in the view).
+      this._cachedCollection = this.logRepo.loadIndexEntries();
+      return;
     }
     this._cachedCollection.add(event);
   }
@@ -96,8 +140,10 @@ export class Runtime {
     // Update in-memory collection
     this.jobs = this.jobs.update(renamed);
 
-    // Rewrite logs to reference updated job fields (by id)
+    // Rewrite the owned logs to reference updated job fields (by id), then rebuild
+    // the derived index so the dashboard view reflects the rename.
     this.logRepo.renameJobInLogByJob(renamed);
+    this.rebuildIndex();
     this.invalidateEventCollection();
     // If an active session references the renamed job, update it in-memory so UI
     // and timers reflect the new title without requiring a full reload.
@@ -158,6 +204,32 @@ export class Runtime {
 
   public async loadJobs(): Promise<void> {
     this.jobs = await this.jobRepo.loadAll();
+  }
+
+  /**
+   * Refresh the repo's cached jobs from `config.json` (US-06), deriving them from the
+   * owned log and auto-upgrading the config when needed. Only runs for an opted-in
+   * workspace — never creates `.timescope/` speculatively (#2).
+   */
+  public refreshRepoJobs(): void {
+    if (!this.paths.workspace_log_path) { this.repoJobs = []; return; }
+    this.repoJobs = ensure_repo_jobs_cache(this.paths.repo_config_path, this.paths.workspace_log_path);
+  }
+
+  /**
+   * The Start picker's job list: the global jobs unioned with this repo's cached jobs
+   * (US-06), deduped by id — so an opened repo's jobs are pickable even when the global
+   * job list is empty (fresh machine / clone).
+   */
+  public pickableJobs(): JobCollection {
+    const jobs = this.jobs.toArray().slice();
+    const seen = new Set(jobs.map(j => j.id));
+    for (const cj of this.repoJobs) {
+      if (seen.has(cj.job_id)) continue;
+      jobs.push(Job.fromEventFields(cj.job_id, cj.job_title));
+      seen.add(cj.job_id);
+    }
+    return JobCollection.fromArray(jobs);
   }
 
   public setActiveSession(session: Session | null) {

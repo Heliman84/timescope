@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
 
 import { Runtime } from "./core/runtime";
 import { JobCollection } from "./core/job_collection";
@@ -10,6 +11,8 @@ import { Session } from "./core/session";
 import { Job } from "./core/job";
 import { format_build_info_full } from "./core/build_info";
 import { compact_log_file, has_repairable_damage } from "./core/log_sanitizer";
+import { is_workspace_opted_in, enable_local_logging, register_if_opted_in, is_folder_declined, decline_folder } from "./core/local_opt_in";
+import { migrate_legacy_global_log } from "./core/migration";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
@@ -18,6 +21,45 @@ let _heartbeatInterval: NodeJS.Timeout | null = null;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const STATE_KEY_LAST_SEEN = "timescope.lastSeen";
 const STATE_KEY_LAST_SHUTDOWN = "timescope.lastShutdown";
+
+// Prompt about local logging at most once per window session.
+let _optInPromptedThisSession = false;
+
+/**
+ * Offer to log the open workspace's time into a committed `.timescope/` folder.
+ * Nothing is created unless the user says yes (#2). Asked at most once per
+ * session, and never again for a folder the user declined permanently.
+ */
+async function maybe_prompt_local_opt_in(runtime: Runtime): Promise<void> {
+    const folder = vscode.workspace.workspaceFolders?.[0];
+    if (!folder) return;                                              // no workspace → global-only
+    if (is_workspace_opted_in(runtime.paths)) return;                // already opted in
+    if (_optInPromptedThisSession) return;
+    // "Never for this folder" is recorded in the global registry (per-machine), not
+    // VS Code workspace state — so it's in TimeScope's own inspectable store (#48/#6).
+    if (is_folder_declined(runtime.registryRepo, folder.uri.fsPath)) return;
+    _optInPromptedThisSession = true;
+
+    const choice = await vscode.window.showInformationMessage(
+        "Track this workspace's time in a committed .timescope/ folder too? Global tracking continues either way.",
+        "Track here", "Not now", "Never for this folder"
+    );
+    if (choice === "Track here") {
+        try {
+            enable_local_logging(runtime.paths, folder.uri.fsPath, folder.name, runtime.registryRepo, Date.now());
+            vscode.window.showInformationMessage("TimeScope: now logging this workspace in .timescope/.");
+        } catch (ex) {
+            vscode.window.showErrorMessage(`TimeScope: could not enable local logging: ${String(ex)}`);
+        }
+    } else if (choice === "Never for this folder") {
+        try {
+            decline_folder(runtime.registryRepo, folder.uri.fsPath);
+        } catch (ex) {
+            vscode.window.showErrorMessage(`TimeScope: could not record opt-out: ${String(ex)}`);
+        }
+    }
+    // "Not now" / dismissed: leave as-is; the once-per-session flag prevents nagging.
+}
 
 export async function activate(context: vscode.ExtensionContext) {
     _context = context;
@@ -28,9 +70,45 @@ export async function activate(context: vscode.ExtensionContext) {
     _runtime = runtime;
     await runtime.loadJobs();
 
-    // Update settings UI to show resolved global paths
+    // Update settings UI to show resolved global paths. The global-owned event
+    // store is now `scratch.jsonl` (#48 48c); the legacy `logs.jsonl` is retired.
     config.update("global_jobs_path", runtime.paths.global_jobs_path, vscode.ConfigurationTarget.Global);
-    config.update("global_log_path", runtime.paths.global_log_path, vscode.ConfigurationTarget.Global);
+    config.update("global_log_path", runtime.paths.scratch_path ?? runtime.paths.global_log_path, vscode.ConfigurationTarget.Global);
+
+    // If this workspace is already opted in (a `.timescope` folder exists), make
+    // sure it has a config.json and refresh its registry entry. Never blocks activation.
+    try {
+        const folder0 = vscode.workspace.workspaceFolders?.[0];
+        register_if_opted_in(runtime.paths, folder0?.uri.fsPath, folder0?.name ?? "", runtime.registryRepo, Date.now());
+    } catch (ex) {
+        console.error("TimeScope: registry update on activation failed", ex);
+    }
+
+    // #48 48c: one-time migration of the legacy global `logs.jsonl` into the owned
+    // `scratch.jsonl`, then (re)build the derived index so the dashboard sees every
+    // owned source. The index is disposable, so rebuilding at activation is safe.
+    try {
+        if (runtime.paths.global_log_path && runtime.paths.scratch_path) {
+            const mig = migrate_legacy_global_log(runtime.paths.global_log_path, runtime.paths.scratch_path);
+            if (mig.migrated > 0) {
+                vscode.window.showInformationMessage(
+                    `TimeScope: migrated ${mig.migrated} legacy event(s) into local-first storage (backup: ${mig.backup_path}).`
+                );
+            }
+        }
+        runtime.rebuildIndex();
+    } catch (ex) {
+        console.error("TimeScope: local-first migration / index rebuild failed", ex);
+    }
+
+    // #48 US-06: cache this repo's jobs in .timescope/config.json (auto-upgrading an
+    // older-style repo whose log predates the cache) so the Start picker has them even
+    // on a machine that's never seen the repo. Only touches an opted-in workspace.
+    try {
+        runtime.refreshRepoJobs();
+    } catch (ex) {
+        console.error("TimeScope: repo job-cache refresh failed", ex);
+    }
 
     // Initialize and register UI items
     runtime.initializeUI();
@@ -67,7 +145,11 @@ export async function activate(context: vscode.ExtensionContext) {
     //
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.start", async () => {
-            const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
+            // First Start in an un-opted-in workspace offers local logging (#2/#48).
+            await maybe_prompt_local_opt_in(runtime);
+
+            // Picker offers global jobs ∪ this repo's cached jobs (US-06).
+            const job = await pickJob(runtime.pickableJobs(), { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
             if (!job) return;
 
             if (!runtime.jobs.findById(job.id)) {
@@ -80,6 +162,8 @@ export async function activate(context: vscode.ExtensionContext) {
             runtime.logRepo.appendValidated(startEvent);
             runtime.appendToCache(startEvent);
             runtime.setActiveSession(session);
+            // Keep the repo's config.json job cache current (adds a newly-used job).
+            runtime.refreshRepoJobs();
         })
     );
 
@@ -176,7 +260,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // ────────────────────────────────────────────────────────────────
     //
     const run_compaction = () => {
-        const results = [runtime.paths.global_log_path, runtime.paths.workspace_log_path]
+        const results = [runtime.paths.scratch_path, runtime.paths.workspace_log_path]
             .filter((p): p is string => !!p)
             .map(p => ({ path: p, result: compact_log_file(p) }));
         const changed = results.filter(r => r.result.changed);
@@ -190,6 +274,66 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.compactLog", run_compaction)
+    );
+
+    //
+    // ────────────────────────────────────────────────────────────────
+    // COMMAND: Show Storage Status (#48 — observability)
+    // ────────────────────────────────────────────────────────────────
+    //
+    // On-demand, reliable view of local-first storage state — migration doesn't rely
+    // on a fleeting activation toast anymore. Also verifies the derived index, scratch,
+    // registry (repos + declines), and this repo's cached jobs.
+    //
+    context.subscriptions.push(
+        vscode.commands.registerCommand("timescope.showStorageStatus", () => {
+            const p = runtime.paths;
+            const count_events = (fp?: string): number => {
+                if (!fp || !fs.existsSync(fp)) return 0;
+                return fs.readFileSync(fp, "utf8").split(/\r?\n/).filter(l => l.trim().length > 0)
+                    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+                    .filter(o => o && (o as { _format_version?: unknown })._format_version === undefined).length;
+            };
+            let repos = 0, declined = 0;
+            try { const r = runtime.registryRepo.load(); repos = r.repos.length; declined = r.declined_paths.length; } catch { /* report zeros */ }
+            const legacy_present = !!p.global_log_path && fs.existsSync(p.global_log_path);
+            const backup_present = !!p.global_log_path && fs.existsSync(p.global_log_path + ".migrated.bak");
+            const detail = [
+                `Global index:      ${count_events(p.global_index_path)} event(s)   ← dashboard reads this`,
+                `Scratch (owned):   ${count_events(p.scratch_path)} event(s)`,
+                `Legacy global log: ${legacy_present ? "present (NOT yet migrated)" : "none"}${backup_present ? "   ·   migration backup: yes" : ""}`,
+                `Registry:          ${repos} repo(s), ${declined} declined folder(s)`,
+                `This workspace:    ${is_workspace_opted_in(p) ? "opted-in" : "not opted-in"}   ·   ${runtime.repoJobs.length} cached job(s)`,
+            ].join("\n");
+            vscode.window.showInformationMessage("TimeScope — Storage Status", { modal: true, detail });
+        })
+    );
+
+    //
+    // ────────────────────────────────────────────────────────────────
+    // COMMAND: Rebuild Global Index (#48 48b)
+    // ────────────────────────────────────────────────────────────────
+    //
+    // Rebuilds the derived global index.jsonl from the owned sources — every
+    // registered repo's committed log plus the global scratch log. The index is
+    // disposable/rebuildable, so this is always safe to run.
+    //
+    context.subscriptions.push(
+        vscode.commands.registerCommand("timescope.rebuildGlobalIndex", () => {
+            if (!runtime.paths.global_index_path) {
+                vscode.window.showErrorMessage("TimeScope: no global index path resolved.");
+                return;
+            }
+            try {
+                const result = runtime.rebuildIndex();
+                runtime.refreshEventCollection();
+                vscode.window.showInformationMessage(
+                    `TimeScope: rebuilt global index — ${result.event_count} event(s) from ${result.source_count} source log(s) + scratch.`
+                );
+            } catch (ex) {
+                vscode.window.showErrorMessage(`TimeScope: could not rebuild global index: ${String(ex)}`);
+            }
+        })
     );
 
     // Load-time health check: heal-in-memory always happens on read; when
