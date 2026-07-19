@@ -108,6 +108,25 @@ issue and keep the user oriented in the forest, not just the trees:
 - A wave starts only when the prior wave's PRs are merged; the arc log's build order names
   the highest-collision files and which track owns them each wave.
 
+**Spine & satellites (window topology).** During an arc, the main VS Code window (on
+`develop`) hosts the **arc spine chat** — coordination only: kickoff, wave gates, dispatch,
+cross-issue decisions. The spine **never edits source and never holds a feature branch**; its
+state lives in the arc log, so a fresh chat rehydrates from one read (the spine is
+disposable-but-durable). Per issue, the spine picks the dispatch target:
+
+- **In-spine agent wave** — well-specified, low-UX-judgment issues: run Tier 1/2 right here.
+- **Satellite window** — human-heavy issues (design iteration, repeated F5): create the
+  worktree + feature branch, `code <worktree-path>`, and end with a one-line starter prompt
+  for the user to paste into the new window's cold chat, e.g.
+  `Arc <slug> — wave X — work issue #N. Read docs/arc-log/<file> first.`
+  The satellite runs the normal feature loop with its own tiers/agents, F5s its own branch,
+  and PRs; on merge, dev-log + arc status are finalized and the worktree is removed.
+
+Return path: the user tells the spine "done" → the spine re-reads the arc log + `gh` PR/issue
+state and kicks the next wave. **Durable records are the only interface between chats** —
+never rely on another session's memory. Breadcrumbs are two-sided: spine at wave level
+(`Arc <slug> — wave X/Y — dispatching #A, #B`), satellites at issue level.
+
 
 ## Never delegated
 

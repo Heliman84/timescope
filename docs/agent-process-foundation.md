@@ -75,6 +75,13 @@ forest in the trees. Two mechanisms fix that:
 - **A breadcrumb ritual**: during an arc, every user-facing status update and gate handoff
   opens with `Arc <slug> — wave X/Y — issue #N (<track>)`. Recovery from "where were we?"
   is reading the spine's status table, never re-reading PRs.
+- **Spine & satellite sessions (window scale)**: host the spine chat in the primary IDE
+  window on the integration branch — coordination only, it never edits source; its state is
+  the spine document, so any fresh session rehydrates in one read (disposable-but-durable).
+  Per issue the spine dispatches either an **in-spine agent wave** (well-specified work) or a
+  **satellite window** on its own worktree + session (human-heavy work — it gets the human
+  gate locally). Sessions communicate only through durable records; the handoff into a cold
+  satellite session is a one-line starter prompt the spine writes and the human pastes.
 
 
 ### 8. The roster archetypes

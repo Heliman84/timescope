@@ -85,6 +85,33 @@ PRs are merged. Getting lost mid-arc should never require re-reading PRs — the
 status table plus the breadcrumb is the recovery path.
 
 
+### Spine & satellite windows
+
+During an arc your **main window stays on `develop` with the arc spine chat** — it
+coordinates and decides but never implements (no source edits, no feature branch; its state
+is the arc log, so even a brand-new chat rehydrates in one read). Per issue, the spine picks
+one of two dispatch targets:
+
+```mermaid
+flowchart LR
+    SP[Main window · develop<br/>arc spine chat<br/>coordinates, never implements]
+    SP -->|worktree + branch +<br/>starter prompt you paste| SAT[Satellite window<br/>one issue · own chat<br/>feature loop · local F5 · PR]
+    SP -->|run in-spine| AW[Agent wave<br/>Tier 2 builders<br/>in worktrees]
+    SAT -->|PR merged +<br/>arc status updated| SP
+    AW -->|PR merged +<br/>arc status updated| SP
+```
+
+- **Human-heavy issue** (design iteration, UX feel, repeated F5) → satellite window: the
+  spine creates the worktree + branch, opens the window, and hands you a one-line starter
+  prompt to paste — one paste is the whole handoff cost, since a new window's chat starts
+  cold. You and that chat pair on the issue with full attention; F5 runs against that
+  window's own branch.
+- **Well-specified issue** → in-spine agent wave: no new window; you F5 once at the end.
+
+When a satellite's PR merges, you return to the spine and say "done" — it re-reads the arc
+log and PR state (never another chat's memory) and kicks off the next issue or wave.
+
+
 ## Who writes what you read
 
 Builders draft per-slice F5 notes → **verifier** assembles the single F5 packet and leaves

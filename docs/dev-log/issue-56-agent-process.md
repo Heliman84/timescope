@@ -25,6 +25,7 @@ The three chat-driven loops run everything inline in one context — exploration
 - **Wiki is text/tables only — no mermaid.** The wiki is agent-consumed, and structured text with `file:line` anchors is denser and more reliable for a model than diagram syntax; mermaid earns its keep with humans, so diagrams live in `docs/`.
 - **Track branches letter-indexed next to the issue number** (`feature/issue-<N><letter>--<slug>`, e.g. `issue-47a--multi-instance`) instead of a trailing track suffix — the differentiator survives truncated branch lists, and the letterless name is always the core feature branch.
 - **Arc mode added to the process** (user request — repeatedly "lost the forest" during the local-first arc): the arc log is the spine (north star, build order, live status table updated by scribe at each PR), and during an arc every status update and F5 handoff opens with the breadcrumb `Arc <slug> — wave X/Y — issue #N (<track>)`. Generalized into foundation §7.
+- **Spine & satellite windows for arcs** (user proposal, refined): the main window/chat on develop is a coordination-only spine — never edits source, never holds a feature branch, rehydrates entirely from the arc log (disposable-but-durable). Per issue the spine dispatches an in-spine agent wave (well-specified) or a satellite VS Code window on a worktree (human-heavy — gets local F5). Chats can't talk to each other, so durable records are the only interface; the handoff into a cold satellite chat is a one-line starter prompt the user pastes.
 - **Release qualification** (deep gate too expensive per-feature: install smoke, property/fuzz, corpus replay) filed as its own issue rather than bundled here; the wiki seed came from a one-shot Explore sweep (~167k tokens spent in an isolated context — the pattern proving itself during its own construction).
 
 
@@ -36,4 +37,19 @@ The three chat-driven loops run everything inline in one context — exploration
 
 ## Retrospective
 
-*To be filled at PR time.*
+Shipped: 8 agent definitions (model + effort pinned by judgment density), a 6-page agent
+wiki seeded from a single ~167k-token Explore sweep, the `delegate` skill (tiers, waves,
+briefs/packets, F5 packet, arc mode), CLAUDE.md policy, all three loop skills wired, and two
+process docs (human reminder + portable foundation). Release qualification split off as #57.
+
+Changes from the original issue: the roster grew from the issue's four sketched agents to
+eight; the wiki went from a 4-file concept to the co-worker's proven 6-file set with
+200-line budgets and human blurbs; arc mode and the **spine/satellite window topology**
+weren't in the issue at all — they emerged from review discussion about losing the forest
+during the #48 arc. Sub-branch naming iterated twice (slash-nesting is invalid in git refs;
+trailing track suffix truncates badly → letter index next to the issue number).
+
+For a future reader: the process gated itself — this branch's pre-PR review/verification ran
+through the reviewer/verifier agents it introduces, and the wiki convention became text-only
+after concluding mermaid serves humans, not models. Wave 3 of the local-first arc (#47
+in-spine, #15 as the first satellite) is the intended shakedown.
