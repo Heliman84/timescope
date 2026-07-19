@@ -2,6 +2,7 @@
 
 > *What this is: every command, fixture, and rig needed to build, test, seed, package, and F5 this repo.*
 
+
 ## npm scripts (`package.json:82-92`)
 
 | Script | Does |
@@ -16,6 +17,7 @@
 | `write-buildinfo` | `out/buildinfo.json` `{version, commit, branch, build_date}`; git failure degrades to "unknown" |
 | `package` | prepublish + `vsce package` → `timescope-<version>.vsix` (never committed) |
 
+
 ## F5 dev rig
 
 - `.vscode/launch.json`: extensionHost with `--disable-extensions`, opens `test-workspace/`;
@@ -29,6 +31,7 @@
   deliberately duplicating a week of record IDs across them to exercise dedup (#39). Uses
   compiled `out/core/*.js`.
 
+
 ## Tooling & CI
 
 - Engines: vscode `^1.85.0`; TypeScript `^5.4.0`; `@playwright/test ^1.61.1`; vsce `^3.0.0`;
@@ -40,12 +43,14 @@
 - Pre-commit hook `.githooks/pre-commit` blocks direct commits to develop/main; enable once
   per clone: `git config core.hooksPath .githooks` (`DEVELOPMENT.md:80`).
 
+
 ## Branch & version discipline
 
 - `develop` = integration (default PR base); `main` = releases; `feature/issue-<N>-<slug>`;
-  wave sub-branches `feature/issue-<N>-<slug>--<track>` (see delegate skill).
+  wave sub-branches `feature/issue-<N><letter>--<slug>`, letter = merge order (delegate skill).
 - Versioning (`coding_standards.md:56-61`): pre-1.0, major pinned at 0; **every PR bumps
   `package.json` version in its own commit — with explicit user confirmation, never silently.**
+
 
 ## Directory conventions
 

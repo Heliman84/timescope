@@ -2,6 +2,7 @@
 
 > *What this is: the traps that bite, the invariants that must hold, and corrected misdiagnoses kept on record.*
 
+
 ## Load-bearing invariants (reviewer checks these; builders must not break them)
 
 - **One owner per event** (`record_format_spec.md:9`, `event_repository.ts:71-73`): opted-in
@@ -22,6 +23,7 @@
   (`job.ts:79`). `Job.fromEventFields` bypasses validation and marks `partial: true`
   (`job.ts:186`) — partial Jobs must never be persisted to `jobs.json` (comment-enforced
   only; the type system won't stop you).
+
 
 ## Traps
 
@@ -54,6 +56,7 @@
   `renameJobInLogByJob` rewrites the log.
 - **Issue numbers are the TODO convention**: no TODO/HACK/FIXME exist under `src/` —
   deferred work is inline `#NN` references (e.g. #43 edit-other-repos, #47 multi-writer).
+
 
 ## Corrections (wrong turns kept on record — prevents repeat misdiagnoses)
 

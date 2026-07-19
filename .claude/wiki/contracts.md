@@ -2,6 +2,7 @@
 
 > *What this is: the exact message, file, and schema contracts between the extension, webview, and on-disk stores.*
 
+
 ## Webview ↔ extension messages
 
 Sent in `src/dashboard/webview/dashboard.js`, handled in `src/dashboard/controller/dashboard.ts:50`.
@@ -17,6 +18,7 @@ Sent in `src/dashboard/webview/dashboard.js`, handled in `src/dashboard/controll
 `new_record` from the webview must be a full `EventDTO` shape
 (`id, event, job_title, timestamp, job_id, time_seed[, task]`) — built at `dashboard.js:973`.
 
+
 ## JSONL record format (`docs/record_format_spec.md`)
 
 - Header line `{"_format_version": 2}` must be first (`FORMAT_VERSION` in `log_sanitizer.ts:5`).
@@ -28,6 +30,7 @@ Sent in `src/dashboard/webview/dashboard.js`, handled in `src/dashboard/controll
 - **Record ID** (`docs/record_id_spec.md`): `<time5>-<bucket1>-<jobHash3>`
   (`event.ts:358/370/382`); job hash = FNV-1a 32-bit base36.
 
+
 ## On-disk stores
 
 | File | Owner / role | Schema |
@@ -38,6 +41,7 @@ Sent in `src/dashboard/webview/dashboard.js`, handled in `src/dashboard/controll
 | `.timescope/config.json` | repo-owned identity (`REPO_CONFIG_FORMAT_VERSION = 2`, `repo_config.ts:5`) | `{repo_id, format_version, jobs?:[{job_id, job_title}]}`; `repo_id` stable 12-hex, never regenerated; `jobs` = US-06 cache, rewritten only when derived set changes (`jobs_differ`, `repo_jobs.ts:32`) |
 | `registry.json` (global) | machine-local: known repos + declines (`REGISTRY_FORMAT_VERSION = 1`, `registry.ts:3`) | `{format_version, repos:[{id,name,path,last_seen}], declined:string[]}`; malformed file **throws** (never drop repo paths); missing → empty |
 | `jobs.json` (global) | job metadata (`job_dto.ts`) | `[{job_id, job_title, is_archived?, created, last_modified?, job_seed}]`; `job_id` must match `/^[0-9a-z]{5}$/` (`job_repository.ts:139`); legacy string-array rejected with pointer to `scripts/upgrade_jobs.ts` |
+
 
 ## package.json contributions
 

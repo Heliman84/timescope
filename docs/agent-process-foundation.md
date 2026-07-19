@@ -6,13 +6,16 @@
 > TimeScope-tuned instance of this model lives in [agent-process.md](agent-process.md),
 > `.claude/agents/`, `.claude/wiki/`, and the `delegate` skill.
 
+
 ## Part 1 — The invariant core (keep these in every repo)
+
 
 ### 1. The orchestrator is the main chat thread, not an agent
 Subagents cannot converse with the user, so decisions and user gates can only live in the
 main thread. Defining an "orchestrator agent" adds a hop to every decision and detaches it
 from the gates. The main thread holds: scope agreement, the human verification gate, merges,
 briefs out, packets back — and nothing verbose.
+
 
 ### 2. Model + effort by judgment density, not prestige
 Most tokens in a feature are mechanical (searching, generating code, running tests) —
@@ -22,12 +25,14 @@ where mistakes are expensive to *unwind* (plans, architecture), not where output
 mechanically checkable (builds caught by tests, checklist gates). The orchestrator runs on
 the top model: post-delegation it is the lowest-volume, highest-judgment context.
 
+
 ### 3. Briefs down, packets up
 Briefs are self-contained (goal, done-criteria, files, constraints, "read the wiki index
 first"). Agents return a **fixed-format packet** — conclusions with `file:line` refs, bounded
 length — never transcripts or file dumps. Continue an agent via SendMessage instead of
 respawning (context intact, no cold start). Litmus test: if the main thread is pasting raw
 tool output into its own analysis, that work belonged in an agent.
+
 
 ### 4. Delegation tiers
 - **Tier 0 — inline:** single-file/trivial. Agents would be pure overhead.
@@ -36,14 +41,18 @@ tool output into its own analysis, that work belonged in an agent.
 - **Tier 2 — wave:** planner partitions **disjoint-file** tracks; one builder per track in
   its own git worktree; sub-branch PRs into an integration (feature) branch; merge in planned
   order. Disjointness is the go/no-go — overlap means sequential.
-  Sub-branch naming: `<feature-branch>--<track>` (git refs cannot nest under an existing
-  branch name).
+  Sub-branch naming: letter-index the tracks next to the issue number in merge order
+  (e.g. `feature/issue-47a--<slug>`) — the differentiator survives truncated branch lists,
+  the letterless branch is always the integration branch, and git refs can't nest under an
+  existing branch name so a `<feature-branch>/<track>` form is invalid anyway.
+
 
 ### 5. The human gate
 Every domain has a verification step only the human can run. Agents build + self-verify +
 return a draft "gate packet"; a verifier agent assembles one packet and leaves the
 environment ready; the orchestrator delivers it with a one-line mission header in the user's
 terms. One gate per feature-complete state — not per slice.
+
 
 ### 6. The agent wiki (`.claude/wiki/`)
 Distilled operational knowledge every agent reads before exploring — so exploration cost
@@ -55,7 +64,20 @@ compounds *down* across sessions. Six pages: `index.md` (router + team table), `
 - Wrong-turn diagnoses stay on record as corrections — they prevent repeat misdiagnoses
 - Provenance = git history (no separate activity log)
 
-### 7. The roster archetypes
+
+### 7. Arcs — multi-issue campaigns need a spine and a breadcrumb
+When an effort spans multiple issues, per-issue records aren't enough — the human loses the
+forest in the trees. Two mechanisms fix that:
+- **A spine document** (an "arc log"): the north-star architecture (decided in the main
+  thread from an architect study), the wave-by-wave build order naming the highest-collision
+  files and their owning track, and a live status table (issue → decision log → PR). The
+  scribe updates it at every PR; the next wave starts only when the current wave's PRs merge.
+- **A breadcrumb ritual**: during an arc, every user-facing status update and gate handoff
+  opens with `Arc <slug> — wave X/Y — issue #N (<track>)`. Recovery from "where were we?"
+  is reading the spine's status table, never re-reading PRs.
+
+
+### 8. The roster archetypes
 
 | Archetype | Model / effort | Mission | Notes |
 | :--- | :--- | :--- | :--- |
@@ -72,6 +94,7 @@ auto-delegation — include "use proactively"), `tools` (comma list; omit = all)
 (alias), `effort` (low…max), `color`. Keep bodies terse: wiki-read line, Role, rules, Output
 packet format (~40 lines).
 
+
 ## Part 2 — Tuning to a new domain (what to swap)
 
 | Knob | VS Code extension (TimeScope) | Firmware | Analysis Python | Web app | Robotics / CV |
@@ -85,6 +108,7 @@ packet format (~40 lines).
 
 Constant across domains: the tiers, briefs/packets, wiki mechanics, model/effort mapping,
 worktree waves, and the human gate pattern.
+
 
 ## Part 3 — Seeding checklist for a new repo
 

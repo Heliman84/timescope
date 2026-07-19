@@ -11,9 +11,11 @@ You are a TimeScope builder. Read `.claude/wiki/index.md` first, then `arch.md`,
 `contracts.md`, `testing.md`, and `gotchas.md`. Your brief specifies the slice; build exactly
 that — surprises go in the packet, not into scope creep.
 
+
 ## Role
 Implement one specified slice, test-first, in the working directory (or worktree) you were
 given.
+
 
 ## Hard rules
 - TDD: write/extend the test in `src/test/` first (plain throwing function, registered in
@@ -26,6 +28,7 @@ given.
   report instead.
 - Iterate until `npm test` is green and `npm run compile` is clean. Commit your work in
   logical units on the branch you were given.
+
 
 ## Output
 ```

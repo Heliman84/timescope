@@ -6,6 +6,7 @@ Agent-facing operational knowledge, curated with a ~200-line budget per page (pr
 appending). Provenance = these files' git history. Human docs live in `docs/`; this wiki is
 the distilled "what a fresh agent needs so it doesn't re-derive the codebase."
 
+
 ## Pages
 
 | Page | Contents |
@@ -15,6 +16,7 @@ the distilled "what a fresh agent needs so it doesn't re-derive the codebase."
 | [ops.md](ops.md) | npm scripts, F5 dev rig + fixture workspaces, seeding, CI, tooling versions, branch model, versioning discipline |
 | [testing.md](testing.md) | Pure-Node suite pattern (throwing functions, `run_tests.ts`), Playwright webview harness, fixtures, how to add a test, coverage gaps |
 | [gotchas.md](gotchas.md) | Invariants and traps: dedup layers, divergent session reconstruction, Windows atomic-write fallback, padding conventions, corrections log |
+
 
 ## Agent team
 

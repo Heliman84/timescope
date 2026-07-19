@@ -2,10 +2,12 @@
 
 > *What this is: where every piece of code lives and how data flows from a click to disk to the dashboard.*
 
+
 ## Purpose
 VS Code extension tracking consulting hours: start/pause/resume/stop from the status bar,
 webview analytics dashboard. Domain-driven, immutable domain objects, local-first storage
 (one owner per event; global index is derived). Diagrams: `docs/processes.md`.
+
 
 ## Module map — `src/core/`
 
@@ -29,6 +31,7 @@ webview analytics dashboard. Domain-driven, immutable domain objects, local-firs
 | `timer.ts` | Pure status-bar/timer helpers over `Runtime` |
 | `build_info.ts` | Reads `out/buildinfo.json` (`load_build_info` :19, never throws) |
 
+
 ## Other modules
 
 - `src/extension.ts` — activation entry (`activate` :64, `deactivate` :406); registers all
@@ -44,17 +47,17 @@ webview analytics dashboard. Domain-driven, immutable domain objects, local-firs
 - `src/utils/fs_utils.ts` — `append_line_safe` :26; `write_file_atomic` :52 (temp+rename,
   Windows lock fallback — see gotchas).
 
+
 ## Data flow (Start pressed → dashboard)
 
-```mermaid
-flowchart LR
-    SB[Status bar command<br/>extension.ts] --> S[Session.start<br/>new Event]
-    S --> AV[logRepo.appendValidated<br/>legality + dedup]
-    AV --> OWN[(owned log:<br/>.timescope/logs.jsonl<br/>or scratch.jsonl)]
-    AV --> IDX[(index.jsonl<br/>derived, rebuildable)]
-    S --> RT[runtime.appendToCache<br/>+ setActiveSession → timer]
-    DB[Dashboard webview] -- request_data --> RF[runtime.refreshEventCollection<br/>reads index.jsonl] -- summary_data --> DB
-```
+Write path: status-bar command (`extension.ts`) → `Session.start()` creates an `Event` →
+`logRepo.appendValidated` (state-legality check + dedup) writes the **one owned log**
+(`.timescope/logs.jsonl` if opted in, else `scratch.jsonl`) and replicates the line into the
+derived `index.jsonl` → `runtime.appendToCache` + `setActiveSession` (status bar + 1 s timer).
 
-Dashboard reads happen only on a `request_data` message — fresh reload of `index.jsonl`,
-serialized by `buildPayload` (descending timestamp DTOs).
+Read path: dashboard reads happen only on a `request_data` message —
+`runtime.refreshEventCollection()` reloads `index.jsonl` fresh, `buildPayload` serializes
+descending-timestamp DTOs, posted back as `summary_data`.
+
+*(Wiki convention: text and tables, no mermaid — this file is read by agents; diagrams for
+humans live in `docs/`.)*

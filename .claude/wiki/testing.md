@@ -2,6 +2,7 @@
 
 > *What this is: the two test suites' patterns, harness mechanics, and exactly how to add a test to each.*
 
+
 ## Pure-Node suite (`src/test/`)
 
 - `run_tests.ts` `main()` (:21) calls every `run_*_tests()` in sequence in a try/catch;
@@ -16,6 +17,7 @@
   round-trip), event domain, build info, storage-dir resolution, `filter_state`, log hygiene
   (sanitize/append-safe/write-atomic/compaction), repo_config, repo_jobs, registry,
   local_opt_in, global_index, migration.
+
 
 ## Playwright webview suite (`tests/webview/`)
 
@@ -39,6 +41,7 @@
   from `harness.ts`; `open_dashboard(page, fx.payload)` in `test.beforeEach`; assert on DOM
   or `Chart.getChart(id)`. Specs: `dashboard.spec.ts`, `filtering.spec.ts`,
   `malformed_streams.spec.ts`.
+
 
 ## Coverage gaps (by design — the F5 layer)
 
