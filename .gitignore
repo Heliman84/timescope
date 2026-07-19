@@ -42,4 +42,11 @@ test-workspace/.timescope/
 !test-workspace-empty/.vscode/settings.json
 test-workspace-empty/global-storage/*
 !test-workspace-empty/global-storage/.gitkeep
+
+# Test-multi: two-repo shared-global fixture for multi-instance F5 (#48/#47).
+# Track the pinned settings + shared-global placeholder; regen data via scripts.
+test-multi/repoA/.timescope/
+test-multi/repoB/.timescope/
+test-multi/shared-global/*
+!test-multi/shared-global/.gitkeep
 test-workspace-empty/.timescope/
