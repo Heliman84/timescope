@@ -1,5 +1,5 @@
 /**
- * Seed the two-repo multi-instance F5 fixture under test-multi/.
+ * Seed the two-repo multi-instance F5 fixture under test-workspace-multi/.
  *
  * Two repos (repoA, repoB) each pin TimeScope storage to a shared sibling dir
  * (`../shared-global`) so two Extension Development Host windows share ONE global
@@ -21,7 +21,7 @@ const { Job } = require("../out/core/job");
 const { Event } = require("../out/core/event");
 const { generate_repo_id } = require("../out/core/repo_config");
 
-const base = path.resolve(__dirname, "..", "test-multi");
+const base = path.resolve(__dirname, "..", "test-workspace-multi");
 const nowMinus = (mins) => Date.now() - mins * 60000;
 
 function makeRepo(name, jobTitle, sessionMins) {
