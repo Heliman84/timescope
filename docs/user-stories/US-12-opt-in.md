@@ -70,5 +70,6 @@ opted in — I get no prompt, and tracking is local from the first Start.
 - **Related:** [[US-05]] (time committed with the repo), [[US-06]] (opening an existing repo),
   [[US-10]] (the Settings-tab management UI where opt-in/opt-out is reversed).
 - **Open questions:** none blocking. *Resolved:* re-opt-in lives in the #6 Settings tab; a decline is
-  machine-local **by design** (committing it would force it on everyone who clones); storage model —
-  declines move from VS Code `workspaceState` → `registry.json`, delivered with #6.
+  machine-local **by design** (committing it would force it on everyone who clones). Storage model —
+  **done:** declines now persist in `registry.json` (not VS Code `workspaceState`); only the reversal
+  *UI* remains for #6.

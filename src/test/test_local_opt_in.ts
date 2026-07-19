@@ -9,6 +9,9 @@ import {
     is_workspace_opted_in,
     enable_local_logging,
     register_if_opted_in,
+    is_folder_declined,
+    decline_folder,
+    undecline_folder,
 } from "../core/local_opt_in";
 
 function fixture(suffix: string): { root: string; ws_root: string; paths: TimeScopePaths; registry_repo: RegistryRepository } {
@@ -77,4 +80,37 @@ export function run_local_opt_in_tests(): void {
     const mtime_after = fs.statSync(b.paths.registry_path).mtimeMs;
     assert.strictEqual(mtime_after, mtime_before, "unchanged repo must not rewrite registry.json");
     assert.strictEqual(b.registry_repo.load().find_by_id(healed_id!)!.last_seen, 600, "last_seen not churned on unchanged activation");
+}
+
+/**
+ * Tests the registry-backed per-folder opt-out ("Never for this folder"):
+ * - Target: decline_folder / is_folder_declined / undecline_folder in src/core/local_opt_in.ts
+ * - What: a decline persists to registry.json (not VS Code state), is idempotent (no write
+ *   churn), and can be reversed by the underlying function (UI is #6).
+ * - Why: opt-out storage moves into TimeScope's own inspectable per-machine store now, so it's
+ *   testable ahead of the #6 Settings tab.
+ */
+export function run_local_opt_in_decline_tests(): void {
+    const a = fixture("decline");
+    assert.strictEqual(is_folder_declined(a.registry_repo, a.ws_root), false, "not declined initially");
+
+    decline_folder(a.registry_repo, a.ws_root);
+    assert.ok(is_folder_declined(a.registry_repo, a.ws_root), "folder declined after decline_folder");
+    assert.ok(a.registry_repo.load().is_declined(a.ws_root), "decline persisted to registry.json on disk");
+
+    // Idempotent: re-declining does not rewrite the file.
+    const mtime_before = fs.statSync(a.paths.registry_path).mtimeMs;
+    decline_folder(a.registry_repo, a.ws_root);
+    assert.strictEqual(fs.statSync(a.paths.registry_path).mtimeMs, mtime_before, "re-decline must not rewrite registry.json");
+
+    // Underlying reversal (the #6 Settings tab will call this).
+    undecline_folder(a.registry_repo, a.ws_root);
+    assert.strictEqual(is_folder_declined(a.registry_repo, a.ws_root), false, "undecline clears the decline");
+
+    // A declined folder coexists with registered repos.
+    enable_local_logging(a.paths, a.ws_root, "workspace", a.registry_repo, 1000);
+    decline_folder(a.registry_repo, path.join(a.root, "other-folder"));
+    const reg = a.registry_repo.load();
+    assert.strictEqual(reg.repos.length, 1, "repo still registered");
+    assert.ok(reg.is_declined(path.join(a.root, "other-folder")), "decline recorded alongside the repo");
 }

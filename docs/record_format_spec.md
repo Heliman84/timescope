@@ -38,11 +38,18 @@ to rebuild the global index efficiently and to dedup repos by id:
   "format_version": 1,
   "repos": [
     { "id": "a1b2c3d4e5f6", "name": "lantern-fw", "path": "/work/lantern-fw", "last_seen": 1721000000000 }
-  ]
+  ],
+  "declined": [ "/work/scratch-repo" ]
 }
 ```
 
-- Entities (clients / projects / task-types) join the registry in #15; 48a tracks repos only.
+- `declined` — folders the user opted **out** of ("Never for this folder"). Per-machine (the
+  registry is not committed); paths are matched case/separator-insensitively. This replaces the
+  old VS Code `workspaceState` storage so the decision lives in TimeScope's own inspectable store
+  (rule: *travels → repo; machine-local → registry*). The reversal UI is #6; the underlying
+  `add`/`remove` functions ship now.
+- Entities (clients / projects / task-types) join the registry in #15; today it tracks repos +
+  declines. `declined` is additive — older registries without it load as an empty list.
 - A malformed `registry.json` is a hard error (losing repo paths would defeat a rebuild); a
   missing file is treated as an empty registry.
 

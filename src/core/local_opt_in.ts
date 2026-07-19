@@ -23,6 +23,29 @@ function ensure_repo_config(config_path: string): string {
     return repo_id;
 }
 
+/**
+ * Per-folder opt-out ("Never for this folder"), stored in the global `registry.json`
+ * (per-machine), not VS Code workspace state — so it lives in TimeScope's own
+ * inspectable store. The reversal UI lands with #6; these are the underlying functions.
+ */
+export function is_folder_declined(registry_repo: RegistryRepository, folder_path: string): boolean {
+    return registry_repo.load().is_declined(folder_path);
+}
+
+/** Record a decline. No-op (no write) when the folder is already declined. */
+export function decline_folder(registry_repo: RegistryRepository, folder_path: string): void {
+    const registry = registry_repo.load();
+    if (registry.is_declined(folder_path)) return;
+    registry_repo.save(registry.add_declined(folder_path));
+}
+
+/** Clear a decline — the underlying reversal (the #6 Settings tab calls this). */
+export function undecline_folder(registry_repo: RegistryRepository, folder_path: string): void {
+    const registry = registry_repo.load();
+    if (!registry.is_declined(folder_path)) return;
+    registry_repo.save(registry.remove_declined(folder_path));
+}
+
 /** Upsert this repo into the global registry (records path + last_seen for rebuild). */
 export function register_repo(
     registry_repo: RegistryRepository,

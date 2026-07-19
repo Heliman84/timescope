@@ -13,6 +13,8 @@ export interface RepoEntry {
 export interface RegistryDTO {
     format_version: number;
     repos: RepoEntry[];
+    /** Folders the user declined to track ("Never for this folder"). Per-machine (#48/#6). */
+    declined: string[];
 }
 
 /** Normalize a filesystem path for stable comparison (case-insensitive on Windows). */
@@ -22,19 +24,21 @@ function normalize_path(p: string): string {
 }
 
 /**
- * Immutable registry of known repos. In #48 it tracks repos only; client /
- * project / task-type entity lists arrive with #15. Mutations return new
- * instances (only Runtime is mutable, per the domain rules).
+ * Immutable registry of known repos + declined folders. In #48 it tracks repos and
+ * per-folder opt-out declines; client / project / task-type entity lists arrive with
+ * #15. Mutations return new instances (only Runtime is mutable, per the domain rules).
  */
 export class Registry {
     private readonly _repos: ReadonlyArray<RepoEntry>;
+    private readonly _declined: ReadonlyArray<string>;
 
-    private constructor(repos: RepoEntry[]) {
+    private constructor(repos: RepoEntry[], declined: string[]) {
         this._repos = repos;
+        this._declined = declined;
     }
 
     static empty(): Registry {
-        return new Registry([]);
+        return new Registry([], []);
     }
 
     static from_dto(obj: unknown): Registry {
@@ -51,11 +55,17 @@ export class Registry {
                 last_seen: typeof r.last_seen === "number" ? r.last_seen : 0,
             });
         }
-        return new Registry(repos);
+        const rawDeclined = Array.isArray(rec.declined) ? rec.declined : [];
+        const declined = rawDeclined.filter((d): d is string => typeof d === "string");
+        return new Registry(repos, declined);
     }
 
     get repos(): RepoEntry[] {
         return this._repos.slice();
+    }
+
+    get declined_paths(): string[] {
+        return this._declined.slice();
     }
 
     find_by_id(id: string): RepoEntry | undefined {
@@ -71,13 +81,32 @@ export class Registry {
     upsert_repo(entry: RepoEntry): Registry {
         const next = this._repos.filter(r => r.id !== entry.id);
         next.push({ ...entry });
-        return new Registry(next);
+        return new Registry(next, this._declined.slice());
+    }
+
+    /** True when the folder was declined ("Never for this folder"). Path-normalized. */
+    is_declined(p: string): boolean {
+        const target = normalize_path(p);
+        return this._declined.some(d => normalize_path(d) === target);
+    }
+
+    /** Record a declined folder (no-op if already present). Returns a new Registry. */
+    add_declined(p: string): Registry {
+        if (this.is_declined(p)) return this;
+        return new Registry(this._repos.slice(), [...this._declined, p]);
+    }
+
+    /** Clear a folder's decline — the underlying reverse of opt-out (UI is #6). */
+    remove_declined(p: string): Registry {
+        const target = normalize_path(p);
+        return new Registry(this._repos.slice(), this._declined.filter(d => normalize_path(d) !== target));
     }
 
     to_dto(): RegistryDTO {
         return {
             format_version: REGISTRY_FORMAT_VERSION,
             repos: this._repos.map(r => ({ ...r })),
+            declined: this._declined.slice(),
         };
     }
 }

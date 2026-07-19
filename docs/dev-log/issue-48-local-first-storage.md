@@ -85,6 +85,15 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
   simultaneously can mint divergent repo_ids. Same concurrency class; narrow (first-ever opt-in
   only).
 
+## Follow-on during F5
+
+- **Opt-out moved to the registry.** "Never for this folder" now persists in `registry.json`
+  (`declined[]`) instead of VS Code `workspaceState`, per the adopted *travels → repo; machine-local
+  → registry* rule. `Registry.is_declined/add_declined/remove_declined` + `local_opt_in`
+  `is_folder_declined/decline_folder/undecline_folder`; the opt-in prompt reads/writes the registry.
+  Pulled forward from #6 (only the reversal *UI* stays there) because it's testable now by inspecting
+  the file. Additive schema — old registries load with an empty `declined`.
+
 ## Bugs found during F5
 
 - **Phantom open session → recovery double-stop (48c).** During 48a/48b `appendEvent`

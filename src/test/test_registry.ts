@@ -75,3 +75,44 @@ export function run_registry_repository_tests(): void {
     fs.writeFileSync(registry_path, "{ not json", "utf8");
     assert.throws(() => repo.load(), /Malformed registry/, "malformed registry throws");
 }
+
+/**
+ * Tests the per-folder opt-out ("Never for this folder") stored in the registry (#48/#6):
+ * - Target: Registry.is_declined/add_declined/remove_declined in src/core/registry.ts
+ * - Why: the opt-out decision moves out of VS Code workspace state into TimeScope's own
+ *   per-machine store; the reversal function must exist independently of the (later, #6) UI.
+ */
+export function run_registry_declined_tests(): void {
+    const empty = Registry.empty();
+    assert.strictEqual(empty.declined_paths.length, 0, "empty registry has no declines");
+    assert.strictEqual(empty.is_declined("/work/foo"), false, "nothing declined initially");
+
+    const r1 = empty.add_declined("/work/foo");
+    assert.strictEqual(empty.declined_paths.length, 0, "add_declined must not mutate the source");
+    assert.ok(r1.is_declined("/work/foo"), "path is declined after add");
+    assert.ok(r1.is_declined("/work/foo/"), "decline check tolerates a trailing separator");
+
+    // Idempotent: the same path (normalized) does not duplicate.
+    const r2 = r1.add_declined("/work/foo/");
+    assert.strictEqual(r2.declined_paths.length, 1, "duplicate decline collapses");
+
+    // A different path appends.
+    const r3 = r2.add_declined("/work/bar");
+    assert.strictEqual(r3.declined_paths.length, 2, "distinct decline appends");
+
+    // Remove — the underlying reversal (the #6 Settings tab drives this).
+    const r4 = r3.remove_declined("/work/foo");
+    assert.ok(!r4.is_declined("/work/foo"), "removed decline is gone");
+    assert.ok(r4.is_declined("/work/bar"), "other declines remain");
+
+    // DTO round-trip preserves declines alongside repos.
+    const withRepo = r3.upsert_repo({ id: "abc123", name: "Foo", path: "/work/foo", last_seen: 1 });
+    const back = Registry.from_dto(withRepo.to_dto());
+    assert.strictEqual(back.declined_paths.length, 2, "declines survive the DTO round-trip");
+    assert.strictEqual(back.repos.length, 1, "repos survive alongside declines");
+    assert.ok(back.is_declined("/work/bar"), "a decline is preserved through the DTO");
+
+    // from_dto tolerates missing / malformed declined (older registries).
+    assert.strictEqual(Registry.from_dto({ repos: [] }).declined_paths.length, 0, "missing declined → empty");
+    assert.strictEqual(Registry.from_dto({ declined: "nope" }).declined_paths.length, 0, "non-array declined ignored");
+}
