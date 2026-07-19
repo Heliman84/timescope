@@ -12,6 +12,7 @@ import {
     is_folder_declined,
     decline_folder,
     undecline_folder,
+    register_repo,
 } from "../core/local_opt_in";
 
 function fixture(suffix: string): { root: string; ws_root: string; paths: TimeScopePaths; registry_repo: RegistryRepository } {
@@ -147,4 +148,34 @@ export function run_local_opt_in_first_opt_in_race_tests(): void {
     assert.strictEqual(read_repo_config(ws.config_path)!.repo_id, winner_id, "config.json is untouched — no second identity minted");
     assert.strictEqual(a.registry_repo.load().repos.length, 1, "only the winner's single identity is registered");
     assert.strictEqual(a.registry_repo.load().find_by_id(winner_id)!.path, a.ws_root, "registered under the winner's id");
+}
+
+/**
+ * Tests decline/registration concurrency via RegistryRepository.update (#47 F1):
+ * - Target: decline_folder / undecline_folder / register_repo in src/core/local_opt_in.ts
+ * - What: a decline and a concurrent registration both survive (neither clobbers the
+ *   other); an undecline followed by a concurrent registration keeps the decline removed
+ *   — a whole-registry merge would have unioned the stale decline back in, since a union
+ *   can't represent a removal, but intent-based `update` (fresh disk read right before
+ *   each write) can.
+ * - Why: pins reviewer finding F1 against a regression back to whole-snapshot merge/save.
+ */
+export function run_local_opt_in_concurrent_writer_tests(): void {
+    const a = fixture("concurrent-writer");
+    const declined_path = path.join(a.root, "declined-folder");
+
+    // A decline and a "concurrent" registration (interleaved calls, both routed through
+    // RegistryRepository.update — each reloads fresh from disk right before writing).
+    decline_folder(a.registry_repo, declined_path);
+    register_repo(a.registry_repo, "repo-x", "X", a.ws_root, 1000);
+    let reg = a.registry_repo.load();
+    assert.ok(reg.is_declined(declined_path), "decline survives a concurrent registration");
+    assert.ok(reg.find_by_id("repo-x"), "registration survives a concurrent decline");
+
+    // Undecline, then another window registers — the decline must stay removed.
+    undecline_folder(a.registry_repo, declined_path);
+    register_repo(a.registry_repo, "repo-y", "Y", path.join(a.root, "y-root"), 2000);
+    reg = a.registry_repo.load();
+    assert.ok(!reg.is_declined(declined_path), "undecline stays removed after a concurrent registration");
+    assert.ok(reg.find_by_id("repo-y"), "the concurrent registration also lands");
 }

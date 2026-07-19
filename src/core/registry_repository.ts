@@ -27,14 +27,20 @@ export class RegistryRepository {
     }
 
     /**
-     * Merge-on-write: reload the current on-disk registry and merge the caller's registry
-     * into it before saving, so a concurrent writer's registration (made after the caller's
-     * snapshot was loaded) survives (#47 multi-instance safety).
+     * Intent-based read-modify-write: reload the registry fresh from disk, apply `mutate`
+     * (an add/remove intent, not a whole-snapshot replace), then write the result — and
+     * return it. Replaces whole-registry merge-on-write (#47 reviewer finding F1): a
+     * union-of-snapshots approach can't represent *removals* (an undecline done by another
+     * window would get unioned back in by a stale decline). Every registry writer should
+     * route through this so each write only ever expresses its own intent against the
+     * freshest disk state, never a stale snapshot of everything else.
      */
-    save_merged(registry: Registry): void {
-        const disk = this.load();
-        // `registry` (the caller's write intent) wins on a shared id; disk-only entries
-        // written by a concurrent writer the caller never saw are preserved alongside it.
-        this.save(registry.merge(disk));
+    update(mutate: (registry: Registry) => Registry): Registry {
+        const current = this.load();
+        const next = mutate(current);
+        // Domain no-op idioms (e.g. Registry.add_declined already-declined) return the
+        // same instance — skip the write so a no-op call never churns registry.json.
+        if (next !== current) this.save(next);
+        return next;
     }
 }

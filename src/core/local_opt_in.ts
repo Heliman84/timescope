@@ -42,18 +42,24 @@ export function is_folder_declined(registry_repo: RegistryRepository, folder_pat
     return registry_repo.load().is_declined(folder_path);
 }
 
-/** Record a decline. No-op (no write) when the folder is already declined. */
+/**
+ * Record a decline. Routed through `RegistryRepository.update` (#47 F1): the mutate
+ * intent (`add_declined`) applies against a freshly reloaded registry, and is itself a
+ * no-op (same instance, no write) when already declined — never a stale whole-registry
+ * snapshot that could clobber a concurrent writer's registration.
+ */
 export function decline_folder(registry_repo: RegistryRepository, folder_path: string): void {
-    const registry = registry_repo.load();
-    if (registry.is_declined(folder_path)) return;
-    registry_repo.save(registry.add_declined(folder_path));
+    registry_repo.update(r => r.add_declined(folder_path));
 }
 
-/** Clear a decline — the underlying reversal (the #6 Settings tab calls this). */
+/**
+ * Clear a decline — the underlying reversal (the #6 Settings tab calls this). Routed
+ * through `update` for the same reason as `decline_folder` (#47 F1): a whole-registry
+ * merge can't represent a removal (a stale decline unioned back in would resurrect it),
+ * but an intent-based update applied to fresh disk state can.
+ */
 export function undecline_folder(registry_repo: RegistryRepository, folder_path: string): void {
-    const registry = registry_repo.load();
-    if (!registry.is_declined(folder_path)) return;
-    registry_repo.save(registry.remove_declined(folder_path));
+    registry_repo.update(r => r.remove_declined(folder_path));
 }
 
 /** Upsert this repo into the global registry (records path + last_seen for rebuild). */
@@ -64,8 +70,7 @@ export function register_repo(
     ws_path: string,
     now: number
 ): void {
-    const registry = registry_repo.load();
-    registry_repo.save_merged(registry.upsert_repo({ id: repo_id, name, path: ws_path, last_seen: now }));
+    registry_repo.update(r => r.upsert_repo({ id: repo_id, name, path: ws_path, last_seen: now }));
 }
 
 /**
@@ -116,13 +121,12 @@ export function register_if_opted_in(
 
     // Activation runs on every window open — only rewrite the registry when the
     // repo is new or its name/path actually changed, not to refresh last_seen.
-    // Avoids a global-storage write on every startup and shrinks (does not
-    // close) the concurrent read-modify-write window; robust multi-writer
-    // registry safety is #47's concern.
-    const registry = registry_repo.load();
-    const existing = registry.find_by_id(repo_id);
+    // Avoids a global-storage write on every startup. This check-then-update still has
+    // a narrow window before `update`'s own fresh reload, but `update` reloads right
+    // before writing, so a concurrent writer's registration is never clobbered (#47 F1).
+    const existing = registry_repo.load().find_by_id(repo_id);
     if (!existing || existing.name !== ws_name || existing.path !== ws_root) {
-        registry_repo.save_merged(registry.upsert_repo({ id: repo_id, name: ws_name, path: ws_root, last_seen: now }));
+        registry_repo.update(r => r.upsert_repo({ id: repo_id, name: ws_name, path: ws_root, last_seen: now }));
     }
     return repo_id;
 }

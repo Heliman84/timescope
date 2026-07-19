@@ -77,35 +77,37 @@ export function run_registry_repository_tests(): void {
 }
 
 /**
- * Tests RegistryRepository.save_merged (#47 multi-instance write safety):
- * - Target: RegistryRepository.save_merged in src/core/registry_repository.ts
- * - What: writer A saves repo-A; writer B (holding a pre-A snapshot) calls save_merged
- *   with only repo-B → reload shows BOTH repos, not just B's.
- * - Why: two windows opting in concurrently must not race-clobber each other's registration.
+ * Tests RegistryRepository.update (#47 F1 — intent-based read-modify-write):
+ * - Target: RegistryRepository.update in src/core/registry_repository.ts
+ * - What: writer A registers repo-A via update; writer B (whose mutate intent was formed
+ *   before A wrote) registers repo-B via update → reload shows BOTH repos, since update()
+ *   always reloads fresh from disk immediately before applying + saving the mutation.
+ *   Also: a no-op mutate (same instance returned) skips the write entirely.
+ * - Why: replaces whole-registry merge-on-write, which couldn't represent removals (a
+ *   union always resurrects a concurrently-cleared decline). Intent-based update can.
  */
-export function run_registry_repository_merge_tests(): void {
-    const root = mkdir_tmp("merge");
+export function run_registry_repository_update_tests(): void {
+    const root = mkdir_tmp("update");
     const registry_path = path.join(root, "registry.json");
     const repo = new RegistryRepository(registry_path);
 
-    // Writer B loads before writer A has written anything (both start from empty).
-    const writer_b_snapshot = repo.load();
+    // Writer A registers repo-A.
+    repo.update(r => r.upsert_repo({ id: "repo-a", name: "Alpha", path: "/work/alpha", last_seen: 100 }));
 
-    // Writer A saves repo-A directly.
-    const writer_a_registry = Registry.empty()
-        .upsert_repo({ id: "repo-a", name: "Alpha", path: "/work/alpha", last_seen: 100 });
-    repo.save(writer_a_registry);
+    // Writer B's mutate intent doesn't reference writer A's repo at all — update() reloads
+    // fresh from disk right before applying it, so repo-A's registration is never clobbered.
+    const result = repo.update(r => r.upsert_repo({ id: "repo-b", name: "Beta", path: "/work/beta", last_seen: 200 }));
+    assert.strictEqual(result.repos.length, 2, "update()'s return value reflects both repos");
 
-    // Writer B, unaware of repo-A, saves only repo-B via save_merged.
-    const writer_b_registry = writer_b_snapshot
-        .upsert_repo({ id: "repo-b", name: "Beta", path: "/work/beta", last_seen: 200 });
-    repo.save_merged(writer_b_registry);
-
-    // Reload shows BOTH repos — writer B's merge-on-write did not clobber writer A.
     const reloaded = repo.load();
-    assert.strictEqual(reloaded.repos.length, 2, "save_merged preserves the other writer's concurrent registration");
+    assert.strictEqual(reloaded.repos.length, 2, "both concurrent registrations survive on disk");
     assert.strictEqual(reloaded.find_by_id("repo-a")!.name, "Alpha", "writer A's repo survives");
     assert.strictEqual(reloaded.find_by_id("repo-b")!.name, "Beta", "writer B's repo is saved");
+
+    // A no-op mutate (domain no-op idiom: returns the same instance) skips the write.
+    const mtime_before = fs.statSync(registry_path).mtimeMs;
+    repo.update(r => r);
+    assert.strictEqual(fs.statSync(registry_path).mtimeMs, mtime_before, "update() does not rewrite registry.json for a no-op mutate");
 }
 
 /**
@@ -150,40 +152,15 @@ export function run_registry_declined_tests(): void {
 }
 
 /**
- * Tests Registry.merge (#47 multi-instance write safety):
- * - Target: Registry.merge in src/core/registry.ts
- * - What: merging two registries unions repos (incoming wins by id) and unions declined
- *   folders, leaving disk-only foreign repos intact; returns a new instance.
- * - Why: two windows can each hold a stale in-memory snapshot; merge-on-write must not let
- *   the second writer clobber the first writer's repo/decline that it never saw.
+ * Tests Registry.remove_declined's no-op idiom (#47 F1):
+ * - Target: Registry.remove_declined in src/core/registry.ts
+ * - What: returns the *same instance* when the path wasn't declined (mirrors add_declined's
+ *   existing no-op idiom), so RegistryRepository.update() can skip a redundant write.
  */
-export function run_registry_merge_tests(): void {
-    const base = Registry.empty()
-        .upsert_repo({ id: "aaa", name: "Alpha", path: "/work/alpha", last_seen: 100 })
-        .add_declined("/work/declined-a");
-
-    // Merging in a disk-only foreign repo (never seen by `base`) keeps it intact.
-    const disk = base.upsert_repo({ id: "bbb", name: "Beta", path: "/work/beta", last_seen: 50 });
-    const merged = base.merge(disk);
-    assert.strictEqual(merged.repos.length, 2, "merge unions repos by id");
-    assert.strictEqual(merged.find_by_id("aaa")!.name, "Alpha", "base's own repo survives the merge");
-    assert.strictEqual(merged.find_by_id("bbb")!.name, "Beta", "disk-only foreign repo is preserved");
-
-    // Incoming (the `this` receiver) wins on a shared id.
-    const mine = Registry.empty().upsert_repo({ id: "aaa", name: "Alpha-mine", path: "/work/alpha", last_seen: 999 });
-    const other = Registry.empty().upsert_repo({ id: "aaa", name: "Alpha-theirs", path: "/work/alpha-old", last_seen: 1 });
-    const winner = mine.merge(other);
-    assert.strictEqual(winner.find_by_id("aaa")!.name, "Alpha-mine", "incoming (receiver) wins on a shared id");
-    assert.strictEqual(winner.find_by_id("aaa")!.last_seen, 999, "incoming fields win wholesale, not field-merged");
-
-    // Declined folders union too.
-    const mine_declined = Registry.empty().add_declined("/work/x");
-    const other_declined = Registry.empty().add_declined("/work/y");
-    const merged_declined = mine_declined.merge(other_declined);
-    assert.ok(merged_declined.is_declined("/work/x"), "receiver's decline survives merge");
-    assert.ok(merged_declined.is_declined("/work/y"), "foreign decline is unioned in");
-
-    // Immutability: merge does not mutate either input.
-    assert.strictEqual(base.repos.length, 1, "merge must not mutate the receiver");
-    assert.strictEqual(disk.repos.length, 2, "merge must not mutate the argument");
+export function run_registry_remove_declined_noop_tests(): void {
+    const r = Registry.empty().add_declined("/work/foo");
+    assert.strictEqual(r.remove_declined("/work/bar"), r, "remove_declined of an undeclined path returns the same instance");
+    const r2 = r.remove_declined("/work/foo");
+    assert.notStrictEqual(r2, r, "remove_declined of a declined path returns a new instance");
+    assert.ok(!r2.is_declined("/work/foo"), "the decline is actually removed");
 }
