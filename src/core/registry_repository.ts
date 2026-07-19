@@ -25,4 +25,16 @@ export class RegistryRepository {
     save(registry: Registry): void {
         write_file_atomic(this.registry_path, JSON.stringify(registry.to_dto(), null, 2) + "\n");
     }
+
+    /**
+     * Merge-on-write: reload the current on-disk registry and merge the caller's registry
+     * into it before saving, so a concurrent writer's registration (made after the caller's
+     * snapshot was loaded) survives (#47 multi-instance safety).
+     */
+    save_merged(registry: Registry): void {
+        const disk = this.load();
+        // `registry` (the caller's write intent) wins on a shared id; disk-only entries
+        // written by a concurrent writer the caller never saw are preserved alongside it.
+        this.save(registry.merge(disk));
+    }
 }

@@ -55,7 +55,7 @@ export function register_repo(
     now: number
 ): void {
     const registry = registry_repo.load();
-    registry_repo.save(registry.upsert_repo({ id: repo_id, name, path: ws_path, last_seen: now }));
+    registry_repo.save_merged(registry.upsert_repo({ id: repo_id, name, path: ws_path, last_seen: now }));
 }
 
 /**
@@ -112,7 +112,7 @@ export function register_if_opted_in(
     const registry = registry_repo.load();
     const existing = registry.find_by_id(repo_id);
     if (!existing || existing.name !== ws_name || existing.path !== ws_root) {
-        registry_repo.save(registry.upsert_repo({ id: repo_id, name: ws_name, path: ws_root, last_seen: now }));
+        registry_repo.save_merged(registry.upsert_repo({ id: repo_id, name: ws_name, path: ws_root, last_seen: now }));
     }
     return repo_id;
 }

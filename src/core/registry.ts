@@ -102,6 +102,19 @@ export class Registry {
         return new Registry(this._repos.slice(), this._declined.filter(d => normalize_path(d) !== target));
     }
 
+    /**
+     * Merge another registry into this one: unions repos (this receiver wins wholesale on a
+     * shared id — no field-level merge) and unions declined folders. Leaves disk-only foreign
+     * entries the caller never saw intact. Returns a new Registry (#47 multi-instance safety).
+     */
+    merge(other: Registry): Registry {
+        const by_id = new Map<string, RepoEntry>();
+        for (const r of other._repos) by_id.set(r.id, { ...r });
+        for (const r of this._repos) by_id.set(r.id, { ...r });
+        const declined = new Set<string>([...other._declined, ...this._declined]);
+        return new Registry(Array.from(by_id.values()), Array.from(declined));
+    }
+
     to_dto(): RegistryDTO {
         return {
             format_version: REGISTRY_FORMAT_VERSION,

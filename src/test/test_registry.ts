@@ -77,6 +77,38 @@ export function run_registry_repository_tests(): void {
 }
 
 /**
+ * Tests RegistryRepository.save_merged (#47 multi-instance write safety):
+ * - Target: RegistryRepository.save_merged in src/core/registry_repository.ts
+ * - What: writer A saves repo-A; writer B (holding a pre-A snapshot) calls save_merged
+ *   with only repo-B → reload shows BOTH repos, not just B's.
+ * - Why: two windows opting in concurrently must not race-clobber each other's registration.
+ */
+export function run_registry_repository_merge_tests(): void {
+    const root = mkdir_tmp("merge");
+    const registry_path = path.join(root, "registry.json");
+    const repo = new RegistryRepository(registry_path);
+
+    // Writer B loads before writer A has written anything (both start from empty).
+    const writer_b_snapshot = repo.load();
+
+    // Writer A saves repo-A directly.
+    const writer_a_registry = Registry.empty()
+        .upsert_repo({ id: "repo-a", name: "Alpha", path: "/work/alpha", last_seen: 100 });
+    repo.save(writer_a_registry);
+
+    // Writer B, unaware of repo-A, saves only repo-B via save_merged.
+    const writer_b_registry = writer_b_snapshot
+        .upsert_repo({ id: "repo-b", name: "Beta", path: "/work/beta", last_seen: 200 });
+    repo.save_merged(writer_b_registry);
+
+    // Reload shows BOTH repos — writer B's merge-on-write did not clobber writer A.
+    const reloaded = repo.load();
+    assert.strictEqual(reloaded.repos.length, 2, "save_merged preserves the other writer's concurrent registration");
+    assert.strictEqual(reloaded.find_by_id("repo-a")!.name, "Alpha", "writer A's repo survives");
+    assert.strictEqual(reloaded.find_by_id("repo-b")!.name, "Beta", "writer B's repo is saved");
+}
+
+/**
  * Tests the per-folder opt-out ("Never for this folder") stored in the registry (#48/#6):
  * - Target: Registry.is_declined/add_declined/remove_declined in src/core/registry.ts
  * - Why: the opt-out decision moves out of VS Code workspace state into TimeScope's own
@@ -115,4 +147,43 @@ export function run_registry_declined_tests(): void {
     // from_dto tolerates missing / malformed declined (older registries).
     assert.strictEqual(Registry.from_dto({ repos: [] }).declined_paths.length, 0, "missing declined → empty");
     assert.strictEqual(Registry.from_dto({ declined: "nope" }).declined_paths.length, 0, "non-array declined ignored");
+}
+
+/**
+ * Tests Registry.merge (#47 multi-instance write safety):
+ * - Target: Registry.merge in src/core/registry.ts
+ * - What: merging two registries unions repos (incoming wins by id) and unions declined
+ *   folders, leaving disk-only foreign repos intact; returns a new instance.
+ * - Why: two windows can each hold a stale in-memory snapshot; merge-on-write must not let
+ *   the second writer clobber the first writer's repo/decline that it never saw.
+ */
+export function run_registry_merge_tests(): void {
+    const base = Registry.empty()
+        .upsert_repo({ id: "aaa", name: "Alpha", path: "/work/alpha", last_seen: 100 })
+        .add_declined("/work/declined-a");
+
+    // Merging in a disk-only foreign repo (never seen by `base`) keeps it intact.
+    const disk = base.upsert_repo({ id: "bbb", name: "Beta", path: "/work/beta", last_seen: 50 });
+    const merged = base.merge(disk);
+    assert.strictEqual(merged.repos.length, 2, "merge unions repos by id");
+    assert.strictEqual(merged.find_by_id("aaa")!.name, "Alpha", "base's own repo survives the merge");
+    assert.strictEqual(merged.find_by_id("bbb")!.name, "Beta", "disk-only foreign repo is preserved");
+
+    // Incoming (the `this` receiver) wins on a shared id.
+    const mine = Registry.empty().upsert_repo({ id: "aaa", name: "Alpha-mine", path: "/work/alpha", last_seen: 999 });
+    const other = Registry.empty().upsert_repo({ id: "aaa", name: "Alpha-theirs", path: "/work/alpha-old", last_seen: 1 });
+    const winner = mine.merge(other);
+    assert.strictEqual(winner.find_by_id("aaa")!.name, "Alpha-mine", "incoming (receiver) wins on a shared id");
+    assert.strictEqual(winner.find_by_id("aaa")!.last_seen, 999, "incoming fields win wholesale, not field-merged");
+
+    // Declined folders union too.
+    const mine_declined = Registry.empty().add_declined("/work/x");
+    const other_declined = Registry.empty().add_declined("/work/y");
+    const merged_declined = mine_declined.merge(other_declined);
+    assert.ok(merged_declined.is_declined("/work/x"), "receiver's decline survives merge");
+    assert.ok(merged_declined.is_declined("/work/y"), "foreign decline is unioned in");
+
+    // Immutability: merge does not mutate either input.
+    assert.strictEqual(base.repos.length, 1, "merge must not mutate the receiver");
+    assert.strictEqual(disk.repos.length, 2, "merge must not mutate the argument");
 }
