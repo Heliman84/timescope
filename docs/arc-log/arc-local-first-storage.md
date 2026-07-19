@@ -83,7 +83,7 @@ is the highest-collision file — the storage-track branch owns it each wave.
 | 3 | [#47](https://github.com/Heliman84/timescope/issues/47) Multi-instance verification | storage | — | not started |
 | 3 | [#15](https://github.com/Heliman84/timescope/issues/15) Hierarchical jobs | webview | — | not started — *basic job pickability (US-06) shipped early in #48; entity model remains* |
 | 4 | [#43](https://github.com/Heliman84/timescope/issues/43) Amend events | storage | — | not started |
-| 4 | [#6](https://github.com/Heliman84/timescope/issues/6) Job management + Settings panel | webview | — | not started — *opt-out storage (registry) shipped in #48; the Settings-tab UI remains* |
+| 4 | [#6](https://github.com/Heliman84/timescope/issues/6) Job management + Settings tab | webview | — | not started — *opt-out storage (registry) shipped in #48; the Settings-tab UI remains* |
 | 5 | [#3](https://github.com/Heliman84/timescope/issues/3) Scope filtering | webview | — | not started |
 
 ## Future capabilities — designed-for, not-in-scope
