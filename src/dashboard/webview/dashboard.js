@@ -118,6 +118,11 @@ function load_payload(payload) {
             time_seed: e.time_seed,
             global_line_index: e.global_line_index,
             workspace_line_index: e.workspace_line_index,
+            // #15 hierarchy — additive, optional (see attribution.ts's AttributedEventDTO).
+            source_repo_id: e.source_repo_id,
+            client: e.client,
+            project: e.project,
+            task_type: e.task_type,
         }))
         .sort((a, b) => a.timestamp - b.timestamp);
 
@@ -130,6 +135,30 @@ function load_payload(payload) {
 
     all_sessions = build_sessions_from_events(all_events);
     assign_job_colors(all_sessions);
+}
+
+// ---------------------------------------------------------------------
+// #15 HIERARCHY LABELLING
+// ---------------------------------------------------------------------
+//
+// Each event may carry an additive attribution (see attribution.ts):
+// `task_type` (resolved from job_id, direct or alias) and, when the source
+// repo is bound, `client`/`project`. hierarchy_label is the single place
+// that turns those into the display/grouping string used everywhere a job
+// name is shown — the legend, charts, table, and job filter (all driven by
+// the shared `job` field on session/event objects, see filter_state.js).
+//
+// - Client + Project + Task-type all resolved → "Client › Project › Task-type"
+// - Task-type resolved but the source repo is unbound → "Task-type" alone
+// - Nothing resolvable (legacy/unassigned) → the flat `job` title, unchanged
+function hierarchy_label(e) {
+    if (e && e.task_type) {
+        if (e.client && e.project) {
+            return `${e.client.name} › ${e.project.name} › ${e.task_type.name}`;
+        }
+        return e.task_type.name;
+    }
+    return e.job;
 }
 
 // ---------------------------------------------------------------------
@@ -203,7 +232,11 @@ function build_sessions_from_events(events) {
     }
 
     for (const e of events) {
-        const job = e.job;
+        // #15: group/label by the resolved hierarchy path when available, falling
+        // back to the flat job title — see hierarchy_label above. Two jobs that
+        // share a task-type (e.g. a legacy job converted onto it, see #15
+        // convert_legacy_job) collapse into one grouped session here.
+        const job = hierarchy_label(e);
         const ts = e.timestamp;
         const evt = (e.event || "").toLowerCase();
 
@@ -922,8 +955,11 @@ function open_session_edit_modal(session) {
 
     container.innerHTML = '';
 
-    // Find events for this session (inclusive)
-    const events = all_events.filter(e => e.job === session.job && e.timestamp >= session.start && e.timestamp <= session.stop).sort((a,b)=>a.timestamp - b.timestamp);
+    // Find events for this session (inclusive). Match on the same hierarchy label
+    // used to group the session (not the flat job title) — a #15 grouped session
+    // can span events whose flat job titles differ (e.g. a legacy alias) but share
+    // a task-type.
+    const events = all_events.filter(e => hierarchy_label(e) === session.job && e.timestamp >= session.start && e.timestamp <= session.stop).sort((a,b)=>a.timestamp - b.timestamp);
 
     events.forEach((e, idx) => {
         const key = `${e.event}|${e.job}|${e.timestamp}|${e.task || ''}`;

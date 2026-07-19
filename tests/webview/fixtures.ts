@@ -11,6 +11,11 @@
  * relative date presets now resolve against a fixed, known day.
  */
 
+export interface FixtureEntityRef {
+    id: string;
+    name: string;
+}
+
 export interface FixtureEvent {
     event: string;
     job: string;
@@ -21,6 +26,16 @@ export interface FixtureEvent {
     time_seed: number;
     global_line_index: number;
     workspace_line_index: number;
+    /**
+     * #15 hierarchy — additive/optional, mirrors `AttributedEventDTO` in
+     * src/dashboard/controller/attribution.ts. Absent on every pre-#15 fixture
+     * (build_fixture/build_filter_fixture/build_malformed_fixture), so those
+     * specs exercise the flat-title fallback unchanged.
+     */
+    source_repo_id?: string;
+    client?: FixtureEntityRef;
+    project?: FixtureEntityRef;
+    task_type?: FixtureEntityRef;
 }
 
 /**
@@ -208,6 +223,87 @@ function shift_day(now: Date, delta_days: number): string {
     const d = new Date(now);
     d.setDate(now.getDate() + delta_days);
     return local_day(d.getTime());
+}
+
+export interface HierarchyFixtureData {
+    payload: FixtureEvent[];
+    /** "Client › Project › Task-type" for the bound-repo session. */
+    bound_label: string;
+    /** "Task-type" alone for the unbound-repo session. */
+    unbound_label: string;
+    /** Flat job title for the session with no resolvable task-type. */
+    unassigned_label: string;
+}
+
+/**
+ * Three closed sessions (relative to FIXED_NOW), one per #15 resolution outcome:
+ * - Bound: a bound-repo session with client + project + task_type resolved →
+ *   labelled "Acme Corp › Website Revamp › Development".
+ * - Unbound: an unbound-repo session with only task_type resolved → labelled
+ *   "Design" alone.
+ * - Unassigned: a scratch/legacy session with no resolvable task_type → the
+ *   flat job title, unchanged ("Personal Errand").
+ *
+ * A second bound-repo session using a *different* flat job title but the same
+ * task_type (mirrors #15's convert_legacy_job alias) proves grouping collapses
+ * onto the shared hierarchy label rather than the literal job title.
+ */
+export function build_hierarchy_fixture(now: Date = FIXED_NOW): HierarchyFixtureData {
+    let line = 0;
+    const ev = (
+        event: string,
+        job: string,
+        job_id: string,
+        hours: number,
+        minutes: number,
+        extra: Partial<FixtureEvent> = {},
+        task = ""
+    ): FixtureEvent => ({
+        event,
+        job,
+        timestamp: at_local_time(now, hours, minutes),
+        task,
+        id: `hf-${++line}`,
+        job_id,
+        time_seed: at_local_time(now, hours, minutes),
+        global_line_index: line,
+        workspace_line_index: line,
+        ...extra,
+    });
+
+    const client = { id: "client-1", name: "Acme Corp" };
+    const project = { id: "project-1", name: "Website Revamp" };
+    const task_type = { id: "tt-dev", name: "Development" };
+    const bound = { source_repo_id: "repoA", client, project, task_type };
+
+    const design_task_type = { id: "tt-design", name: "Design" };
+    const unbound = { source_repo_id: "repoB", task_type: design_task_type };
+
+    const events: FixtureEvent[] = [
+        // Bound: repoA, canonical task-type job, 09:00-10:00
+        ev("start", "Development", "tt-dev", 9, 0, bound),
+        ev("stop", "Development", "tt-dev", 10, 0, bound, "canonical-task work"),
+
+        // Bound, same task-type, DIFFERENT flat job title (the legacy-alias case):
+        // 11:00-11:30 — must group with the session above under the same label.
+        ev("start", "Old Style Work", "legacy-dev", 11, 0, bound),
+        ev("stop", "Old Style Work", "legacy-dev", 11, 30, bound, "legacy-alias work"),
+
+        // Unbound: repoB, task-type resolves but no client/project. 13:00-14:00
+        ev("start", "Design Work", "tt-design", 13, 0, unbound),
+        ev("stop", "Design Work", "tt-design", 14, 0, unbound, "no-binding work"),
+
+        // Unassigned: no resolvable task-type at all (scratch/legacy). 15:00-15:30
+        ev("start", "Personal Errand", "errand", 15, 0),
+        ev("stop", "Personal Errand", "errand", 15, 30, {}, "unassigned-errand work"),
+    ];
+
+    return {
+        payload: events.slice().sort((a, b) => b.timestamp - a.timestamp),
+        bound_label: "Acme Corp › Website Revamp › Development",
+        unbound_label: "Design",
+        unassigned_label: "Personal Errand",
+    };
 }
 
 export interface MalformedFixtureData {
