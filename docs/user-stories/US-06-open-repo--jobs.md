@@ -39,9 +39,10 @@ I open the repo and press **Start** to begin (or continue) tracking in it.
 
 ## Traceability
 
-- **Delivered by:** repo-owned logs + registry from [#48](https://github.com/Heliman84/timescope/issues/48);
-  the repo-side job cache (`config.json`) and the entity model land with
-  [#15](https://github.com/Heliman84/timescope/issues/15). Realized across both.
+- **Delivered by:** [#48](https://github.com/Heliman84/timescope/issues/48) — repo-owned logs +
+  registry, **and** the repo-side job cache in `config.json` (auto-upgrades an older log-only repo,
+  unioned into the Start picker). [#15](https://github.com/Heliman84/timescope/issues/15) restructures
+  the cache into the Client/Project/Task-type entity model.
 - **Related:** [[US-05]] (time committed with the repo), [[US-09]] (hierarchical picking),
   [[US-10]] (management UI), [[US-12]] (opt-in).
 - **Revisit after #15:** the flat "jobs" terminology here will likely become Client/Project/Task-type,

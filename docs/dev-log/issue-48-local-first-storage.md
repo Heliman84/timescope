@@ -87,6 +87,20 @@ Architecture is settled in issue #48. Implementation decisions made 2026-07-18:
 
 ## Follow-on during F5
 
+- **US-06 pulled into #48 — repo jobs cached in `config.json`.** Opening a repo now surfaces its jobs
+  in the Start picker even with an empty global. `config.json` gains a `jobs` cache (id + title, v2);
+  `repo_jobs.ts` (`derive_repo_jobs` from the owned log, `ensure_repo_jobs_cache` auto-upgrades an
+  older log-only repo, churn-free). `Runtime.pickableJobs()` = global ∪ repo cache (deduped);
+  `refreshRepoJobs()` runs at activation (opted-in only, never speculative) and after each Start.
+  Interim flat-job model; #15 restructures into the entity model (US-06 says as much). *The user
+  reversed the earlier "defer to #15" call — local-first was unusable without it.*
+- **Migration observability — `TimeScope: Show Storage Status`.** Migration was a silent one-shot
+  toast, easy to miss and impossible to re-check. New read-only command reports index/scratch counts,
+  legacy-log/backup presence, registry repos + declines, and cached jobs — the reliable signal for
+  every F5 check.
+
+## Follow-on (registry opt-out)
+
 - **Opt-out moved to the registry.** "Never for this folder" now persists in `registry.json`
   (`declined[]`) instead of VS Code `workspaceState`, per the adopted *travels → repo; machine-local
   → registry* rule. `Registry.is_declined/add_declined/remove_declined` + `local_opt_in`

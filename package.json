@@ -71,6 +71,11 @@
                 "command": "timescope.rebuildGlobalIndex",
                 "title": "Rebuild Global Index",
                 "category": "TimeScope"
+            },
+            {
+                "command": "timescope.showStorageStatus",
+                "title": "Show Storage Status",
+                "category": "TimeScope"
             }
         ]
     },

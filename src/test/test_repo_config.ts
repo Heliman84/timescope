@@ -45,6 +45,17 @@ export function run_repo_config_tests(): void {
     assert.strictEqual(noVer!.repo_id, b, "repo_id read without a format_version");
     assert.strictEqual(noVer!.format_version, REPO_CONFIG_FORMAT_VERSION, "missing format_version defaults");
 
+    // Cached jobs (US-06) round-trip; malformed entries are dropped.
+    write_repo_config(cfg_path, {
+        repo_id: a, format_version: REPO_CONFIG_FORMAT_VERSION,
+        jobs: [{ job_id: "16lor", job_title: "test-issue9" }],
+    });
+    const withJobs = read_repo_config(cfg_path)!;
+    assert.strictEqual(withJobs.jobs!.length, 1, "cached jobs round-trip");
+    assert.strictEqual(withJobs.jobs![0].job_title, "test-issue9", "cached job title round-trips");
+    fs.writeFileSync(cfg_path, JSON.stringify({ repo_id: a, jobs: [{ job_id: "x" }, { job_id: "y", job_title: "ok" }] }) + "\n", "utf8");
+    assert.strictEqual(read_repo_config(cfg_path)!.jobs!.length, 1, "job entries missing a title are dropped");
+
     // Malformed / missing repo_id → throw, so we never silently mint a new identity.
     fs.writeFileSync(cfg_path, "{ not json", "utf8");
     assert.throws(() => read_repo_config(cfg_path), /Malformed repo config/, "malformed JSON throws");

@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as fs from "fs";
 
 import { Runtime } from "./core/runtime";
 import { JobCollection } from "./core/job_collection";
@@ -100,6 +101,15 @@ export async function activate(context: vscode.ExtensionContext) {
         console.error("TimeScope: local-first migration / index rebuild failed", ex);
     }
 
+    // #48 US-06: cache this repo's jobs in .timescope/config.json (auto-upgrading an
+    // older-style repo whose log predates the cache) so the Start picker has them even
+    // on a machine that's never seen the repo. Only touches an opted-in workspace.
+    try {
+        runtime.refreshRepoJobs();
+    } catch (ex) {
+        console.error("TimeScope: repo job-cache refresh failed", ex);
+    }
+
     // Initialize and register UI items
     runtime.initializeUI();
     context.subscriptions.push(
@@ -138,7 +148,8 @@ export async function activate(context: vscode.ExtensionContext) {
             // First Start in an un-opted-in workspace offers local logging (#2/#48).
             await maybe_prompt_local_opt_in(runtime);
 
-            const job = await pickJob(runtime.jobs, { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
+            // Picker offers global jobs ∪ this repo's cached jobs (US-06).
+            const job = await pickJob(runtime.pickableJobs(), { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
             if (!job) return;
 
             if (!runtime.jobs.findById(job.id)) {
@@ -151,6 +162,8 @@ export async function activate(context: vscode.ExtensionContext) {
             runtime.logRepo.appendValidated(startEvent);
             runtime.appendToCache(startEvent);
             runtime.setActiveSession(session);
+            // Keep the repo's config.json job cache current (adds a newly-used job).
+            runtime.refreshRepoJobs();
         })
     );
 
@@ -261,6 +274,39 @@ export async function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand("timescope.compactLog", run_compaction)
+    );
+
+    //
+    // ────────────────────────────────────────────────────────────────
+    // COMMAND: Show Storage Status (#48 — observability)
+    // ────────────────────────────────────────────────────────────────
+    //
+    // On-demand, reliable view of local-first storage state — migration doesn't rely
+    // on a fleeting activation toast anymore. Also verifies the derived index, scratch,
+    // registry (repos + declines), and this repo's cached jobs.
+    //
+    context.subscriptions.push(
+        vscode.commands.registerCommand("timescope.showStorageStatus", () => {
+            const p = runtime.paths;
+            const count_events = (fp?: string): number => {
+                if (!fp || !fs.existsSync(fp)) return 0;
+                return fs.readFileSync(fp, "utf8").split(/\r?\n/).filter(l => l.trim().length > 0)
+                    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+                    .filter(o => o && (o as { _format_version?: unknown })._format_version === undefined).length;
+            };
+            let repos = 0, declined = 0;
+            try { const r = runtime.registryRepo.load(); repos = r.repos.length; declined = r.declined_paths.length; } catch { /* report zeros */ }
+            const legacy_present = !!p.global_log_path && fs.existsSync(p.global_log_path);
+            const backup_present = !!p.global_log_path && fs.existsSync(p.global_log_path + ".migrated.bak");
+            const detail = [
+                `Global index:      ${count_events(p.global_index_path)} event(s)   ← dashboard reads this`,
+                `Scratch (owned):   ${count_events(p.scratch_path)} event(s)`,
+                `Legacy global log: ${legacy_present ? "present (NOT yet migrated)" : "none"}${backup_present ? "   ·   migration backup: yes" : ""}`,
+                `Registry:          ${repos} repo(s), ${declined} declined folder(s)`,
+                `This workspace:    ${is_workspace_opted_in(p) ? "opted-in" : "not opted-in"}   ·   ${runtime.repoJobs.length} cached job(s)`,
+            ].join("\n");
+            vscode.window.showInformationMessage("TimeScope — Storage Status", { modal: true, detail });
+        })
     );
 
     //

@@ -20,7 +20,7 @@ Story: ✍️ written · ✎ to write.  Build: ✅ done · 🚧 partial/seam · 
 | ID | Title | Story | Build | Delivered by |
 |----|-------|-------|-------|--------------|
 | US-12 | Opt in to tracking a folder | [✍️](user-stories/US-12-opt-in.md) | ✅ | [#2](https://github.com/Heliman84/timescope/issues/2) |
-| US-06 | Open an existing repo and use its jobs | [✍️](user-stories/US-06-open-repo-jobs.md) | 🚧 | [#48](https://github.com/Heliman84/timescope/issues/48) / OPEN |
+| US-06 | Open an existing repo and use its jobs | [✍️](user-stories/US-06-open-repo--jobs.md) | ✅ | [#48](https://github.com/Heliman84/timescope/issues/48) (config.json job cache) |
 
 ## Backlog — stories still to write
 

@@ -11,6 +11,8 @@ import { Job } from "./job";
 import { updateTimerText, updateStatusBar, startTimerInterval, stopTimerInterval } from "./timer";
 import { load_build_info, BuildInfo } from "./build_info";
 import { rebuild_index, registry_log_paths } from "./global_index";
+import { RepoConfigJob } from "./repo_config";
+import { ensure_repo_jobs_cache } from "./repo_jobs";
 
 export class Runtime {
   public readonly paths: TimeScopePaths;
@@ -22,6 +24,9 @@ export class Runtime {
 
   public activeSession: Session | null = null;
   public timerInterval: NodeJS.Timeout | null = null;
+
+  /** The repo's cached jobs (US-06), from `.timescope/config.json`. Empty when no workspace. */
+  public repoJobs: RepoConfigJob[] = [];
 
   private _cachedCollection: EventCollection | null = null;
 
@@ -199,6 +204,32 @@ export class Runtime {
 
   public async loadJobs(): Promise<void> {
     this.jobs = await this.jobRepo.loadAll();
+  }
+
+  /**
+   * Refresh the repo's cached jobs from `config.json` (US-06), deriving them from the
+   * owned log and auto-upgrading the config when needed. Only runs for an opted-in
+   * workspace — never creates `.timescope/` speculatively (#2).
+   */
+  public refreshRepoJobs(): void {
+    if (!this.paths.workspace_log_path) { this.repoJobs = []; return; }
+    this.repoJobs = ensure_repo_jobs_cache(this.paths.repo_config_path, this.paths.workspace_log_path);
+  }
+
+  /**
+   * The Start picker's job list: the global jobs unioned with this repo's cached jobs
+   * (US-06), deduped by id — so an opened repo's jobs are pickable even when the global
+   * job list is empty (fresh machine / clone).
+   */
+  public pickableJobs(): JobCollection {
+    const jobs = this.jobs.toArray().slice();
+    const seen = new Set(jobs.map(j => j.id));
+    for (const cj of this.repoJobs) {
+      if (seen.has(cj.job_id)) continue;
+      jobs.push(Job.fromEventFields(cj.job_id, cj.job_title));
+      seen.add(cj.job_id);
+    }
+    return JobCollection.fromArray(jobs);
   }
 
   public setActiveSession(session: Session | null) {
