@@ -74,7 +74,7 @@ export function run_resolve_storage_dir_fallback_tests(): void {
 
 /**
  * Tests workspace_timescope_paths:
- * - Target: workspace_timescope_paths in src/core/paths.ts
+ * - Target: workspace_timescope_paths in src/core/workspace_paths.ts
  * - What: derives the `.timescope` dir + jobs/log/config paths under a repo root.
  * - Why: the opt-in flow (#48) needs these candidate paths without touching disk.
  */

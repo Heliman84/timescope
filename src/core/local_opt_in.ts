@@ -71,6 +71,11 @@ export function enable_local_logging(
     now: number
 ): string {
     const ws = workspace_timescope_paths(ws_root);
+    // A stray *file* named `.timescope` (US-12 edge case) would make mkdirSync throw a
+    // low-signal fs error — surface a clear, actionable one instead.
+    if (fs.existsSync(ws.dir) && !fs.statSync(ws.dir).isDirectory()) {
+        throw new Error(`Cannot enable local logging: '${ws.dir}' exists but is not a directory. Remove or rename that file, then try again.`);
+    }
     fs.mkdirSync(ws.dir, { recursive: true });
     const repo_id = ensure_repo_config(ws.config_path);
 

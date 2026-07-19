@@ -80,6 +80,15 @@ export function run_local_opt_in_tests(): void {
     const mtime_after = fs.statSync(b.paths.registry_path).mtimeMs;
     assert.strictEqual(mtime_after, mtime_before, "unchanged repo must not rewrite registry.json");
     assert.strictEqual(b.registry_repo.load().find_by_id(healed_id!)!.last_seen, 600, "last_seen not churned on unchanged activation");
+
+    // Stray FILE named `.timescope` (US-12 edge) → a clear, actionable error, not a raw fs throw.
+    const s = fixture("strayfile");
+    fs.writeFileSync(workspace_timescope_paths(s.ws_root).dir, "not a directory", "utf8");
+    assert.throws(
+        () => enable_local_logging(s.paths, s.ws_root, "workspace", s.registry_repo, 1),
+        /is not a directory/,
+        "a stray .timescope file yields a clear error instead of a low-signal mkdir throw"
+    );
 }
 
 /**

@@ -14,17 +14,24 @@ This section documents the metadata files introduced across #48: `config.json` /
 
 ### Repo config — `.timescope/config.json`
 
-A repo's authority about itself, committed with the repository. In 48a it carries only a stable
-repo id (Client/Project binding + pinned task-types arrive with #15):
+A repo's authority about itself, committed with the repository. It carries a stable repo id and
+(US-06) a cache of the repo's jobs so a fresh clone can populate the Start picker without a global
+job list. Client/Project binding + pinned task-types arrive with #15.
 
 ```json
 {
   "repo_id": "a1b2c3d4e5f6",
-  "format_version": 1
+  "format_version": 2,
+  "jobs": [
+    { "job_id": "16lor", "job_title": "Lantern - Speaker - EE CAD" }
+  ]
 }
 ```
 
 - `repo_id` — 12-char hex, generated once at opt-in and never regenerated (clone → same id).
+- `jobs` — cached `{ job_id, job_title }` derived from the repo's owned log (US-06). Absent in v1
+  configs; an older log-only repo is auto-upgraded (config written with `jobs`) on open. Additive —
+  the current title wins after a rename; the registry stays the cross-repo owner (#15).
 - `.timescope/` is created **only** when the user opts in (first Start → "Track here?"), or when a
   `.timescope` folder already exists (existing folder ⇒ assume opted-in). This closes #2.
 

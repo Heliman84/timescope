@@ -2,7 +2,7 @@
 // jobs but NO config.json, and an EMPTY global store (machine has never seen it).
 // Opening it should auto-upgrade: config.json created + jobs cached (US-06).
 const fs = require("fs"), path = require("path");
-const ROOT = path.resolve("r:/vscode_customizations/timescope");
+const ROOT = path.resolve(__dirname, "..");
 const C = path.join(ROOT, "out", "core");
 const { Job } = require(path.join(C, "job"));
 const { Event } = require(path.join(C, "event"));
