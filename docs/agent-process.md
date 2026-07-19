@@ -92,13 +92,21 @@ coordinates and decides but never implements (no source edits, no feature branch
 is the arc log, so even a brand-new chat rehydrates in one read). Per issue, the spine picks
 one of two dispatch targets:
 
+The diagram below is **your** experience — which window you're in and what you do at each
+handoff:
+
 ```mermaid
-flowchart LR
-    SP[Main window · develop<br/>arc spine chat<br/>coordinates, never implements]
-    SP -->|worktree + branch +<br/>starter prompt you paste| SAT[Satellite window<br/>one issue · own chat<br/>feature loop · local F5 · PR]
-    SP -->|run in-spine| AW[Agent wave<br/>Tier 2 builders<br/>in worktrees]
-    SAT -->|PR merged +<br/>arc status updated| SP
-    AW -->|PR merged +<br/>arc status updated| SP
+flowchart TD
+    subgraph MAIN [Main VS Code window — develop, stays open all arc]
+        SP[Arc spine chat<br/>coordinates · never implements]
+    end
+    SP -->|"① human-heavy issue: spine makes<br/>worktree+branch, opens the window,<br/>writes you a starter prompt"| P1([You: paste the starter prompt<br/>into the new window's chat])
+    subgraph SATW [Satellite VS Code window — worktree, one issue]
+        P1 --> SC[Fresh chat runs the feature loop<br/>② you discuss · F5 this branch · merge its PR]
+    end
+    SP -->|"①′ well-specified issue:<br/>agent wave runs in-spine,<br/>you F5 once at the end"| SP
+    SC -->|"③ PR merged, worktree removed —<br/>close the window"| P2([You: back in the main window,<br/>tell the spine 'done'])
+    P2 -->|"④ spine re-reads arc log + PRs,<br/>kicks the next issue/wave"| SP
 ```
 
 - **Human-heavy issue** (design iteration, UX feel, repeated F5) → satellite window: the
