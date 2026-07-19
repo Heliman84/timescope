@@ -181,7 +181,14 @@ export async function activate(context: vscode.ExtensionContext) {
         context.globalState.update(STATE_KEY_LAST_SEEN, Date.now());
         if (_lockRepoId && _instanceId && runtime.paths.locks_dir) {
             try {
-                refresh_lock(runtime.paths.locks_dir, _lockRepoId, { pid: process.pid, instance_id: _instanceId, now: Date.now() });
+                const refreshed = refresh_lock(runtime.paths.locks_dir, _lockRepoId, { pid: process.pid, instance_id: _instanceId, now: Date.now() });
+                if (!refreshed) {
+                    // Another instance took over the lock (it looked stale to them) — we no
+                    // longer hold it (#47 F3). Stop treating ourselves as the owner so a
+                    // later deactivate doesn't release a lock that isn't ours.
+                    console.warn("TimeScope: lost this repo's instance lock to another window.");
+                    _lockRepoId = null;
+                }
             } catch (ex) {
                 console.error("TimeScope: instance lock refresh failed", ex);
             }

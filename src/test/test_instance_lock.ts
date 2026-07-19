@@ -74,13 +74,15 @@ export function run_instance_lock_tests(): void {
     assert.strictEqual(takeover.live_foreign, false, "takeover is not reported as blocked by a live lock");
     assert.strictEqual(read_lock(lock_path)!.instance_id, "inst-C", "disk lock now belongs to the new owner");
 
-    // refresh_lock updates the heartbeat for the current owner.
+    // refresh_lock updates the heartbeat for the current owner and reports success.
     const refreshed_now = stale_now + 10_000;
-    refresh_lock(locks_dir, repo_id, { pid: 333, instance_id: "inst-C", now: refreshed_now });
+    const refresh_ok = refresh_lock(locks_dir, repo_id, { pid: 333, instance_id: "inst-C", now: refreshed_now });
+    assert.strictEqual(refresh_ok, true, "refresh_lock reports success for the current owner");
     assert.strictEqual(read_lock(lock_path)!.heartbeat_iso, new Date(refreshed_now).toISOString(), "refresh_lock updates the heartbeat");
 
-    // refresh_lock is a no-op when we don't currently own the lock.
-    refresh_lock(locks_dir, repo_id, { pid: 999, instance_id: "inst-D", now: refreshed_now + 1_000 });
+    // refresh_lock backs off (no write) AND reports loss (#47 F3) when we don't currently own the lock.
+    const refresh_foreign = refresh_lock(locks_dir, repo_id, { pid: 999, instance_id: "inst-D", now: refreshed_now + 1_000 });
+    assert.strictEqual(refresh_foreign, false, "refresh_lock reports false when the lock belongs to a foreign instance");
     assert.strictEqual(read_lock(lock_path)!.instance_id, "inst-C", "refresh_lock by a non-owner does not overwrite");
 
     // release_lock: foreign lock is untouched when the caller doesn't own it.
@@ -94,4 +96,34 @@ export function run_instance_lock_tests(): void {
 
     // should_suppress_recovery is false on a successful acquisition.
     assert.strictEqual(should_suppress_recovery(takeover), false, "should_suppress_recovery is false when acquisition succeeded");
+}
+
+/**
+ * Tests the exclusivity guarantee of the FIRST acquisition against a never-before-locked
+ * repo (#47 reviewer finding F2):
+ * - Target: acquire_lock in src/core/instance_lock.ts
+ * - What: with no prior lock file, the first acquire_lock call wins the OS-exclusive create
+ *   and acquires; a second call against the same never-before-locked repo id reports a
+ *   live-foreign lock, not acquired — the exclusivity a plain read-then-atomic-write could
+ *   not guarantee under two truly-simultaneous first launches.
+ * - Why: two windows opening the same never-before-tracked repo at the same instant must
+ *   converge on exactly one lock holder, not both observe "no lock" and both write.
+ */
+export function run_instance_lock_exclusive_first_acquire_tests(): void {
+    const locks_dir = mkdir_tmp("exclusive-first");
+    const repo_id = "repo-first";
+    const now = Date.parse("2026-07-19T12:00:00.000Z");
+    const stale_ms = 30_000;
+
+    const first = acquire_lock(locks_dir, repo_id, { pid: 111, instance_id: "inst-A", now }, stale_ms);
+    assert.strictEqual(first.acquired, true, "the first acquisition against a never-before-locked repo succeeds");
+
+    const second = acquire_lock(locks_dir, repo_id, { pid: 222, instance_id: "inst-B", now: now + 1 }, stale_ms);
+    assert.strictEqual(second.acquired, false, "a second, distinct instance cannot also win the first-acquisition race");
+    assert.strictEqual(second.live_foreign, true, "the second call sees the first's lock as live foreign");
+    assert.strictEqual(second.holder.instance_id, "inst-A", "holder info reflects whoever actually won the exclusive create");
+
+    // The lock file on disk unambiguously belongs to exactly one instance.
+    const lock_path = path.join(locks_dir, `${repo_id}.lock.json`);
+    assert.strictEqual(read_lock(lock_path)!.instance_id, "inst-A", "exactly one instance holds the lock after the race");
 }

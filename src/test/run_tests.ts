@@ -17,7 +17,7 @@ import { run_registry_domain_tests, run_registry_repository_tests, run_registry_
 import { run_local_opt_in_tests, run_local_opt_in_decline_tests, run_local_opt_in_first_opt_in_race_tests, run_local_opt_in_concurrent_writer_tests } from "./test_local_opt_in";
 import { run_append_owned_event_tests, run_rebuild_index_tests, run_registry_log_paths_tests } from "./test_global_index";
 import { run_migration_tests } from "./test_migration";
-import { run_instance_lock_tests } from "./test_instance_lock";
+import { run_instance_lock_tests, run_instance_lock_exclusive_first_acquire_tests } from "./test_instance_lock";
 import { run_multi_instance_no_crosstalk_tests, run_multi_instance_index_convergence_tests } from "./test_multi_instance";
 
 async function main() {
@@ -73,6 +73,7 @@ async function main() {
         run_registry_log_paths_tests();
         run_migration_tests();
         run_instance_lock_tests();
+        run_instance_lock_exclusive_first_acquire_tests();
         run_multi_instance_no_crosstalk_tests();
         run_multi_instance_index_convergence_tests();
         console.log("All tests passed.");
