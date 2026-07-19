@@ -11,8 +11,9 @@ export { buildPayload, filterRelevantErrors };
 /**
  * Build the #15 attributed dashboard payload for the current runtime state —
  * reads owned sources only (registered repo logs + scratch), never the derived
- * `index.jsonl`. Used for the `request_data` reply; edit flows still round-trip
- * through the plain `buildPayload` (see `edit_log_entry`/`edit_log_entries`).
+ * `index.jsonl`. Used for both the `request_data` reply and the `edit_result`
+ * replies (edit_log_entry/edit_log_entries) — the dashboard's hierarchy
+ * grouping/labelling must survive an edit, not just the initial load.
  */
 function build_dashboard_payload(runtime: Runtime) {
     const registry = runtime.registryRepo.load();
@@ -88,10 +89,10 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 try { candidate = Event.fromDTO(new_record); }
                 catch (err) {
                     summary.errors.push(`Edit failed: could not construct event from record — ${err instanceof Error ? err.message : String(err)}`);
-                    const updated = runtime.refreshEventCollection();
+                    runtime.refreshEventCollection();
                     panel.webview.postMessage({
                         type: "edit_result",
-                        payload: { summary, payload: buildPayload(updated.toEvents()) }
+                        payload: { summary, payload: build_dashboard_payload(runtime) }
                     });
                     return;
                 }
@@ -129,10 +130,10 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 }
             }
 
-            const updated = runtime.refreshEventCollection();
+            runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "edit_result",
-                payload: { summary, payload: buildPayload(updated.toEvents()) }
+                payload: { summary, payload: build_dashboard_payload(runtime) }
             });
         }
 
@@ -198,10 +199,10 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 summary.errors.push(...filterRelevantErrors(errors, editedEvents));
             }
 
-            const finalCollection = runtime.refreshEventCollection();
+            runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "edit_result",
-                payload: { summary, payload: buildPayload(finalCollection.toEvents()) }
+                payload: { summary, payload: build_dashboard_payload(runtime) }
             });
         }
     });

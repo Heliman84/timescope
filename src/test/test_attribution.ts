@@ -8,6 +8,8 @@ import { RepoConfig, REPO_CONFIG_FORMAT_VERSION, write_repo_config } from "../co
 import { workspace_timescope_paths } from "../core/workspace_paths";
 import { append_owned_event } from "../core/global_index";
 import { build_attributed_payload } from "../dashboard/controller/attribution";
+import { TimeScopePaths } from "../core/paths";
+import { EventRepository } from "../core/event_repository";
 
 function mkdir_tmp(suffix: string): string {
     const root = path.join(__dirname, "..", "..", "test-output", `attribution-${suffix}-${Date.now()}`);
@@ -240,6 +242,60 @@ export function run_build_attributed_payload_does_not_touch_index_tests(): void 
     console.log("  ✓ build_attributed_payload does-not-touch-index tests passed");
 }
 
+/**
+ * Tests that hierarchy attribution survives an edit round-trip — the exact
+ * sequence dashboard.ts's edit_log_entry(ies) handler performs: replace the
+ * event in its owning log via EventRepository.replaceEvent, then re-attribute
+ * for the `edit_result` reply. Regression coverage for a reviewer finding
+ * (#15): the edit-reply path was calling the plain (unattributed) buildPayload,
+ * so a Save silently collapsed the dashboard's hierarchy grouping back to flat
+ * titles until the panel was reopened.
+ */
+export function run_build_attributed_payload_survives_edit_tests(): void {
+    const root = mkdir_tmp("edit-survives");
+    const fx = build_fixture(root);
+
+    // Simulate this window having repoA open as its workspace, so the edit
+    // targets repoA's owned log the same way dashboard.ts's edit handler does.
+    const repoA_log_path = workspace_timescope_paths(
+        fx.registry.find_by_id(fx.repoA_id)!.path
+    ).log_path;
+    const paths: TimeScopePaths = {
+        global_jobs_path: path.join(root, "jobs.json"),
+        global_log_path: path.join(root, "global-logs.jsonl"),
+        registry_path: path.join(root, "registry.json"),
+        workspace_log_path: repoA_log_path,
+    } as TimeScopePaths;
+    const repo = new EventRepository(paths);
+
+    const boundStartId = ev(fx.boundJob, "start", 1000).id;
+    const before = repo.loadAllEntries();
+    const oldStart = before.find(e => e.id === boundStartId)!;
+    assert.ok(oldStart, "bound job's start event found in repoA's owned log");
+
+    // The edit: retime the start event (same shape as the dashboard's Save flow).
+    const newStart = oldStart.withTimestamp(1200);
+    const result = repo.replaceEvent(oldStart, newStart);
+    assert.ok(result.workspaceReplaced, "edit persisted to repoA's owned log");
+
+    // Re-attribute (this is what dashboard.ts now calls for both request_data
+    // AND edit_result — build_dashboard_payload wraps build_attributed_payload).
+    const payload = build_attributed_payload({
+        registry: fx.registry,
+        scratch_path: fx.scratch_path,
+        current_workspace_repo_id: fx.repoA_id,
+    });
+
+    const edited = payload.find(p => p.id === boundStartId)!;
+    assert.ok(edited, "edited event still present after re-attribution");
+    assert.strictEqual(edited.timestamp, 1200, "edit's new timestamp is reflected");
+    assert.deepStrictEqual(edited.client, { id: "client-1", name: "Acme Corp" }, "client survives the edit");
+    assert.deepStrictEqual(edited.project, { id: "project-1", name: "Website Revamp" }, "project survives the edit");
+    assert.deepStrictEqual(edited.task_type, { id: fx.boundJob.id, name: "Development" }, "task_type survives the edit");
+
+    console.log("  ✓ build_attributed_payload survives-edit tests passed");
+}
+
 export function run_attribution_tests(): void {
     console.log("attribution: build_attributed_payload");
     run_build_attributed_payload_bound_repo_tests();
@@ -247,4 +303,5 @@ export function run_attribution_tests(): void {
     run_build_attributed_payload_unassigned_tests();
     run_build_attributed_payload_dedup_tests();
     run_build_attributed_payload_does_not_touch_index_tests();
+    run_build_attributed_payload_survives_edit_tests();
 }
