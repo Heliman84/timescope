@@ -25,6 +25,12 @@ export interface TimeScopePaths {
      */
     scratch_path?: string;
     /**
+     * Global per-repo instance-lock folder (#47) — heartbeat lock files so a second
+     * VS Code window opened on the same repo can detect it and warn instead of racing
+     * timer actions / crash-recovery. Created on demand.
+     */
+    locks_dir?: string;
+    /**
      * Workspace log/jobs paths — set only when the workspace is *opted in*
      * (a `.timescope` folder exists). Left undefined otherwise so no write
      * ever creates `.timescope` speculatively (#2).
@@ -61,6 +67,7 @@ export function resolve_paths(context: vscode.ExtensionContext): TimeScopePaths 
         registry_path: path.join(global_dir, "registry.json"),
         global_index_path: path.join(global_dir, "index.jsonl"),
         scratch_path: path.join(global_dir, "scratch.jsonl"),
+        locks_dir: path.join(global_dir, "locks"),
     };
 
     if (workspace_folder) {

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
+import * as crypto from "crypto";
 
 import { Runtime } from "./core/runtime";
 import { JobCollection } from "./core/job_collection";
@@ -13,12 +14,22 @@ import { format_build_info_full } from "./core/build_info";
 import { compact_log_file, has_repairable_damage } from "./core/log_sanitizer";
 import { is_workspace_opted_in, enable_local_logging, register_if_opted_in, is_folder_declined, decline_folder } from "./core/local_opt_in";
 import { migrate_legacy_global_log } from "./core/migration";
+import { acquire_lock, refresh_lock, release_lock, should_suppress_recovery } from "./core/instance_lock";
 
 let _runtime: Runtime | null = null;
 let _context: vscode.ExtensionContext | null = null;
 let _heartbeatInterval: NodeJS.Timeout | null = null;
 
+// Per-activation instance-lock identity (#47). Set only when this window holds the lock
+// for the opted-in repo it activated in; both null otherwise (no repo, or lock not held).
+let _lockRepoId: string | null = null;
+let _instanceId: string | null = null;
+
 const HEARTBEAT_INTERVAL_MS = 30_000;
+// A lock is considered stale (its prior holder presumed crashed/closed without a clean
+// release) after this many missed heartbeats. K=3 gives real slack for a slow/backgrounded
+// window's timer tick to fire late without falsely declaring the lock stale.
+const LOCK_STALE_MS = HEARTBEAT_INTERVAL_MS * 3;
 const STATE_KEY_LAST_SEEN = "timescope.lastSeen";
 const STATE_KEY_LAST_SHUTDOWN = "timescope.lastShutdown";
 
@@ -77,11 +88,38 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // If this workspace is already opted in (a `.timescope` folder exists), make
     // sure it has a config.json and refresh its registry entry. Never blocks activation.
+    let activation_repo_id: string | null = null;
     try {
         const folder0 = vscode.workspace.workspaceFolders?.[0];
-        register_if_opted_in(runtime.paths, folder0?.uri.fsPath, folder0?.name ?? "", runtime.registryRepo, Date.now());
+        activation_repo_id = register_if_opted_in(runtime.paths, folder0?.uri.fsPath, folder0?.name ?? "", runtime.registryRepo, Date.now());
     } catch (ex) {
         console.error("TimeScope: registry update on activation failed", ex);
+    }
+
+    // Per-repo instance lock (#47): detect another VS Code window already tracking this
+    // opted-in repo, so we can warn instead of silently racing timer actions with it, and
+    // suppress our own crash-recovery prompt (which would otherwise fight the live window).
+    let suppress_recovery = false;
+    if (activation_repo_id && runtime.paths.locks_dir) {
+        try {
+            _instanceId = crypto.randomUUID();
+            const lock_result = acquire_lock(
+                runtime.paths.locks_dir,
+                activation_repo_id,
+                { pid: process.pid, instance_id: _instanceId, now: Date.now() },
+                LOCK_STALE_MS
+            );
+            if (lock_result.acquired) {
+                _lockRepoId = activation_repo_id;
+            } else if (should_suppress_recovery(lock_result)) {
+                suppress_recovery = true;
+                vscode.window.showWarningMessage(
+                    `TimeScope: this workspace is already being tracked in another VS Code window (pid ${lock_result.holder.pid}). Timer actions here may conflict with it.`
+                );
+            }
+        } catch (ex) {
+            console.error("TimeScope: instance lock acquisition failed", ex);
+        }
     }
 
     // #48 48c: one-time migration of the legacy global `logs.jsonl` into the owned
@@ -126,14 +164,28 @@ export async function activate(context: vscode.ExtensionContext) {
     const lastShutdown = context.globalState.get<number>(STATE_KEY_LAST_SHUTDOWN) ?? 0;
     const shutdownTimestamp = Math.max(lastSeen, lastShutdown) || undefined;
 
-    // Check for orphaned session from previous VSCode shutdown and offer recovery
-    const recoveredSession = await checkAndRecover(runtime.logRepo, shutdownTimestamp);
-    runtime.setActiveSession(recoveredSession && recoveredSession.isOpen ? recoveredSession : null);
+    // Check for orphaned session from previous VSCode shutdown and offer recovery — unless
+    // another live window already holds this repo's instance lock (#47): recovering here
+    // too would offer to resurrect/mutate a session the other window may already own.
+    if (!suppress_recovery) {
+        const recoveredSession = await checkAndRecover(runtime.logRepo, shutdownTimestamp);
+        runtime.setActiveSession(recoveredSession && recoveredSession.isOpen ? recoveredSession : null);
+    } else {
+        runtime.setActiveSession(null);
+    }
 
     // Start heartbeat: periodically persist a "last seen" timestamp so that
-    // crash-recovery can approximate when VSCode was last alive.
+    // crash-recovery can approximate when VSCode was last alive. Also refreshes our
+    // instance lock's heartbeat (#47), so a live window's lock never looks stale.
     _heartbeatInterval = setInterval(() => {
         context.globalState.update(STATE_KEY_LAST_SEEN, Date.now());
+        if (_lockRepoId && _instanceId && runtime.paths.locks_dir) {
+            try {
+                refresh_lock(runtime.paths.locks_dir, _lockRepoId, { pid: process.pid, instance_id: _instanceId, now: Date.now() });
+            } catch (ex) {
+                console.error("TimeScope: instance lock refresh failed", ex);
+            }
+        }
     }, HEARTBEAT_INTERVAL_MS);
     // Write an initial heartbeat immediately so the value is current from activation.
     context.globalState.update(STATE_KEY_LAST_SEEN, Date.now());
@@ -414,6 +466,18 @@ export function deactivate() {
         clearInterval(_heartbeatInterval);
         _heartbeatInterval = null;
     }
+
+    // Release our instance lock (#47) so the folder is immediately re-acquirable — by a
+    // relaunch of this same window or a fresh one — without waiting out the stale window.
+    if (_lockRepoId && _instanceId && _runtime?.paths.locks_dir) {
+        try {
+            release_lock(_runtime.paths.locks_dir, _lockRepoId, _instanceId);
+        } catch (ex) {
+            console.error("TimeScope: instance lock release failed", ex);
+        }
+    }
+    _lockRepoId = null;
+    _instanceId = null;
 
     // Ensure any running interval is stopped and session cleared
     _runtime?.setActiveSession(null);
