@@ -28,13 +28,30 @@ VS Code extension for tracking consulting hours: start/pause/resume/stop work se
 
 ## Workflow
 
-Three chat-driven loops, each a skill in `.claude/skills/`:
+Chat-driven loops, each a skill in `.claude/skills/`:
 
 | Loop | Skill | Trigger |
 | :--- | :--- | :--- |
 | Feature (issue → PR) | `feature` | discussing/working a GitHub issue |
 | Install latest develop build | `install` | "install the latest build" |
 | Release develop → main | `release` | "do a release" |
+| Delegation playbook | `delegate` | orchestrating any Tier 1+ work (referenced by the loops) |
+
+
+## Agent delegation
+
+The main chat thread is the **orchestrator**: decisions, user gates (scope, F5, PR merges),
+briefs out, packets back. Verbose/mechanical work runs in the project agents in
+`.claude/agents/` — this is standing authorization to spawn them per the tiers, without asking:
+
+- **Tier 0 — inline:** single-file/trivial changes, quick questions. No agents.
+- **Tier 1 — standard:** scout explores; reviewer + verifier gate every pre-PR; scribe drafts docs.
+- **Tier 2 — wave:** planner partitions disjoint tracks → builders in parallel worktrees →
+  sub-branch PRs into the feature branch.
+
+Full playbook (roster, briefs/packets, wave mechanics, F5 packet): the `delegate` skill.
+Agents read `.claude/wiki/index.md` before exploring; the wiki is curated at PR time.
+Never delegated: scope agreement, F5, PR merges, `package.json` changes, version bumps.
 
 
 ## Conventions

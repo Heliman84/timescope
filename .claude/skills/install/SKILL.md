@@ -13,5 +13,6 @@ description: TimeScope install loop — use when the user asks to recompile, pac
 
 Notes:
 
+- This loop is Tier 0 — short, mechanical, user-gated; it stays inline (no agents).
 - `.vsix` files are gitignored — never commit them.
 - If the user was on a feature branch, return them to it afterwards.

@@ -6,12 +6,18 @@ description: TimeScope release loop — use when the user asks to do a release, 
 # Release Loop (develop → main → GitHub Release)
 
 Fully chat-driven. The user's only manual step is reviewing/merging the release PR.
+This loop stays mostly inline (mechanical + user-gated); the qualification step below is the
+exception.
 
 ## 1. Preflight (on develop)
 
 - Working tree clean, `git pull` — up to date with origin/develop
 - `npm test` green
 - `npm run package` succeeds (proves the vsix builds)
+- **Release qualification** (once the release-qual suite lands — see the release-qualification
+  issue): verifier runs the deep gate (packaging + install smoke, state-machine property
+  tests, JSONL corpus replay, extended UI runs) and **reviewer** takes an exhaustive pass over
+  `git diff main...develop`. Too expensive per-feature; mandatory here.
 
 ## 2. Bump
 

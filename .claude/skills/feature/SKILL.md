@@ -7,9 +7,16 @@ description: TimeScope feature loop — use when discussing a GitHub issue, star
 
 The durable record is the GitHub issue + the PR description + a short `docs/dev-log/` decision log. No heavyweight up-front spec files.
 
+**Delegation:** this loop runs on the tiers in the `delegate` skill — decide the tier at plan
+time. The main thread orchestrates; scout/planner/builders/reviewer/verifier/scribe do the
+verbose work and return packets. Tier 0 (single-file/trivial) skips agents entirely.
+
 ## 1. Discuss
 
 - If an issue number is given: `gh issue view <N>` (add `--comments` if there's discussion). Restate the problem in your own words; discuss until scope is agreed.
+- Unfamiliar territory → spawn **scout** for the recon instead of exploring inline. Structural
+  implications (state machine, storage model, data formats) → spawn **architect** for an
+  options study to anchor the discussion; the decision stays here with the user.
 - If there is no issue yet: discuss the idea, then draft a short issue (problem, desired behavior, acceptance notes) and file it with `gh issue create` after the user confirms the text.
 
 ## 2. Branch
@@ -25,10 +32,17 @@ git checkout -b feature/issue-<N>-<short-slug>
 
 Plan in conversation (use plan mode for non-trivial changes). Identify exact files, tests, and any impact on: the session state machine, the dashboard/webview, data formats (`docs/record_format_spec.md`), or commands/settings in `package.json` (needs explicit approval).
 
+Multi-file scope → spawn **planner** for the slice/track plan and pick the tier: ≥2 disjoint
+tracks → Tier 2 wave (worktrees + sub-branch PRs into the feature branch — mechanics in the
+`delegate` skill); otherwise Tier 1.
+
 Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEMPLATE.md) to `docs/dev-log/issue-<N>-<short-slug>.md` and fill in the problem + the scope decisions and trade-offs as they're agreed. It's a living decision log through implementation, not a spec — keep it short.
 
 ## 4. Implement
 
+- Tier 1+: delegate slices to **builder** (core) / **ui-builder** (webview); Tier 2 runs them
+  in parallel worktrees per the `delegate` skill. Builders self-verify and return build
+  packets with draft F5 notes; review findings bounce back to the owning builder.
 - TDD: write/extend tests in `src/test/` first (plain throwing functions, registered in `run_tests.ts`), then implement.
 - Dashboard/webview changes: extend the Playwright suite in `tests/webview/` (harness stubs `acquireVsCodeApi`; fixtures mirror `buildPayload`). While iterating on UI you can also drive the harness live with the Playwright MCP tools and show the user screenshots instead of requiring F5 for every tweak.
 - Iterate until `npm test` is green and `npm run compile` is clean; `npm run test:ui` green whenever `src/dashboard/webview/` or `tests/webview/` changed.
@@ -36,12 +50,16 @@ Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEM
 
 ## 5. Pre-PR checklist (all must pass before handoff)
 
+Tier 1+: **verifier** runs the mechanical items and stages F5 readiness; **reviewer** runs the
+review item; **scribe** drafts the doc items. The orchestrator confirms the packets and owns
+the user-gated items (version bump, waivers).
+
 - [ ] `npm test` green, `npm run compile` clean
 - [ ] Working tree committed, no stray file changes
 - [ ] No new dependencies; `package.json` untouched beyond the confirmed version bump and any explicitly approved changes (e.g. new command contributions) — verify mechanically: `git diff origin/develop...HEAD -- package.json package-lock.json` shows only the confirmed bump and/or explicitly approved changes
 - [ ] Review `git diff --stat origin/develop...HEAD` for stray files that don't belong to this feature
 - [ ] `docs/processes.md` diagrams updated if architecture/state machine/data format changed
-- [ ] `/code-review` run on the diff; findings fixed or explicitly waived by the user. Beyond generic review, verify the TimeScope domain invariants:
+- [ ] **reviewer** agent run on the diff (or `/code-review` at Tier 0); findings fixed or explicitly waived by the user. Beyond generic review, verify the TimeScope domain invariants:
   - Domain objects stay immutable (mutations return new instances; only `Runtime` mutates)
   - Timestamps remain monotonic per job log (`ensureAfter` on any appended/retimed event)
   - Event dedup by ID is preserved (no path writes an event twice across global/workspace logs)
@@ -56,6 +74,10 @@ Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEM
 **Default to feature-complete testing.** The user prefers to F5 **once, when the whole issue's scope works end-to-end** — not at each intermediate slice (testing half-built states wastes their time). When an issue is sliced, keep building toward feature-complete and self-verify each slice yourself (test suite, the `run`/`verify` skills, driving the flow). Only request an intermediate F5 when you genuinely need a second set of eyes — and say so explicitly ("I need your eyes on X because …"). See the `user-testing-cadence` memory.
 
 When you do hand off, STOP and tell the user the branch is ready. Do NOT create the PR until they ask.
+
+The handoff content comes from the F5 packet: builders draft per-slice notes → **verifier**
+assembles one packet and leaves the checkout F5-ready → the orchestrator delivers it in the
+user's terms (below).
 
 **Every F5 handoff must open with a context header** so the user doesn't have to reconstruct where we are:
 
