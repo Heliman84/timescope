@@ -50,3 +50,8 @@ test-multi/repoB/.timescope/
 test-multi/shared-global/*
 !test-multi/shared-global/.gitkeep
 test-workspace-empty/.timescope/
+
+# Test-workspace-legacy: v0.2.0-style repo (log, no config) for the US-06 F5 test
+test-workspace-legacy/.timescope/
+test-workspace-legacy/global-storage/*
+!test-workspace-legacy/global-storage/.gitkeep
