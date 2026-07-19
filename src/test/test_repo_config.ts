@@ -62,3 +62,46 @@ export function run_repo_config_tests(): void {
     fs.writeFileSync(cfg_path, JSON.stringify({ format_version: 1 }) + "\n", "utf8");
     assert.throws(() => read_repo_config(cfg_path), /Invalid repo config/, "missing repo_id throws");
 }
+
+/**
+ * Tests the #15 Client/Project binding + pinned task-types additive fields on RepoConfig:
+ * - Target: read_repo_config / write_repo_config in src/core/repo_config.ts
+ * - Why: strict binding means a bound repo's sessions belong to its Client/Project
+ *   implicitly; the binding + pinned vocabulary must round-trip without disturbing the
+ *   existing US-06 `jobs` cache, and format_version stays 2.
+ */
+export function run_repo_config_binding_tests(): void {
+    const root = mkdir_tmp("binding");
+    const cfg_path = path.join(root, "config.json");
+    const repo_id = generate_repo_id();
+
+    // Absent binding/pinned_task_types reads as unbound (undefined).
+    write_repo_config(cfg_path, { repo_id, format_version: REPO_CONFIG_FORMAT_VERSION });
+    const unbound = read_repo_config(cfg_path)!;
+    assert.strictEqual(unbound.binding, undefined, "absent binding reads as undefined");
+    assert.strictEqual(unbound.pinned_task_types, undefined, "absent pinned_task_types reads as undefined");
+    assert.strictEqual(unbound.format_version, REPO_CONFIG_FORMAT_VERSION, "format_version stays 2");
+
+    // Round-trip of binding + pinned_task_types, alongside the existing jobs cache.
+    write_repo_config(cfg_path, {
+        repo_id,
+        format_version: REPO_CONFIG_FORMAT_VERSION,
+        jobs: [{ job_id: "16lor", job_title: "test-issue9" }],
+        binding: { client_id: "c1", project_id: "p1" },
+        pinned_task_types: ["t1", "t2"],
+    });
+    const bound = read_repo_config(cfg_path)!;
+    assert.deepStrictEqual(bound.binding, { client_id: "c1", project_id: "p1" }, "binding round-trips");
+    assert.deepStrictEqual(bound.pinned_task_types, ["t1", "t2"], "pinned_task_types round-trips");
+    assert.strictEqual(bound.jobs!.length, 1, "existing jobs cache untouched by binding fields");
+    assert.strictEqual(bound.jobs![0].job_title, "test-issue9", "jobs cache content untouched");
+    assert.strictEqual(bound.format_version, REPO_CONFIG_FORMAT_VERSION, "format_version stays 2 when bound");
+
+    // Malformed binding (missing a field) is dropped, tolerant style.
+    fs.writeFileSync(cfg_path, JSON.stringify({ repo_id, binding: { client_id: "c1" } }) + "\n", "utf8");
+    assert.strictEqual(read_repo_config(cfg_path)!.binding, undefined, "malformed binding dropped");
+
+    // Non-string entries in pinned_task_types are filtered out.
+    fs.writeFileSync(cfg_path, JSON.stringify({ repo_id, pinned_task_types: ["t1", 2, null, "t2"] }) + "\n", "utf8");
+    assert.deepStrictEqual(read_repo_config(cfg_path)!.pinned_task_types, ["t1", "t2"], "non-string pinned entries dropped");
+}
