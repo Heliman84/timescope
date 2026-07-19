@@ -9,7 +9,7 @@ Sent in `src/dashboard/webview/dashboard.js`, handled in `src/dashboard/controll
 
 | Direction | Message | Notes |
 | :--- | :--- | :--- |
-| web → ext | `{type:"request_data"}` | once on load (`dashboard.js:9`); reply is `summary_data` |
+| web → ext | `{type:"request_data"}` | once on load (`dashboard.js:10`); reply is `summary_data` |
 | web → ext | `{type:"edit_log_entry", payload:{id, new_record}}` | single edit (`dashboard.ts:60`) |
 | web → ext | `{type:"edit_log_entries", payload:{edits:[{id,new_record}]}}` | session-modal batch (`dashboard.js:1003` → `dashboard.ts:124`) |
 | ext → web | `{type:"summary_data", payload:DTO[], build_info}` | handled `dashboard.js:36` |
@@ -50,7 +50,7 @@ Sent in `src/dashboard/webview/dashboard.js`, handled in `src/dashboard/controll
   (`extension.ts:75-76`) as read-only display mirrors — **not declared** contributions.
 - **Commands:** `timescope.start/pause/resume/stop/dashboard/renameJob/showBuildInfo/`
   `compactLog/rebuildGlobalIndex/showStorageStatus` (`package.json:29-80`). `addJob`/`deleteJob`
-  are registered in code (`extension.ts:364/393`) but not palette-contributed.
+  are registered in code (`extension.ts:364/394`) but not palette-contributed.
 
 Any change to these contracts requires updating the spec docs (`docs/record_format_spec.md`)
 and usually `docs/processes.md` — and package.json changes need explicit user approval.
