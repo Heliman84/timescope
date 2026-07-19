@@ -51,4 +51,34 @@ Client → Project → Task-type entities so the Start picker only asks for the 
 
 ## Retrospective
 
-Filled in at PR time: what actually got built, anything that changed from the plan, and what a future reader should know.
+The plan held — no scope surprises. Built in the planned S1→S2→A1→B1→A2→A3→B2 order: registry
+entities → repo-config binding/pins → pure `task_types.ts` helpers → Runtime wiring → Start
+command wiring → attributed dashboard payload → webview hierarchy rendering.
+
+New shared helper not explicitly planned: `id_gen.ts` factors the FNV-1a/base36 id derivation
+out of `job.ts` so client/project/task-type ids mint the same way — `mint_unique_id` adds a
+salted-retry loop for hash collisions (small id space, distinct seeds can collide), which the
+original `Job.create` path didn't need to handle for a single entity kind.
+
+**Reviewer findings, all fixed pre-PR:**
+- **Id-collision minting gap** — entity minting used the raw seeded hash with no check that the
+  candidate id already belonged to a *different* entity. Fixed by routing all minting through
+  `mint_unique_id`'s `is_taken` guard (`id_gen.ts`).
+- **`convert_legacy_job` dangling pin** — converting onto an unknown/deleted `target_task_type_id`
+  pinned it into the repo config anyway, even though the alias wasn't recorded. Fixed to a full
+  no-op (registry and config both returned unchanged) when the target doesn't resolve.
+- **Edit-reply attribution loss** — `edit_log_entry`/`edit_log_entries` replied with the plain
+  `buildPayload` (no client/project/task_type/source_repo_id), so a Save silently collapsed
+  hierarchy grouping back to flat titles until the panel was reopened. Fixed by routing all three
+  `edit_result` reply sites through the same `build_dashboard_payload` used by `request_data`.
+
+**Webview discovery, not a reviewer finding:** `dashboard.js`'s `load_payload` explicitly
+allowlists which DTO fields survive into its in-memory event objects — new attribution fields
+(`source_repo_id`, `client`, `project`, `task_type`) had to be added there explicitly or they'd
+silently disappear before `hierarchy_label` ever saw them. Worth checking this allowlist whenever
+a future payload field is added.
+
+**Spec follow-up still owed:** the additive registry/repo-config fields (`clients[]`,
+`projects[]`, `task_types[]`, `binding`, `pinned_task_types[]`) need documenting in
+`docs/record_format_spec.md` once the storage track releases that file this wave — flagged to
+the arc spine, not resolved here.

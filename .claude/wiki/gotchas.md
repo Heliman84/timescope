@@ -56,6 +56,17 @@
   `renameJobInLogByJob` rewrites the log.
 - **Issue numbers are the TODO convention**: no TODO/HACK/FIXME exist under `src/` —
   deferred work is inline `#NN` references (e.g. #43 edit-other-repos, #47 multi-writer).
+- **`dashboard.js`'s `load_payload` allowlists DTO fields** (#15) — it copies named fields onto
+  its in-memory event objects rather than spreading the DTO; a new payload field (e.g. the #15
+  `source_repo_id`/`client`/`project`/`task_type` additions) silently disappears in the webview
+  until added there explicitly. Check this whenever a controller payload gains a field.
+- **Entity id minting must guard against hash collisions** (#15, `id_gen.ts`): the id space
+  (5 base36 chars) is small enough that distinct seeds can collide. `mint_unique_id` salts and
+  retries against a caller-supplied `is_taken` check — minting a fresh client/project/task-type
+  id without it can silently reuse another entity's id.
+- **`convert_legacy_job` is a full no-op on an unresolvable target** (#15, `task_types.ts`): if
+  `target_task_type_id` doesn't exist in the registry, both the alias adoption *and* the repo-config
+  pin are skipped — pinning anyway would leave a dangling pin pointing at nothing.
 
 
 ## Corrections (wrong turns kept on record — prevents repeat misdiagnoses)

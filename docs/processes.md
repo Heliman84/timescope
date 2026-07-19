@@ -74,11 +74,16 @@ State is tracked by the `Session` domain object (`src/core/session.ts`):
 sequenceDiagram
     participant User
     participant Ext as extension.ts
+    participant Bind as pick_binding /<br>pick_task_type (#15)
     participant Sess as Session
     participant Repo as EventRepository
     participant RT as Runtime
 
     User->>Ext: timescope.start
+    Ext->>Bind: ensure_repo_binding(runtime)
+    Bind-->>Ext: Client/Project bound<br>(no-op if already bound,<br>skipped if not opted in)
+    Ext->>Bind: pick_task_type(runtime)
+    Bind-->>Ext: Task-type (job_id)<br>or legacy job (with conversion)
     Ext->>Sess: Session.start(job)
     Sess-->>Ext: startEvent
     Ext->>Repo: appendValidated(startEvent)
@@ -86,6 +91,13 @@ sequenceDiagram
     Ext->>RT: setActiveSession(session)
     RT-->>RT: updateStatusBar + startTimerInterval
 ```
+
+**Start** additionally resolves a Client/Project binding (`pick_binding.ts`, cancellable,
+no partial writes — no-op once bound) and a Task-type (`pick_task_type.ts`: pinned first,
+"Other…" for the full vocabulary, "New Task-type…" auto-pins, legacy flat jobs offer
+inline conversion into a Task-type via alias adoption). `job_id` on the resulting `Event`
+carries the task-type id going forward; Client/Project are never stored per event — they're
+derived from the repo's binding at read time (see §7 Dashboard).
 
 All four session commands (start, pause, resume, stop) follow the same pattern:
 1. Mutate the in-memory `Session` (produces an `Event`).
@@ -331,8 +343,10 @@ flowchart LR
     WL -- "rebuild (walk registry)" --> IX
     SC -- "rebuild" --> IX
     RG -. "repo paths" .-> IX
-    RC -. "load / refresh (dashboard)" .-> IX
+    RC -. "load / refresh (session cache)" .-> IX
     ER -- "loadAllEntries (owned: scratch+ws)" --> SC & WL
+    RG -. "repo paths" .-> ATTR["attribution.ts<br>(dashboard payload, #15)"]
+    ATTR -- "read directly" --> SC & WL
 
     JR -- "save / update / delete" --> JF
     JR -- "loadAll" --> JF
@@ -342,8 +356,8 @@ flowchart LR
 | :--- | :--- | :--- |
 | Session command (start/pause/resume/stop) | owned (workspace **or** scratch) | owning log + `index.jsonl` |
 | Recovery | owned (workspace + scratch) | owning log + `index.jsonl` |
-| Dashboard `request_data` | `index.jsonl` (derived) | — |
-| Dashboard edit | owned (find) / `index.jsonl` (display) | owning log, then rebuild `index.jsonl` |
+| Dashboard `request_data` / `edit_result` | owned sources directly (registered repo logs + scratch, deduped, in-memory attribution — **not** `index.jsonl`, #15) | — |
+| Dashboard edit | owned (find) | owning log, then rebuild `index.jsonl`; reply re-attributes from owned sources |
 | Rename job | owned logs | owned logs, `index.jsonl`, `jobs.json` |
 | Rebuild Global Index | registry repo logs + scratch | `index.jsonl` |
 | Migration (once, on activation) | legacy `logs.jsonl` | `scratch.jsonl` (+ `.migrated.bak`) |
@@ -367,14 +381,14 @@ flowchart LR
 sequenceDiagram
     participant WV as dashboard.js<br>(webview)
     participant Ctrl as dashboard.ts<br>(controller)
-    participant Utils as dashboard_utils.ts
+    participant Attr as attribution.ts (#15)
     participant RT as Runtime
 
     WV->>Ctrl: request_data
-    Ctrl->>RT: refreshEventCollection()
-    RT-->>Ctrl: EventCollection
-    Ctrl->>Utils: buildPayload(events)
-    Utils-->>Ctrl: payload[]
+    Ctrl->>Attr: build_attributed_payload(registry, scratch)
+    Attr-->>Attr: read each owned source directly<br>(registered repo logs + scratch)<br>dedup by event id
+    Attr-->>Attr: resolve client/project (repo binding)<br>+ task_type (job_id, direct or alias)
+    Attr-->>Ctrl: AttributedEventDTO[]
     Ctrl->>Ctrl: format_build_info_full(runtime.buildInfo)
     Ctrl-->>WV: summary_data { payload, build_info }
 
@@ -384,17 +398,24 @@ sequenceDiagram
     Ctrl->>Ctrl: Event.fromDTO(new_record)
     Ctrl->>Ctrl: collection.validateReplacement(old, new)
     Ctrl->>RT: logRepo.replaceEvent(old, new)
-    Ctrl->>RT: refreshEventCollection()
+    Ctrl->>RT: refreshEventCollection() (updates index.jsonl)
     RT-->>Ctrl: updated EventCollection
     Ctrl->>Ctrl: collection.validate()
-    Ctrl->>Utils: filterRelevantErrors(errors, edited)
-    Utils-->>Ctrl: relevant error strings
-    Ctrl->>Utils: buildPayload(events)
-    Utils-->>Ctrl: payload[]
+    Ctrl->>Ctrl: filterRelevantErrors(errors, edited)
+    Ctrl->>Attr: build_attributed_payload(registry, scratch)
+    Attr-->>Ctrl: AttributedEventDTO[]
     Ctrl-->>WV: edit_result { summary, payload }
 ```
 
-- `dashboard_utils.ts` exports two pure functions: `buildPayload()` (timestamp-descending DTO array) and `filterRelevantErrors()` (scopes validation errors to the edited events).
+- **The dashboard's read surface is owned sources, not `index.jsonl`** (#15): `attribution.ts`'s
+  `build_attributed_payload` walks the registry's registered repo logs plus scratch directly,
+  dedups by event id, and resolves `client`/`project` (from the source repo's binding) and
+  `task_type` (from `job_id`, direct or alias) in memory. `index.jsonl` is still written/rebuilt
+  on every append/edit for other consumers, but the dashboard never reads it — its format is
+  locked and carries no per-event source attribution. Every reply that carries a payload
+  (`request_data` *and* both `edit_result` sites) goes through this same builder, so hierarchy
+  grouping survives a Save without needing the panel reopened.
+- `dashboard_utils.ts` exports two pure functions: `buildPayload()` (timestamp-descending DTO array, still used internally for validation/error-filtering) and `filterRelevantErrors()` (scopes validation errors to the edited events).
 - `filter_state.js` (webview) holds the pure filter/sort logic behind the summary view: one filter-state object (date range, jobs, duration/pause ranges, source, sort) that `dashboard.js` renders from. Date presets resolve into explicit `start_day`/`end_day` bounds; `source` (merged/global/workspace) is wired through the filter model as the seam for issue #3, with no UI yet. Loaded as a plain `<script>` in the webview and `require()`d directly by the pure-Node test suite (`src/test/test_filter_state.ts`).
 - `build_info.ts` exports `load_build_info()` (reads `out/buildinfo.json`, `null` if missing/malformed) and formatters `format_status_bar_suffix()` / `format_build_info_full()` (the latter composed from the former). `Runtime` loads it once at construction; the status-bar tooltip, dashboard footer, and the Show Build Info command all render it, with a "no build info" fallback.
 - The controller routes all data access through `Runtime` — never directly to `EventRepository`.
