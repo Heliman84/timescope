@@ -3,7 +3,7 @@
 > Decision log, not a spec. Started at plan time, finalized as a retrospective at PR time.
 > Part of the [Local-First Storage arc](../arc-log/arc-local-first-storage.md) (Wave 2).
 
-**Issue:** https://github.com/Heliman84/timescope/issues/48  ·  **PR:** (pending)
+**Issue:** [#48](https://github.com/Heliman84/timescope/issues/48)  ·  **PR:** [#54](https://github.com/Heliman84/timescope/pull/54) (merged, v0.6.0)
 
 ## Problem
 

@@ -78,13 +78,13 @@ is the highest-collision file — the storage-track branch owns it each wave.
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Log hygiene (storage) | storage | [issue-42-log-hygiene](../dev-log/issue-42-log-hygiene.md) | ✅ merged (PR [#49](https://github.com/Heliman84/timescope/pull/49), v0.5.0) |
 | 1 | [#42](https://github.com/Heliman84/timescope/issues/42) Malformed-stream coverage (webview) | webview | [issue-42-webview-malformed-streams](../dev-log/issue-42-webview-malformed-streams.md) | ✅ merged (PR [#50](https://github.com/Heliman84/timescope/pull/50), v0.5.1) |
-| 2 | [#48](https://github.com/Heliman84/timescope/issues/48) Local-first storage architecture | storage (solo) | [issue-48-local-first-storage](../dev-log/issue-48-local-first-storage.md) | 🚧 feature-complete (48a+48b+48c on branch; awaiting F5 + PR) |
+| 2 | [#48](https://github.com/Heliman84/timescope/issues/48) Local-first storage architecture | storage (solo) | [issue-48-local-first-storage](../dev-log/issue-48-local-first-storage.md) | ✅ merged (PR [#54](https://github.com/Heliman84/timescope/pull/54), v0.6.0) |
+| 2 | [#2](https://github.com/Heliman84/timescope/issues/2) Folder opt-in (verify/close) | storage | (in [#48](../dev-log/issue-48-local-first-storage.md)) | ✅ closed by #48 (v0.6.0) — was planned late; the fix fell out of the opt-in flow |
 | 3 | [#47](https://github.com/Heliman84/timescope/issues/47) Multi-instance verification | storage | — | not started |
-| 3 | [#15](https://github.com/Heliman84/timescope/issues/15) Hierarchical jobs | webview | — | not started |
+| 3 | [#15](https://github.com/Heliman84/timescope/issues/15) Hierarchical jobs | webview | — | not started — *basic job pickability (US-06) shipped early in #48; entity model remains* |
 | 4 | [#43](https://github.com/Heliman84/timescope/issues/43) Amend events | storage | — | not started |
-| 4 | [#6](https://github.com/Heliman84/timescope/issues/6) Job management + Settings panel | webview | — | not started |
+| 4 | [#6](https://github.com/Heliman84/timescope/issues/6) Job management + Settings tab | webview | — | not started — *opt-out storage (registry) shipped in #48; the Settings-tab UI remains* |
 | 5 | [#3](https://github.com/Heliman84/timescope/issues/3) Scope filtering | webview | — | not started |
-| 5 | [#2](https://github.com/Heliman84/timescope/issues/2) Folder opt-in (verify/close) | — | — | not started |
 
 ## Future capabilities — designed-for, not-in-scope
 
