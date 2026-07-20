@@ -142,6 +142,7 @@ mechanical, via `.claude/settings.json` (a project `model: opus` default) and th
 | **No feature work on develop/main** | `PreToolUse` hook denies Edit/Write to `src/`, `tests/`, `package.json` on `develop`/`main` (docs + `.claude/` stay writable for the spine) | Editing source on the wrong branch |
 | **F5 env actually staged** | `Stop` hook blocks any F5 handoff without a fresh `.claude/.f5-ready.json` receipt (written by `f5_receipt.js` after the verifier stages fixtures) | Handing off a broken/empty test environment |
 | **Dev-log PR link filled** | `Stop` hook blocks a turn that announces a `/pull/<n>` URL while the branch's dev-log still shows `PR: TBD` | Leaving the dev-log's PR link unfilled after opening the PR |
+| **Bounded sessions** | `Stop` hook nudges (non-blocking) at ~40/70/100 turns to checkpoint to the dev-log and continue fresh | Marathon sessions that saturate context and collapse response quality (the wave-3 cost driver) |
 
 The model pin is read at session start, so it only applies to **newly opened / restarted**
 windows — an already-running window must switch with `/model opus`. Hooks fail open: a bug in

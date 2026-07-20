@@ -14,6 +14,7 @@ verbose work and return packets. Tier 0 (single-file/trivial) skips agents entir
 ## 1. Discuss
 
 - If an issue number is given: `gh issue view <N>` (add `--comments` if there's discussion). Restate the problem in your own words; discuss until scope is agreed.
+- **TimeScope issues are high-level on purpose.** Agreeing the *goal* is not enough — a high-level issue carries **embedded decisions** (which entity model, how a legacy path converts, exact UX, a format choice). Surface those **now**, as explicit questions with options + a recommendation, and get the user's answers **before any code**. The planner returns a `Decisions to confirm` section for exactly this. Resolving them up front is what lets the rest run unsupervised; leaving them for implementation is what made #15 thrash and spawn follow-up issues.
 - Unfamiliar territory → spawn **scout** for the recon instead of exploring inline. Structural
   implications (state machine, storage model, data formats) → spawn **architect** for an
   options study to anchor the discussion; the decision stays here with the user.
@@ -47,7 +48,7 @@ Multi-file scope → spawn **planner** for the slice/track plan and pick the tie
 tracks → Tier 2 wave (worktrees + sub-branch PRs into the feature branch — mechanics in the
 `delegate` skill); otherwise Tier 1.
 
-Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEMPLATE.md) to `docs/dev-log/issue-<N>-<short-slug>.md` and fill in the problem + the scope decisions and trade-offs as they're agreed. It's a living decision log through implementation, not a spec — keep it short.
+Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEMPLATE.md) to `docs/dev-log/issue-<N>-<short-slug>.md` and fill in the problem + the scope decisions and trade-offs (including the resolved `Decisions to confirm`). Write it at **two checkpoints, not continuously** — plan-time (decisions) and PR-time (retrospective). Continuous per-turn dev-log churn is narration by another name and inflated context in wave 3; capture the *why* at the checkpoints and keep it short.
 
 ## 4. Implement
 
