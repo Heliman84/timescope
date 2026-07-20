@@ -116,11 +116,33 @@ disposable-but-durable). Per issue, the spine picks the dispatch target:
 
 - **In-spine agent wave** — well-specified, low-UX-judgment issues: run Tier 1/2 right here.
 - **Satellite window** — human-heavy issues (design iteration, repeated F5): create the
-  worktree + feature branch, `code <worktree-path>`, and end with a one-line starter prompt
-  for the user to paste into the new window's cold chat, e.g.
-  `Arc <slug> — wave X — work issue #N. Read docs/arc-log/<file> first.`
-  The satellite runs the normal feature loop with its own tiers/agents, F5s its own branch,
-  and PRs; on merge, dev-log + arc status are finalized and the worktree is removed.
+  worktree + feature branch, `code <worktree-path>`, and hand the user a starter prompt to
+  paste into the new window's cold chat. The satellite runs the normal feature loop with its
+  own tiers/agents, F5s its own branch, and PRs; on merge, dev-log + arc status are finalized
+  and the worktree is removed.
+
+  **Spine starter-prompt rules (a cold chat does exactly what the prompt frames it to do —
+  these are load-bearing):**
+  1. **Cast the chat as the orchestrator, not a coder.** Say so explicitly: "You are the
+     orchestrator for #N — delegate implementation to the project agents; do not build inline."
+     A cold chat that isn't told this will just start coding on whatever model the window is on.
+  2. **Never pre-decide scope in the prompt.** Give breadcrumbs (arc log first, then the issue),
+     not the solution. Point to where scope lives; make the chat restate it and get the user's
+     agreement (feature §1). A prompt that hands over finished scope + "run the feature loop"
+     reads as "go implement" and skips the gate — this is exactly what over-ran a session.
+  3. **Name the non-negotiables:** confirm the window is on **opus** (not Fable) before working;
+     agree scope before branching/building; run the **verifier** and stage the F5 env (receipt)
+     before any handoff.
+  4. **Note the track's file ownership** (e.g. the storage track owns `record_format_spec.md`).
+
+  Template:
+  ```
+  Arc <slug> — wave X/Y — issue #N (<track>). You are the ORCHESTRATOR for this issue,
+  not a coder: delegate implementation to the project agents, do not build inline, and
+  confirm this window is on opus (not Fable) first. Read docs/arc-log/<file>, then issue
+  #N, restate the scope in your own words, and get my agreement BEFORE branching or
+  building. This track owns <files>. Verifier-stage the F5 env before any handoff.
+  ```
 
 Return path: the user tells the spine "done" → the spine re-reads the arc log + `gh` PR/issue
 state and kicks the next wave. **Durable records are the only interface between chats** —
