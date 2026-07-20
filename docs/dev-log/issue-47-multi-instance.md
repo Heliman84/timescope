@@ -3,7 +3,7 @@
 > Decision log, not a spec. Started at plan time, finalized as a retrospective at PR time.
 > Keep it short — capture the *why*, not a blow-by-blow. Skip any section that doesn't apply.
 
-**Issue:** [#47](https://github.com/Heliman84/timescope/issues/47)  ·  **PR:** (pending)  ·  **Arc:** [local-first-storage](../arc-log/arc-local-first-storage.md) (wave 3, storage track)
+**Issue:** [#47](https://github.com/Heliman84/timescope/issues/47)  ·  **PR:** [#64](https://github.com/Heliman84/timescope/pull/64)  ·  **Arc:** [local-first-storage](../arc-log/arc-local-first-storage.md) (wave 3, storage track)
 
 ## Problem
 
@@ -38,3 +38,5 @@ Shipped as planned, all four surfaces closed:
 **Stale threshold:** K=3 missed heartbeats (90s at the existing 30s interval) — enough slack for a slow/backgrounded window's timer tick to fire late without falsely declaring its lock stale, while still recovering promptly from a real crash.
 
 **Verification split:** the pure-Node multi-instance matrix (`test_multi_instance.ts`, `test_instance_lock.ts`, `test_registry.ts`, `test_local_opt_in.ts`, `test_repo_config.ts`) is the regression guard, run on every `npm test`. The two-Extension-Host manual matrix (two real windows on the same repo) is the F5 pass — it's the only way to observe the actual warning UX and confirm heartbeats behave under real VS Code scheduling, but it isn't repeatable CI coverage.
+
+**F5 rig gotcha (cost real time):** a plain *New Window* from an Extension Development Host runs the **installed** extension, not the dev build — so the second window reported the old installed version and the lock never contested. Two dev hosts are required. The reliable, UI-independent way is two CLI launches with distinct user-data dirs: `code --extensionDevelopmentPath=<repo> --user-data-dir=<distinct> --disable-extensions <repo-folder>`. The lock keys on `repo_id` (not folder path), so the same-repo double-open is staged via `repoA-dup` — a separate folder sharing repoA's `repo_id` with an open session — rather than fighting VS Code's "folder already open" focus behavior. Launch configs for `repoA`/`repoB`/`repoA-dup` are checked in.
