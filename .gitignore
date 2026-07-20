@@ -47,6 +47,7 @@ test-workspace-empty/global-storage/*
 # Track the pinned settings + shared-global placeholder; regen data via scripts.
 test-workspace-multi/repoA/.timescope/
 test-workspace-multi/repoB/.timescope/
+test-workspace-multi/repoA-dup/.timescope/
 test-workspace-multi/shared-global/*
 !test-workspace-multi/shared-global/.gitkeep
 test-workspace-empty/.timescope/

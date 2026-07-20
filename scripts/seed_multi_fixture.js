@@ -41,17 +41,48 @@ function makeRepo(name, jobTitle, sessionMins) {
             Event.create(job, "stop", nowMinus(30), "seed session").toJSONL(),
         ].join("\n") + "\n");
 
+    const repo_id = generate_repo_id();
     fs.writeFileSync(path.join(ts, "config.json"),
-        JSON.stringify({ repo_id: generate_repo_id(), format_version: 2, jobs: [{ job_id: job.id, job_title: job.title }] }, null, 2) + "\n");
+        JSON.stringify({ repo_id, format_version: 2, jobs: [{ job_id: job.id, job_title: job.title }] }, null, 2) + "\n");
 
-    console.log(`${name}: job "${jobTitle}" (job_id ${job.id}) + 1 seed session`);
+    console.log(`${name}: job "${jobTitle}" (job_id ${job.id}, repo_id ${repo_id}) + 1 seed session`);
+    return { repo_id, job };
+}
+
+// A stand-in for "the same workspace opened twice": a separate folder that shares
+// repoA's repo_id, so both windows contest the SAME instance lock (the lock keys on
+// repo_id, not path — this sidesteps VS Code's "folder already open" focus behavior).
+// Its log carries an OPEN (unstopped) session so the second window would normally hit
+// orphan-recovery — which a live foreign lock must suppress (#47).
+function makeSameRepoDouble(name, source) {
+    const ts = path.join(base, name, ".timescope");
+    const vs = path.join(base, name, ".vscode");
+    fs.mkdirSync(ts, { recursive: true });
+    fs.mkdirSync(vs, { recursive: true });
+
+    fs.writeFileSync(path.join(vs, "settings.json"),
+        JSON.stringify({ "timescope.global_storage_dir": "../shared-global" }, null, 4) + "\n");
+
+    const header = JSON.stringify({ _format_version: 2 });
+    fs.writeFileSync(path.join(ts, "logs.jsonl"),
+        [header,
+            Event.create(source.job, "start", nowMinus(20)).toJSONL(),
+        ].join("\n") + "\n");
+
+    fs.writeFileSync(path.join(ts, "config.json"),
+        JSON.stringify({ repo_id: source.repo_id, format_version: 2, jobs: [{ job_id: source.job.id, job_title: source.job.title }] }, null, 2) + "\n");
+
+    console.log(`${name}: shares repoA's repo_id ${source.repo_id} + 1 OPEN session (for the double-open warning + recovery-suppression test)`);
 }
 
 fs.rmSync(base, { recursive: true, force: true });
-makeRepo("repoA", "Client-A - Firmware", 90);
+const repoA = makeRepo("repoA", "Client-A - Firmware", 90);
 makeRepo("repoB", "Client-B - PCB Layout", 120);
+makeSameRepoDouble("repoA-dup", repoA);
 
 const shared = path.join(base, "shared-global");
 fs.mkdirSync(shared, { recursive: true });
 fs.writeFileSync(path.join(shared, ".gitkeep"), "");
-console.log("shared-global/ created (empty). Open repoA and repoB in separate windows.");
+console.log("shared-global/ created (empty).");
+console.log("  Different-repo test : open repoA and repoB in two Dev Hosts.");
+console.log("  Same-repo test      : open repoA and repoA-dup in two Dev Hosts (same repo_id).");
