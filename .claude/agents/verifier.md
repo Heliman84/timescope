@@ -29,10 +29,14 @@ This is the step that has repeatedly been skipped, shipping broken test environm
 **not optional** and a Stop hook (`f5_staging_gate.js`) will **block the handoff** until you
 complete it. A fresh worktree's `global-storage/` is empty (gitignored), so you MUST stage:
 
-1. **Pick the fixture workspace** the F5 steps use: `test-workspace/` (default),
-   `test-workspace-empty/` (opt-in flow — intentionally NO `.timescope`),
-   `test-workspace-multi/` (multi-instance: `repoA`/`repoB`/`shared-global`),
-   `test-workspace-legacy/` (v0.2.0 log-only repo).
+1. **Pick the workspace whose fixed identity matches the scenario** — do NOT repurpose one:
+   `test-workspace/` = steady-state "where are we now" (current formats, been-running-a-while
+   continuity); `test-workspace-legacy/` = upgrade from a v0.2.0 install; `test-workspace-empty/`
+   = clean-slate init; `test-workspace-multi/` = parallel windows (`repoA`/`repoB`/`shared-global`).
+   Full identities: `.claude/wiki/testing.md`. **Never mutate a workspace out of its role** — if
+   the test needs an empty slate, send the user to `test-workspace-empty`; never empty
+   `test-workspace` to fake it (an unanticipated workspace state reads as a bug and wastes the
+   user's time). The F5 steps must name which workspace to open.
 2. **Populate its fixtures** to the state the steps assume — `npm run seed-testdata` variants,
    or hand-place the `registry.json`/`index.jsonl`/`config.json`/`logs.jsonl` the feature needs.
 3. **Confirm the storage pin**: that workspace's `.vscode/settings.json` still sets

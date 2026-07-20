@@ -36,6 +36,12 @@ full session budget.
   must stamp `.claude/.f5-ready.json` (pinned to HEAD) via `f5_receipt.js`, and the `Stop` hook
   blocks any F5-handoff-shaped final message without a fresh receipt. This makes "I staged the
   env" an attestation the gate enforces, and it's feature-agnostic.
+- **Fixture workspaces have fixed identities; never repurpose.** Each of the four workspaces
+  answers one question (`test-workspace` steady-state, `-legacy` v0.2.0 upgrade, `-empty`
+  clean-slate, `-multi` parallel). The verifier must pick the matching one and never mutate a
+  workspace out of its role (e.g. emptying `test-workspace` to fake a clean slate) — an
+  unanticipated workspace state reads as a bug and costs the user time. Documented as canonical
+  reference in `.claude/wiki/testing.md`; the receipt's `--workspace` names the one used.
 - **Hooks are Node, not bash.** Portable on the user's Windows/PowerShell setup with no jq/bash
   dependency; Node is already a project requirement. All fail **open** — a guardrail bug must
   never brick a session or block all edits.
@@ -54,7 +60,13 @@ full session budget.
 
 ## Retrospective
 
-_To be filled at PR time._ Built and verified all three hooks against sample stdin (model
-fable/opus; branch guard deny-source/allow-docs on develop vs allow-on-feature; F5 gate
-allow-normal / block-unstaged / allow-after-receipt / block-stale). Prose backstops landed in
-the `delegate` and `feature` skills, the `verifier` agent, `agent-process.md`, and `CLAUDE.md`.
+Shipped in PR #61. Built and verified all three hooks against sample stdin (model fable/opus;
+branch guard deny-source/allow-docs on develop vs allow-on-feature; F5 gate allow-normal /
+block-unstaged / allow-after-receipt / block-stale); `npm test` green, compile clean, no source
+or `package.json` changes. Prose backstops landed in the `delegate` and `feature` skills, the
+`verifier` agent, `agent-process.md`, and `CLAUDE.md`.
+
+Late addition after first review: the four fixture workspaces have **fixed identities** and must
+never be repurposed (the verifier emptying `test-workspace` to fake a clean slate is a
+time-waster, not a help) — documented in `.claude/wiki/testing.md` and enforced in the verifier's
+staging rules + the receipt's `--workspace`.
