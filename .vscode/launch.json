@@ -18,6 +18,60 @@
         "env": {
             "NODE_ENV": "development"
         }
+        },
+        {
+        "name": "Run TimeScope — repoA (multi-instance)",
+        "type": "extensionHost",
+        "request": "launch",
+        "runtimeExecutable": "${execPath}",
+        "args": [
+            "--disable-extensions",
+            "--extensionDevelopmentPath=${workspaceFolder}",
+            "${workspaceFolder}/test-workspace-multi/repoA"
+        ],
+        "outFiles": [
+            "${workspaceFolder}/out/**/*.js"
+        ],
+        "preLaunchTask": "build-timescope",
+        "env": {
+            "NODE_ENV": "development"
+        }
+        },
+        {
+        "name": "Run TimeScope — repoB (multi-instance)",
+        "type": "extensionHost",
+        "request": "launch",
+        "runtimeExecutable": "${execPath}",
+        "args": [
+            "--disable-extensions",
+            "--extensionDevelopmentPath=${workspaceFolder}",
+            "${workspaceFolder}/test-workspace-multi/repoB"
+        ],
+        "outFiles": [
+            "${workspaceFolder}/out/**/*.js"
+        ],
+        "preLaunchTask": "build-timescope",
+        "env": {
+            "NODE_ENV": "development"
+        }
+        },
+        {
+        "name": "Run TimeScope — repoA-dup (same-repo double-open)",
+        "type": "extensionHost",
+        "request": "launch",
+        "runtimeExecutable": "${execPath}",
+        "args": [
+            "--disable-extensions",
+            "--extensionDevelopmentPath=${workspaceFolder}",
+            "${workspaceFolder}/test-workspace-multi/repoA-dup"
+        ],
+        "outFiles": [
+            "${workspaceFolder}/out/**/*.js"
+        ],
+        "preLaunchTask": "build-timescope",
+        "env": {
+            "NODE_ENV": "development"
+        }
         }
     ]
 }

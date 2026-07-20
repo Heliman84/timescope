@@ -13,7 +13,7 @@ the distilled "what a fresh agent needs so it doesn't re-derive the codebase."
 | :--- | :--- |
 | [arch.md](arch.md) | Module map (`src/core/`, `src/dashboard/`, entry point), domain objects, Runtime, the status-bar→disk→dashboard data flow |
 | [contracts.md](contracts.md) | Webview↔extension message protocol, JSONL record format + record IDs, `.timescope/config.json` / `registry.json` / `jobs.json` schemas, package.json contributions |
-| [ops.md](ops.md) | npm scripts, F5 dev rig + fixture workspaces, seeding, CI, tooling versions, branch model, versioning discipline |
+| [ops.md](ops.md) | npm scripts, F5 dev rig + fixture workspaces incl. multi-instance two-host rig, seeding, CI, tooling versions, branch model, versioning discipline |
 | [testing.md](testing.md) | Pure-Node suite pattern (throwing functions, `run_tests.ts`), Playwright webview harness, fixtures, how to add a test, coverage gaps |
 | [gotchas.md](gotchas.md) | Invariants and traps: dedup layers, divergent session reconstruction, Windows atomic-write fallback, padding conventions, corrections log |
 

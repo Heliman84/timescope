@@ -78,6 +78,40 @@ export function run_registry_repository_tests(): void {
 }
 
 /**
+ * Tests RegistryRepository.update (#47 F1 — intent-based read-modify-write):
+ * - Target: RegistryRepository.update in src/core/registry_repository.ts
+ * - What: writer A registers repo-A via update; writer B (whose mutate intent was formed
+ *   before A wrote) registers repo-B via update → reload shows BOTH repos, since update()
+ *   always reloads fresh from disk immediately before applying + saving the mutation.
+ *   Also: a no-op mutate (same instance returned) skips the write entirely.
+ * - Why: replaces whole-registry merge-on-write, which couldn't represent removals (a
+ *   union always resurrects a concurrently-cleared decline). Intent-based update can.
+ */
+export function run_registry_repository_update_tests(): void {
+    const root = mkdir_tmp("update");
+    const registry_path = path.join(root, "registry.json");
+    const repo = new RegistryRepository(registry_path);
+
+    // Writer A registers repo-A.
+    repo.update(r => r.upsert_repo({ id: "repo-a", name: "Alpha", path: "/work/alpha", last_seen: 100 }));
+
+    // Writer B's mutate intent doesn't reference writer A's repo at all — update() reloads
+    // fresh from disk right before applying it, so repo-A's registration is never clobbered.
+    const result = repo.update(r => r.upsert_repo({ id: "repo-b", name: "Beta", path: "/work/beta", last_seen: 200 }));
+    assert.strictEqual(result.repos.length, 2, "update()'s return value reflects both repos");
+
+    const reloaded = repo.load();
+    assert.strictEqual(reloaded.repos.length, 2, "both concurrent registrations survive on disk");
+    assert.strictEqual(reloaded.find_by_id("repo-a")!.name, "Alpha", "writer A's repo survives");
+    assert.strictEqual(reloaded.find_by_id("repo-b")!.name, "Beta", "writer B's repo is saved");
+
+    // A no-op mutate (domain no-op idiom: returns the same instance) skips the write.
+    const mtime_before = fs.statSync(registry_path).mtimeMs;
+    repo.update(r => r);
+    assert.strictEqual(fs.statSync(registry_path).mtimeMs, mtime_before, "update() does not rewrite registry.json for a no-op mutate");
+}
+
+/**
  * Tests the per-folder opt-out ("Never for this folder") stored in the registry (#48/#6):
  * - Target: Registry.is_declined/add_declined/remove_declined in src/core/registry.ts
  * - Why: the opt-out decision moves out of VS Code workspace state into TimeScope's own
@@ -247,4 +281,18 @@ export function run_registry_mint_id_tests(): void {
     // disambiguated id is now itself in the registry, must not chase it further).
     const with_disambiguated = with_collision.upsert_client({ id: minted, name: "Acme" });
     assert.strictEqual(mint_client_id(with_disambiguated, "Acme"), minted, "re-minting the same seed lands back on its own disambiguated id");
+}
+
+/**
+ * Tests Registry.remove_declined's no-op idiom (#47 F1):
+ * - Target: Registry.remove_declined in src/core/registry.ts
+ * - What: returns the *same instance* when the path wasn't declined (mirrors add_declined's
+ *   existing no-op idiom), so RegistryRepository.update() can skip a redundant write.
+ */
+export function run_registry_remove_declined_noop_tests(): void {
+    const r = Registry.empty().add_declined("/work/foo");
+    assert.strictEqual(r.remove_declined("/work/bar"), r, "remove_declined of an undeclined path returns the same instance");
+    const r2 = r.remove_declined("/work/foo");
+    assert.notStrictEqual(r2, r, "remove_declined of a declined path returns a new instance");
+    assert.ok(!r2.is_declined("/work/foo"), "the decline is actually removed");
 }

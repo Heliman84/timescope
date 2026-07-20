@@ -83,6 +83,34 @@ legacy history. It is the successor to the retired global `logs.jsonl`.
   and its events are moved into scratch (deduped by id); the legacy file is then removed so the
   migration runs exactly once.
 
+- Concurrent append + rebuild across two windows is test-verified to converge (`test_multi_instance.ts`):
+  whichever write lands last, the next rebuild reconstructs the deduped union from the owned
+  sources, so no lost write persists past the following activation.
+
+### Instance locks — `locks/<repo_id>.lock.json` (#47)
+
+A per-repo heartbeat file in the global storage dir's `locks/` folder, letting a second VS Code
+window opened on the same opted-in repo detect the first and warn instead of racing timer actions
+and crash-recovery.
+
+```json
+{
+  "pid": 18420,
+  "instance_id": "b6d2e6b0-...-uuid",
+  "heartbeat_iso": "2026-07-19T14:03:21.000Z"
+}
+```
+
+- Written on activation (if acquired) and refreshed every heartbeat tick (30s) by the holding
+  window; removed on clean `deactivate()`.
+- **Stale after 3 missed heartbeats (90s)** — a lock whose `heartbeat_iso` is older than that is
+  treated as an abandoned/crashed window's and is taken over by the next acquirer.
+- A **live** foreign lock at activation (different `instance_id`, not stale) blocks acquisition:
+  the new window shows a warning and skips its own orphan-recovery pass, since the open session
+  belongs to the live window, not a crash.
+- Machine-local, ephemeral, **never committed** — like `index.jsonl`, safe to delete at any time;
+  the next activation simply re-acquires or takes over.
+
 
 ## Jobs Format
 

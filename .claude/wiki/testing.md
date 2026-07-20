@@ -43,6 +43,26 @@
   `malformed_streams.spec.ts`.
 
 
+## F5 fixture workspaces (fixed identities — never repurpose one for another's job)
+
+Each workspace answers **one specific question**. Its identity is stable — pick the workspace
+whose identity matches the scenario, and **never mutate a workspace out of its role** to fake
+another's state.
+
+| Workspace | The question it answers |
+| :--- | :--- |
+| `test-workspace` | **"Where are we right now."** Current file formats, a repo that's been tracking for a while — does today's build keep working / upgrade in place? The steady-state continuity baseline. |
+| `test-workspace-legacy` | **"Will a real upgrade work?"** A last-release install (specifically **v0.2.0**: log-only repo, no `config.json`) opened by today's build. |
+| `test-workspace-empty` | **"Clean-slate init."** No `.timescope` — does first-run / opt-in initialize correctly from nothing? |
+| `test-workspace-multi` | **"Parallel windows."** `repoA` + `repoB` + `shared-global` — multiple VS Code windows working at once without interfering. |
+
+**The rule:** if a feature needs an empty slate, send the tester to `test-workspace-empty` —
+**do not empty `test-workspace`**. If it needs the legacy path, use `test-workspace-legacy` — do
+not strip a config to fake it. When the tester opens the workspace they expect and finds it in an
+unanticipated state, it reads as a bug and burns their time figuring out what's wrong. The F5
+receipt's `--workspace` must name the workspace whose identity matches the test.
+
+
 ## Coverage gaps (by design — the F5 layer)
 
 - No live VS Code host in either suite: activation, status bar rendering, QuickPicks, and

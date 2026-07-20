@@ -67,6 +67,8 @@
 - **`convert_legacy_job` is a full no-op on an unresolvable target** (#15, `task_types.ts`): if
   `target_task_type_id` doesn't exist in the registry, both the alias adoption *and* the repo-config
   pin are skipped — pinning anyway would leave a dangling pin pointing at nothing.
+- **VS Code "New Window" from an EDH doesn't test the dev build**: see `ops.md`'s
+  multi-instance rig section — use two real Extension Development Hosts, not New Window.
 
 
 ## Corrections (wrong turns kept on record — prevents repeat misdiagnoses)
