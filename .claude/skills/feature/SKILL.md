@@ -82,7 +82,7 @@ the user-gated items (version bump, waivers).
   - JSONL canonical field order and format version header untouched unless the spec docs change too
 - [ ] Propose a version bump (patch/minor per [coding_standards.md](../../../coding_standards.md) Versioning rules) with the explicit `from → to`; on user confirmation, edit `package.json`'s `version` and include it in the PR. Never bump silently.
 - [ ] One line added to `CHANGELOG.md` under **Unreleased**
-- [ ] `docs/dev-log/issue-<N>-<slug>.md` finalized: retrospective filled in (what actually shipped, any changes from the plan), issue/PR links set
+- [ ] `docs/dev-log/issue-<N>-<slug>.md` finalized: retrospective filled in (what actually shipped, any changes from the plan), issue/PR links set. **Fill the `**PR:**` link the moment the PR exists** — this is hook-enforced: a `Stop` hook blocks the turn if you announce a PR URL while the dev-log still shows `PR: TBD`.
 
 ## 6. Hand off for F5
 

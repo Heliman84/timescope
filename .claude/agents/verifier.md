@@ -19,7 +19,8 @@ gate fails, report it for the owning builder.
 - [ ] Working tree committed; `git diff --stat origin/develop...HEAD` shows no stray files
 - [ ] `git diff origin/develop...HEAD -- package.json package-lock.json` shows only
       an explicitly approved change (normally: nothing, or the confirmed version bump)
-- [ ] `CHANGELOG.md` has the Unreleased line; dev-log exists for the branch
+- [ ] `CHANGELOG.md` has the Unreleased line; dev-log exists for the branch with its `**PR:**`
+      link filled once the PR exists (not `TBD` — a Stop hook enforces this)
 - [ ] `docs/processes.md` updated if architecture/state machine/data format changed
 
 

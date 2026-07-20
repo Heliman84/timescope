@@ -48,7 +48,10 @@
       { "matcher": "Edit|Write", "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/block_source_edits.js\"" } ] }
     ],
     "Stop": [
-      { "hooks": [ { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/f5_staging_gate.js\"" } ] }
+      { "hooks": [
+        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/f5_staging_gate.js\"" },
+        { "type": "command", "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/dev_log_pr_link_gate.js\"" }
+      ] }
     ]
   },
   "enabledPlugins": {

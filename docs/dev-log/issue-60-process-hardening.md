@@ -3,7 +3,7 @@
 > Decision log, not a spec. Started at plan time, finalized as a retrospective at PR time.
 > Keep it short — capture the *why*, not a blow-by-blow.
 
-**Issue:** [#60](https://github.com/Heliman84/timescope/issues/60)  ·  **PR:** TBD  ·  **Follows:** [#56](https://github.com/Heliman84/timescope/issues/56)
+**Issue:** [#60](https://github.com/Heliman84/timescope/issues/60)  ·  **PR:** [#61](https://github.com/Heliman84/timescope/pull/61)  ·  **Follows:** [#56](https://github.com/Heliman84/timescope/issues/56)
 
 ## Problem
 
@@ -70,3 +70,9 @@ Late addition after first review: the four fixture workspaces have **fixed ident
 never be repurposed (the verifier emptying `test-workspace` to fake a clean slate is a
 time-waster, not a help) — documented in `.claude/wiki/testing.md` and enforced in the verifier's
 staging rules + the receipt's `--workspace`.
+
+Second late addition: a fourth `Stop` hook (`dev_log_pr_link_gate.js`) enforces filling the
+dev-log's `**PR:**` link — this exact omission (leaving `PR: TBD` after opening the PR) had
+recurred across the previous three PRs, proving the advisory checklist line didn't stick. It
+blocks a turn that announces a `/pull/<n>` URL while the branch's dev-log PR field is still a
+placeholder.
