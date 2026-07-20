@@ -56,6 +56,8 @@
   `renameJobInLogByJob` rewrites the log.
 - **Issue numbers are the TODO convention**: no TODO/HACK/FIXME exist under `src/` —
   deferred work is inline `#NN` references (e.g. #43 edit-other-repos, #47 multi-writer).
+- **VS Code "New Window" from an EDH doesn't test the dev build**: see `ops.md`'s
+  multi-instance rig section — use two real Extension Development Hosts, not New Window.
 
 
 ## Corrections (wrong turns kept on record — prevents repeat misdiagnoses)
