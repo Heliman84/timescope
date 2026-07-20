@@ -2,20 +2,22 @@ import * as vscode from "vscode";
 import { Runtime } from "../core/runtime";
 import { ClientEntity, ProjectEntity, Registry, mint_client_id, mint_project_id } from "../core/registry";
 
-const NEW_CLIENT_SENTINEL = "__new_client__";
-const NEW_PROJECT_SENTINEL = "__new_project__";
+// Discriminators for the picker rows. Carried in non-visible custom fields on the
+// QuickPickItem — never in `label`/`description`, which VS Code renders in the UI.
+type ClientPick = vscode.QuickPickItem & { _new?: boolean; _client?: ClientEntity };
+type ProjectPick = vscode.QuickPickItem & { _new?: boolean; _project?: ProjectEntity };
 
 async function pick_or_create_client(registry: Registry): Promise<ClientEntity | null> {
     const clients = registry.clients;
-    const items: vscode.QuickPickItem[] = [{ label: "$(add) New Client…", description: NEW_CLIENT_SENTINEL }];
+    const items: ClientPick[] = [{ label: "$(add) New Client…", _new: true }];
     if (clients.length > 0) {
         items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
-        items.push(...clients.map(c => ({ label: c.name, description: c.id })));
+        items.push(...clients.map(c => ({ label: c.name, _client: c })));
     }
     const picked = await vscode.window.showQuickPick(items, { placeHolder: "Select a Client" });
     if (!picked) return null;
 
-    if (picked.description === NEW_CLIENT_SENTINEL) {
+    if (picked._new) {
         const name = await vscode.window.showInputBox({ prompt: "Enter Client name" });
         if (!name || !name.trim()) return null;
         const trimmed = name.trim();
@@ -24,20 +26,20 @@ async function pick_or_create_client(registry: Registry): Promise<ClientEntity |
         return { id: mint_client_id(registry, trimmed), name: trimmed };
     }
 
-    return clients.find(c => c.id === picked.description) ?? null;
+    return picked._client ?? null;
 }
 
 async function pick_or_create_project(registry: Registry, client: ClientEntity): Promise<ProjectEntity | null> {
     const projects = registry.projects.filter(p => p.client_id === client.id);
-    const items: vscode.QuickPickItem[] = [{ label: "$(add) New Project…", description: NEW_PROJECT_SENTINEL }];
+    const items: ProjectPick[] = [{ label: "$(add) New Project…", _new: true }];
     if (projects.length > 0) {
         items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
-        items.push(...projects.map(p => ({ label: p.name, description: p.id })));
+        items.push(...projects.map(p => ({ label: p.name, _project: p })));
     }
     const picked = await vscode.window.showQuickPick(items, { placeHolder: `Select a Project for ${client.name}` });
     if (!picked) return null;
 
-    if (picked.description === NEW_PROJECT_SENTINEL) {
+    if (picked._new) {
         const name = await vscode.window.showInputBox({ prompt: "Enter Project name" });
         if (!name || !name.trim()) return null;
         const trimmed = name.trim();
@@ -46,7 +48,7 @@ async function pick_or_create_project(registry: Registry, client: ClientEntity):
         return { id: mint_project_id(registry, client.id, trimmed), name: trimmed, client_id: client.id };
     }
 
-    return projects.find(p => p.id === picked.description) ?? null;
+    return picked._project ?? null;
 }
 
 /**

@@ -3,8 +3,13 @@ import { Runtime } from "../core/runtime";
 import { TaskTypeEntity, mint_task_type_id } from "../core/registry";
 import { resolve_task_type, convert_legacy_job } from "../core/task_types";
 
-const NEW_TASK_TYPE_SENTINEL = "__new_task_type__";
-const OTHER_SENTINEL = "__other__";
+// Discriminators for the picker rows. Carried in non-visible custom fields on the
+// QuickPickItem — never in `label`/`description`, which VS Code renders in the UI.
+type TaskTypePick = vscode.QuickPickItem & {
+    _kind?: "new" | "other";
+    _task_type?: TaskTypeEntity;
+    _job_id?: string;
+};
 
 /**
  * Prompt for a new task-type name and persist it to the registry immediately.
@@ -33,19 +38,19 @@ async function pick_or_create_task_type(
     candidates: TaskTypeEntity[],
     opts: { placeHolder: string; suggested_name?: string }
 ): Promise<TaskTypeEntity | null> {
-    const items: vscode.QuickPickItem[] = [{ label: "$(add) New Task-type…", description: NEW_TASK_TYPE_SENTINEL }];
+    const items: TaskTypePick[] = [{ label: "$(add) New Task-type…", _kind: "new" }];
     if (candidates.length > 0) {
         items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
-        items.push(...candidates.map(t => ({ label: t.name, description: t.id })));
+        items.push(...candidates.map(t => ({ label: t.name, _task_type: t })));
     }
     const picked = await vscode.window.showQuickPick(items, { placeHolder: opts.placeHolder });
     if (!picked) return null;
 
-    if (picked.description === NEW_TASK_TYPE_SENTINEL) {
+    if (picked._kind === "new") {
         return create_task_type(runtime, opts.suggested_name);
     }
 
-    return candidates.find(t => t.id === picked.description) ?? null;
+    return picked._task_type ?? null;
 }
 
 /**
@@ -63,23 +68,23 @@ export async function pick_task_type(runtime: Runtime): Promise<TaskTypeEntity |
     const legacy_jobs = runtime.pickableJobs().toArray()
         .filter(j => !resolve_task_type(registry, j.id));
 
-    const items: (vscode.QuickPickItem & { _job_id?: string; _task_type_id?: string })[] = [
-        { label: "$(add) New Task-type…", description: NEW_TASK_TYPE_SENTINEL },
-        { label: "$(list-flat) Other…", description: OTHER_SENTINEL },
+    const items: TaskTypePick[] = [
+        { label: "$(add) New Task-type…", _kind: "new" },
+        { label: "$(list-flat) Other…", _kind: "other" },
     ];
     if (main_list.length > 0) {
         items.push({ label: "", kind: vscode.QuickPickItemKind.Separator });
-        items.push(...main_list.map(t => ({ label: t.name, description: t.id, _task_type_id: t.id })));
+        items.push(...main_list.map(t => ({ label: t.name, _task_type: t })));
     }
     if (legacy_jobs.length > 0) {
         items.push({ label: "", kind: vscode.QuickPickItemKind.Separator, });
-        items.push(...legacy_jobs.map(j => ({ label: `${j.title} (legacy)`, description: j.id, _job_id: j.id })));
+        items.push(...legacy_jobs.map(j => ({ label: `${j.title} (legacy)`, _job_id: j.id })));
     }
 
     const picked = await vscode.window.showQuickPick(items, { placeHolder: "Select a Task-type to start" });
     if (!picked) return null;
 
-    if (picked.description === NEW_TASK_TYPE_SENTINEL) {
+    if (picked._kind === "new") {
         const created = await create_task_type(runtime);
         if (!created) return null;
         if (runtime.repoConfig) {
@@ -91,13 +96,13 @@ export async function pick_task_type(runtime: Runtime): Promise<TaskTypeEntity |
         return created;
     }
 
-    if (picked.description === OTHER_SENTINEL) {
+    if (picked._kind === "other") {
         const full_vocab = runtime.registryRepo.load().task_types;
         return pick_or_create_task_type(runtime, full_vocab, { placeHolder: "Select from the full Task-type vocabulary" });
     }
 
-    if (picked._task_type_id) {
-        return main_list.find(t => t.id === picked._task_type_id) ?? null;
+    if (picked._task_type) {
+        return picked._task_type;
     }
 
     if (picked._job_id) {
