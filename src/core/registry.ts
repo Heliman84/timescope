@@ -96,8 +96,9 @@ export class Registry {
         return new Registry(this._repos.slice(), [...this._declined, p]);
     }
 
-    /** Clear a folder's decline — the underlying reverse of opt-out (UI is #6). */
+    /** Clear a folder's decline — the underlying reverse of opt-out (UI is #6). No-op (same instance) if not declined. */
     remove_declined(p: string): Registry {
+        if (!this.is_declined(p)) return this;
         const target = normalize_path(p);
         return new Registry(this._repos.slice(), this._declined.filter(d => normalize_path(d) !== target));
     }

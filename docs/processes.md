@@ -17,26 +17,37 @@ flowchart TD
     B --> B3["load_build_info(extensionRoot)<br>→ out/buildinfo.json or null"]
     A --> C["runtime.loadJobs()"]
     C --> D["update VS Code settings<br>(global_jobs_path, global_log_path)"]
-    D --> E["runtime.initializeUI()<br>→ divider, start, pause,<br>resume, stop, summary"]
-    E --> F["checkAndRecover(logRepo)"]
-    F --> F1{"last session open?"}
-    F1 -- No --> F2["return null"]
+    D --> R["register_if_opted_in<br>→ registry.update(upsert)"]
+    R --> L["acquire_lock(repo_id)<br>locks/&lt;repo_id&gt;.lock.json"]
+    L --> L1{"live foreign lock?"}
+    L1 -- Yes --> L2["warn: already tracked<br>elsewhere; suppress recovery"]
+    L1 -- No --> E["runtime.initializeUI()<br>→ divider, start, pause,<br>resume, stop, summary"]
+    L2 --> E
+    E --> F{"suppress recovery?"}
+    F -- Yes --> F2["skip checkAndRecover<br>→ active session = null"]
+    F -- No --> F0["checkAndRecover(logRepo)"]
+    F0 --> F1{"last session open?"}
+    F1 -- No --> F2b["return null"]
     F1 -- Yes --> F3["show QuickPick<br>(stop / pause / resume)"]
     F3 --> F4["append recovery event(s)<br>via repo.appendValidated"]
     F4 --> F5["return recovered Session or null"]
     F2 --> G
+    F2b --> G
     F5 --> G
     G["runtime.setActiveSession()<br>→ updateStatusBar,<br>start/stop timer"]
     G --> H["register commands<br>(start, pause, resume, stop,<br>dashboard, addJob,<br>renameJob, deleteJob,<br>showBuildInfo)"]
 
     style A fill:#5b21b6,stroke:#333,color:#fff
     style F3 fill:#92400e,stroke:#333,color:#fff
+    style L2 fill:#92400e,stroke:#333,color:#fff
     style G fill:#065f46,stroke:#333,color:#fff
     style H fill:#1e3a5f,stroke:#333,color:#fff
 ```
 
 **Key points:**
 - `Runtime` is the single owner of paths, repositories, cached `EventCollection`, active `Session`, timer interval, and UI items.
+- Every `registry.json` writer (registration, decline, undecline) goes through `RegistryRepository.update(mutate)` — reload fresh from disk, apply the intent, atomic write — so a concurrent window's write is never clobbered and removals are never resurrected (#47).
+- The per-repo instance lock (#47) is acquired right after registration; a **live** foreign lock (another window's heartbeat still fresh) triggers a warning and suppresses this window's orphan-recovery pass — the open session belongs to the live window, not a crash. A stale lock (3 missed heartbeats, 90s) is taken over silently.
 - `checkAndRecover` reads the last session from this window's owned stores (workspace + scratch) via `EventRepository.loadLastSession("both")`. If the session is open (last event is not `stop`), the user is prompted. Recovery events flow through the same `appendValidated` path as normal commands.
 - No background timer starts unless a session is active after recovery.
 

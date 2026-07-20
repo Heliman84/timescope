@@ -25,11 +25,27 @@
 - `test-workspace/.vscode/settings.json` pins `timescope.global_storage_dir: "global-storage"`
   (relative → `test-workspace/global-storage/`) — F5 never touches real tracking data.
 - Fixture workspaces: `test-workspace/` (main), `test-workspace-empty/` (opt-in prompt),
-  `test-workspace-legacy/` (migration), `test-workspace-multi/` (repoA/repoB shared-global) —
-  each with its own pinned settings.
+  `test-workspace-legacy/` (migration), `test-workspace-multi/` (repoA/repoB/repoA-dup,
+  shared-global) — each with its own pinned settings.
 - Seeding: `scripts/seed_test_data.js` writes global-storage **and** `.timescope/` stores,
   deliberately duplicating a week of record IDs across them to exercise dedup (#39). Uses
   compiled `out/core/*.js`.
+
+### Multi-instance rig (two real Extension Development Hosts)
+
+A plain VS Code *New Window* from an EDH runs the **installed** TimeScope, not the dev
+build (`--extensionDevelopmentPath` isn't inherited) — it silently tests the wrong version
+and the instance lock never contests. A genuine two-instance test needs two EDHs, launched
+either via the checked-in configs ("Run TimeScope — repoA (multi-instance)", "repoB",
+"repoA-dup (same-repo double-open)") or by CLI with distinct user-data dirs:
+`code --extensionDevelopmentPath=<repo> --user-data-dir=<distinctA> --disable-extensions
+<repo>/test-workspace-multi/repoA` (repeat with `<distinctB>` + `repoB`). The instance lock
+keys on `repo_id` from `.timescope/config.json`, not folder path — `repoA-dup` is a separate
+folder sharing repoA's `repo_id` (with an open/unstopped session, to also exercise
+recovery-suppression) so same-repo double-open can be staged without fighting VS Code's
+"folder already open" focus behavior. Regenerate fixtures with
+`node scripts/seed_multi_fixture.js` (creates repoA/repoB/repoA-dup under
+`test-workspace-multi/`, all pinned to `../shared-global`).
 
 
 ## Tooling & CI
