@@ -17,6 +17,10 @@ build/
 npm-debug.log*
 .env
 
+# F5 staging receipt — worktree-local attestation written by .claude/hooks/f5_receipt.js,
+# checked by the F5-staging Stop hook. Never commit (it is per-checkout, per-commit state).
+.claude/.f5-ready.json
+
 # OS / editor files
 .DS_Store
 .vscode/*.local

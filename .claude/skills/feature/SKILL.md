@@ -21,12 +21,23 @@ verbose work and return packets. Tier 0 (single-file/trivial) skips agents entir
 
 ## 2. Branch
 
+**Scope gate — a hard STOP.** Do not create the branch, spawn a builder, or edit source until
+the user has agreed the scope *in response to your restatement of it*. Restating the issue back
+to yourself is not agreement; a starter prompt that arrived with scope pre-baked is not
+agreement. If you are in a satellite window that opened straight onto an issue, treat scope as
+**not yet agreed** and get it before proceeding. Skipping this gate is what over-ran a whole
+session budget on mis-scoped work.
+
 Only after scope is agreed:
 
 ```
 git checkout develop && git pull
 git checkout -b feature/issue-<N>-<short-slug>
 ```
+
+A PreToolUse hook blocks source edits on `develop`/`main`, so being on the feature branch is
+also mechanically required before implementation — but the branch is downstream of the gate,
+not a substitute for it.
 
 ## 3. Plan
 
@@ -40,6 +51,10 @@ Start the dev log now: copy [docs/dev-log/TEMPLATE.md](../../../docs/dev-log/TEM
 
 ## 4. Implement
 
+- **Delegate the bulk; don't build inline.** Implementation is the agents' job — the
+  orchestrator window is high-tier (opus, sometimes higher) and expensive, and doing the
+  token-heavy work there instead of in a sonnet builder is what ran a session dry. Beyond a
+  Tier 0 one-liner, hand slices to a builder.
 - Tier 1+: delegate slices to **builder** (core) / **ui-builder** (webview); Tier 2 runs them
   in parallel worktrees per the `delegate` skill. Builders self-verify and return build
   packets with draft F5 notes; review findings bounce back to the owning builder.
@@ -67,7 +82,7 @@ the user-gated items (version bump, waivers).
   - JSONL canonical field order and format version header untouched unless the spec docs change too
 - [ ] Propose a version bump (patch/minor per [coding_standards.md](../../../coding_standards.md) Versioning rules) with the explicit `from → to`; on user confirmation, edit `package.json`'s `version` and include it in the PR. Never bump silently.
 - [ ] One line added to `CHANGELOG.md` under **Unreleased**
-- [ ] `docs/dev-log/issue-<N>-<slug>.md` finalized: retrospective filled in (what actually shipped, any changes from the plan), issue/PR links set
+- [ ] `docs/dev-log/issue-<N>-<slug>.md` finalized: retrospective filled in (what actually shipped, any changes from the plan), issue/PR links set. **Fill the `**PR:**` link the moment the PR exists** — this is hook-enforced: a `Stop` hook blocks the turn if you announce a PR URL while the dev-log still shows `PR: TBD`.
 
 ## 6. Hand off for F5
 
@@ -78,6 +93,13 @@ When you do hand off, STOP and tell the user the branch is ready. Do NOT create 
 The handoff content comes from the F5 packet: builders draft per-slice notes → **verifier**
 assembles one packet and leaves the checkout F5-ready → the orchestrator delivers it in the
 user's terms (below).
+
+**The F5 environment must actually be staged, not assumed.** A fresh worktree's
+`global-storage/` is empty (gitignored), so the verifier populates the fixture workspace the
+steps use and stamps a receipt (`node .claude/hooks/f5_receipt.js …`). A Stop hook blocks the
+handoff until that receipt exists for the current commit — so "I set up the test environment"
+is enforced, not promised. Never hand off telling the user to F5 an environment you have not
+staged and looked at.
 
 **Every F5 handoff must open with a context header** so the user doesn't have to reconstruct where we are:
 
