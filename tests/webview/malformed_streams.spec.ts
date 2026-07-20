@@ -35,16 +35,16 @@ test("dangling start and stop-without-start produce no sessions", async ({ page 
 test("pause never resumed: paused tail excluded from duration, no pair counted", async ({ page }) => {
     // Orphan 09:00–10:00, paused at 09:30 with no resume → 0.50h active.
     const row = page.locator("#session_table_body tr", { hasText: "orphan work" });
-    await expect(row.locator("td").nth(2)).toHaveText("0.50h");
+    await expect(row.locator("td").nth(3)).toHaveText("0.50h");
     // The dangling pause is NOT a pause/resume pair.
-    await expect(row.locator("td").nth(6)).toHaveText("0");
+    await expect(row.locator("td").nth(7)).toHaveText("0");
 });
 
 test("resume without a pause is ignored", async ({ page }) => {
     // Skip 10:00–11:00 with an orphan resume at 10:30 → full 1.00h, no pairs.
     const row = page.locator("#session_table_body tr", { hasText: "skip work" });
-    await expect(row.locator("td").nth(2)).toHaveText("1.00h");
-    await expect(row.locator("td").nth(6)).toHaveText("0");
+    await expect(row.locator("td").nth(3)).toHaveText("1.00h");
+    await expect(row.locator("td").nth(7)).toHaveText("0");
 });
 
 test("double start finalizes the first session at the second start", async ({ page }) => {
@@ -52,11 +52,11 @@ test("double start finalizes the first session at the second start", async ({ pa
     // First session 13:00–14:00 (task from its start event), second 14:00–15:30.
     const first = page.locator("#session_table_body tr", { hasText: "twice-first" });
     await expect(first).toHaveCount(1);
-    await expect(first.locator("td").nth(2)).toHaveText("1.00h");
+    await expect(first.locator("td").nth(3)).toHaveText("1.00h");
 
     const second = page.locator("#session_table_body tr", { hasText: "twice-stop" });
     await expect(second).toHaveCount(1);
-    await expect(second.locator("td").nth(2)).toHaveText("1.50h");
+    await expect(second.locator("td").nth(3)).toHaveText("1.50h");
 
     // Table is newest-first: the 14:00 session outranks the 13:00 one.
     const rows = page.locator("#session_table_body tr");

@@ -11,8 +11,10 @@ import { Job } from "./job";
 import { updateTimerText, updateStatusBar, startTimerInterval, stopTimerInterval } from "./timer";
 import { load_build_info, BuildInfo } from "./build_info";
 import { rebuild_index, registry_log_paths } from "./global_index";
-import { RepoConfigJob } from "./repo_config";
+import { RepoConfig, RepoConfigJob, RepoConfigBinding, read_repo_config, write_repo_config } from "./repo_config";
 import { ensure_repo_jobs_cache } from "./repo_jobs";
+import { TaskTypeEntity } from "./registry";
+import { pickable_task_types } from "./task_types";
 
 export class Runtime {
   public readonly paths: TimeScopePaths;
@@ -27,6 +29,13 @@ export class Runtime {
 
   /** The repo's cached jobs (US-06), from `.timescope/config.json`. Empty when no workspace. */
   public repoJobs: RepoConfigJob[] = [];
+
+  /**
+   * This repo's full `.timescope/config.json` (#15: Client/Project binding +
+   * pinned task-types), refreshed alongside `repoJobs`. `null` when no opted-in
+   * workspace is open (scratch/non-workspace context, or not yet opted in).
+   */
+  public repoConfig: RepoConfig | null = null;
 
   private _cachedCollection: EventCollection | null = null;
 
@@ -209,11 +218,47 @@ export class Runtime {
   /**
    * Refresh the repo's cached jobs from `config.json` (US-06), deriving them from the
    * owned log and auto-upgrading the config when needed. Only runs for an opted-in
-   * workspace — never creates `.timescope/` speculatively (#2).
+   * workspace — never creates `.timescope/` speculatively (#2). Also refreshes the
+   * full `repoConfig` (#15 binding + pinned task-types) from the same file.
    */
   public refreshRepoJobs(): void {
-    if (!this.paths.workspace_log_path) { this.repoJobs = []; return; }
+    if (!this.paths.workspace_log_path) { this.repoJobs = []; this.repoConfig = null; return; }
     this.repoJobs = ensure_repo_jobs_cache(this.paths.repo_config_path, this.paths.workspace_log_path);
+    this.repoConfig = this.paths.repo_config_path ? read_repo_config(this.paths.repo_config_path) : null;
+  }
+
+  /**
+   * This repo's Client/Project binding (#15), or `undefined` when unbound or when no
+   * opted-in workspace is open. Strict binding: a bound repo's sessions belong to this
+   * Client/Project implicitly — it's never stored on the events themselves.
+   */
+  public get repoBinding(): RepoConfigBinding | undefined {
+    return this.repoConfig?.binding;
+  }
+
+  /**
+   * The ordered task-type picker list (#15): this repo's pinned task-types first, then
+   * the rest of the global vocabulary. Falls back to the full global vocabulary
+   * (registry order, nothing pinned) for a scratch/non-workspace or unbound context —
+   * there's no repo config to pin against.
+   */
+  public pickableTaskTypes(): TaskTypeEntity[] {
+    const registry = this.registryRepo.load();
+    if (!this.repoConfig) return registry.task_types;
+    return pickable_task_types(registry, this.repoConfig);
+  }
+
+  /**
+   * Persist an updated `.timescope/config.json` (e.g. after binding to a Client/Project,
+   * or converting a legacy job into a task-type) and refresh the in-memory cache.
+   * Requires an opted-in workspace — never creates `.timescope/` speculatively (#2).
+   */
+  public persistRepoConfig(config: RepoConfig): void {
+    if (!this.paths.repo_config_path) {
+      throw new Error("persistRepoConfig: no repo config path — this workspace is not opted in");
+    }
+    write_repo_config(this.paths.repo_config_path, config);
+    this.repoConfig = config;
   }
 
   /**

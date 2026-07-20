@@ -1,3 +1,5 @@
+import { compute_seeded_id } from "./id_gen";
+
 // Temporary Job record shape used by the domain. This will be moved to the
 // infrastructure layer as a proper DTO in Step 3.
 export type JobRecord = {
@@ -192,19 +194,6 @@ export class Job {
   // Private helpers (domain logic kept inside the class)
   // ------------------
   private static computeJobIdFromSeed(seed: string): string {
-    const hash32 = Job.fnv1a32(seed);
-    const base36 = (hash32 >>> 0).toString(36).toLowerCase();
-    // Ensure exactly 5 characters (pad left with '0' if needed)
-    return base36.padStart(5, '0').slice(0, 5);
-  }
-
-  // FNV-1a 32-bit, deterministic and platform-independent over UTF-16 code units
-  private static fnv1a32(str: string): number {
-    let h = 0x811c9dc5 >>> 0;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return h >>> 0;
+    return compute_seeded_id(seed, 5);
   }
 }

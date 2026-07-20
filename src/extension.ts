@@ -5,6 +5,8 @@ import * as crypto from "crypto";
 import { Runtime } from "./core/runtime";
 import { JobCollection } from "./core/job_collection";
 import { pickJob } from "./ui/pick_job";
+import { ensure_repo_binding } from "./ui/pick_binding";
+import { pick_task_type } from "./ui/pick_task_type";
 import { handle_dashboard } from "./dashboard/controller/dashboard";
 import { checkAndRecover } from "./core/recovery";
 import { Session } from "./core/session";
@@ -261,14 +263,25 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand("timescope.start", async () => {
             // First Start in an un-opted-in workspace offers local logging (#2/#48).
             await maybe_prompt_local_opt_in(runtime);
+            // Pick up a just-established opt-in (config.json + binding may be new).
+            runtime.refreshRepoJobs();
 
-            // Picker offers global jobs ∪ this repo's cached jobs (US-06).
-            const job = await pickJob(runtime.pickableJobs(), { placeHolder: "Select a job to start", includeNewJob: true, jobRepo: runtime.jobRepo });
-            if (!job) return;
-
-            if (!runtime.jobs.findById(job.id)) {
-                runtime.jobs = runtime.jobs.add(job);
+            // #15: an opted-in repo belongs implicitly to a Client/Project — ensure
+            // that binding before offering the task-type picker. A non-workspace/scratch
+            // context (or a workspace that declined local logging) skips binding
+            // entirely; the task-type picker still offers the full global vocabulary.
+            if (runtime.paths.workspace_log_path) {
+                const bound = await ensure_repo_binding(runtime);
+                if (!bound) return; // user cancelled the binding flow
             }
+
+            const task_type = await pick_task_type(runtime);
+            if (!task_type) return;
+
+            // Task-types are never persisted to jobs.json — construct a partial Job
+            // (id + title only) purely for session/event creation, the same seam
+            // `fromEventFields` uses when reconstructing jobs from logged events.
+            const job = Job.fromEventFields(task_type.id, task_type.name);
 
             const session = Session.start(job);
             const startEvent = session.startEvent;

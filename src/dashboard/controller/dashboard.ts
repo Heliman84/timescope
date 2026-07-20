@@ -3,9 +3,26 @@ import * as fs from "fs";
 import { Runtime } from "../../core/runtime";
 import { Event, ValidationError } from "../../core/event";
 import { buildPayload, filterRelevantErrors } from "./dashboard_utils";
+import { build_attributed_payload } from "./attribution";
 import { format_build_info_full } from "../../core/build_info";
 
 export { buildPayload, filterRelevantErrors };
+
+/**
+ * Build the #15 attributed dashboard payload for the current runtime state —
+ * reads owned sources only (registered repo logs + scratch), never the derived
+ * `index.jsonl`. Used for both the `request_data` reply and the `edit_result`
+ * replies (edit_log_entry/edit_log_entries) — the dashboard's hierarchy
+ * grouping/labelling must survive an edit, not just the initial load.
+ */
+function build_dashboard_payload(runtime: Runtime) {
+    const registry = runtime.registryRepo.load();
+    return build_attributed_payload({
+        registry,
+        scratch_path: runtime.paths.scratch_path,
+        current_workspace_repo_id: runtime.repoConfig?.repo_id,
+    });
+}
 
 export async function handle_dashboard(runtime: Runtime, context: vscode.ExtensionContext) {
     const panel = vscode.window.createWebviewPanel(
@@ -49,10 +66,9 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
 
     panel.webview.onDidReceiveMessage(async (msg) => {
         if (msg.type === "request_data") {
-            const collection = runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "summary_data",
-                payload: buildPayload(collection.toEvents()),
+                payload: build_dashboard_payload(runtime),
                 build_info: format_build_info_full(runtime.buildInfo)
             });
         }
@@ -73,10 +89,10 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 try { candidate = Event.fromDTO(new_record); }
                 catch (err) {
                     summary.errors.push(`Edit failed: could not construct event from record — ${err instanceof Error ? err.message : String(err)}`);
-                    const updated = runtime.refreshEventCollection();
+                    runtime.refreshEventCollection();
                     panel.webview.postMessage({
                         type: "edit_result",
-                        payload: { summary, payload: buildPayload(updated.toEvents()) }
+                        payload: { summary, payload: build_dashboard_payload(runtime) }
                     });
                     return;
                 }
@@ -114,10 +130,10 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 }
             }
 
-            const updated = runtime.refreshEventCollection();
+            runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "edit_result",
-                payload: { summary, payload: buildPayload(updated.toEvents()) }
+                payload: { summary, payload: build_dashboard_payload(runtime) }
             });
         }
 
@@ -183,10 +199,10 @@ export async function handle_dashboard(runtime: Runtime, context: vscode.Extensi
                 summary.errors.push(...filterRelevantErrors(errors, editedEvents));
             }
 
-            const finalCollection = runtime.refreshEventCollection();
+            runtime.refreshEventCollection();
             panel.webview.postMessage({
                 type: "edit_result",
-                payload: { summary, payload: buildPayload(finalCollection.toEvents()) }
+                payload: { summary, payload: build_dashboard_payload(runtime) }
             });
         }
     });

@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as assert from "assert";
-import { Registry } from "../core/registry";
+import { Registry, mint_client_id, mint_project_id, mint_task_type_id } from "../core/registry";
 import { RegistryRepository } from "../core/registry_repository";
+import { compute_seeded_id } from "../core/id_gen";
 
 function mkdir_tmp(suffix: string): string {
     const root = path.join(__dirname, "..", "..", "test-output", `registry-${suffix}-${Date.now()}`);
@@ -149,6 +150,137 @@ export function run_registry_declined_tests(): void {
     // from_dto tolerates missing / malformed declined (older registries).
     assert.strictEqual(Registry.from_dto({ repos: [] }).declined_paths.length, 0, "missing declined → empty");
     assert.strictEqual(Registry.from_dto({ declined: "nope" }).declined_paths.length, 0, "non-array declined ignored");
+}
+
+/**
+ * Tests the #15 hierarchical entity vocabulary (clients/projects/task-types) on Registry:
+ * - Target: Registry.upsert_client/upsert_project/upsert_task_type/add_task_type_alias,
+ *   from_dto/to_dto in src/core/registry.ts
+ * - Why: clients, projects, and task-types are global entities that must round-trip
+ *   through registry.json additively (format_version stays 1) and tolerate malformed rows.
+ */
+export function run_registry_entity_tests(): void {
+    const empty = Registry.empty();
+    assert.strictEqual(empty.clients.length, 0, "empty registry has no clients");
+    assert.strictEqual(empty.projects.length, 0, "empty registry has no projects");
+    assert.strictEqual(empty.task_types.length, 0, "empty registry has no task-types");
+
+    // upsert_client is immutable and dedups by id.
+    const r1 = empty.upsert_client({ id: "c1", name: "Acme" });
+    assert.strictEqual(empty.clients.length, 0, "upsert_client must not mutate the source");
+    assert.strictEqual(r1.clients.length, 1, "upsert_client adds a client");
+    const r2 = r1.upsert_client({ id: "c1", name: "Acme Corp" });
+    assert.strictEqual(r2.clients.length, 1, "same-id upsert_client does not duplicate");
+    assert.strictEqual(r2.clients[0].name, "Acme Corp", "same-id upsert_client updates fields");
+
+    // upsert_project is immutable and dedups by id.
+    const r3 = r2.upsert_project({ id: "p1", name: "Website", client_id: "c1" });
+    assert.strictEqual(r3.projects.length, 1, "upsert_project adds a project");
+    const r4 = r3.upsert_project({ id: "p1", name: "Website Redesign", client_id: "c1" });
+    assert.strictEqual(r4.projects.length, 1, "same-id upsert_project does not duplicate");
+    assert.strictEqual(r4.projects[0].name, "Website Redesign", "same-id upsert_project updates fields");
+
+    // upsert_task_type is immutable and dedups by id.
+    const r5 = r4.upsert_task_type({ id: "t1", name: "Development" });
+    assert.strictEqual(r5.task_types.length, 1, "upsert_task_type adds a task-type");
+    const r6 = r5.upsert_task_type({ id: "t1", name: "Dev" });
+    assert.strictEqual(r6.task_types.length, 1, "same-id upsert_task_type does not duplicate");
+    assert.strictEqual(r6.task_types[0].name, "Dev", "same-id upsert_task_type updates fields");
+
+    // add_task_type_alias is immutable, additive, and idempotent.
+    const r7 = r6.add_task_type_alias("t1", "legacy-job-a");
+    assert.deepStrictEqual(r7.task_types[0].aliases, ["legacy-job-a"], "alias added");
+    assert.strictEqual(r6.task_types[0].aliases, undefined, "add_task_type_alias must not mutate the source");
+    const r8 = r7.add_task_type_alias("t1", "legacy-job-a");
+    assert.strictEqual(r8.task_types[0].aliases!.length, 1, "duplicate alias does not duplicate");
+    const r9 = r8.add_task_type_alias("t1", "legacy-job-b");
+    assert.deepStrictEqual(r9.task_types[0].aliases, ["legacy-job-a", "legacy-job-b"], "second alias appends");
+
+    // Unknown task-type id: no-op (tolerant, doesn't throw).
+    const r10 = r9.add_task_type_alias("does-not-exist", "whatever");
+    assert.strictEqual(r10, r9, "alias on unknown task-type id is a no-op");
+
+    // DTO round-trip: format_version stays 1, entities all survive.
+    const dto = r9.to_dto();
+    assert.strictEqual(dto.format_version, 1, "format_version stays 1");
+    const back = Registry.from_dto(dto);
+    assert.strictEqual(back.clients.length, 1, "clients survive round-trip");
+    assert.strictEqual(back.projects.length, 1, "projects survive round-trip");
+    assert.strictEqual(back.task_types.length, 1, "task_types survive round-trip");
+    assert.deepStrictEqual(back.task_types[0].aliases, ["legacy-job-a", "legacy-job-b"], "aliases survive round-trip");
+    assert.strictEqual(back.projects[0].client_id, "c1", "project client_id survives round-trip");
+
+    // Registries without the arrays load as empty (additive: older registry.json files).
+    const legacy = Registry.from_dto({ format_version: 1, repos: [], declined: [] });
+    assert.strictEqual(legacy.clients.length, 0, "no clients array → empty");
+    assert.strictEqual(legacy.projects.length, 0, "no projects array → empty");
+    assert.strictEqual(legacy.task_types.length, 0, "no task_types array → empty");
+
+    // Malformed entity rows are dropped, same tolerance style as repos.
+    const malformed = Registry.from_dto({
+        clients: [{ id: "c1", name: "Ok" }, { id: "" }, { name: "no id" }, null],
+        projects: [{ id: "p1", name: "Ok", client_id: "c1" }, { id: "p2", name: "no client_id" }, { id: "p3", client_id: "c1" }],
+        task_types: [{ id: "t1", name: "Ok" }, { id: "t2" }, { name: "no id" }],
+    });
+    assert.strictEqual(malformed.clients.length, 1, "malformed client rows dropped");
+    assert.strictEqual(malformed.projects.length, 1, "malformed project rows dropped");
+    assert.strictEqual(malformed.task_types.length, 1, "malformed task_type rows dropped");
+
+    // Unknown extra fields on a task_type row must not cause rejection.
+    const extra = Registry.from_dto({
+        task_types: [{ id: "t1", name: "Development", aliases: ["a"], owner_project: "future-field", extra_junk: 42 }],
+    });
+    assert.strictEqual(extra.task_types.length, 1, "task_type with unknown extra fields is kept");
+    assert.strictEqual(extra.task_types[0].name, "Development", "known fields still read correctly");
+    assert.deepStrictEqual(extra.task_types[0].aliases, ["a"], "aliases still read correctly alongside unknown fields");
+
+    // Non-array / malformed aliases on a task_type are tolerated (dropped to undefined).
+    const badAliases = Registry.from_dto({ task_types: [{ id: "t1", name: "Dev", aliases: "nope" }] });
+    assert.strictEqual(badAliases.task_types[0].aliases, undefined, "non-array aliases dropped");
+}
+
+/**
+ * Tests the id-minting guard for NEW entities (reviewer finding A on #15):
+ * - Target: mint_client_id/mint_project_id/mint_task_type_id in src/core/registry.ts
+ * - What: minting for a brand-new entity must not silently reuse an id that already
+ *   belongs to a DIFFERENT existing entity (a hash collision, since compute_seeded_id
+ *   truncates to 5 base36 chars) — it disambiguates deterministically instead.
+ * - Why: the legitimate same-id-new-name path is a rename via upsert_* directly (see
+ *   run_registry_entity_tests); this guard belongs at the minting layer, not inside
+ *   upsert, so upsert-as-rename keeps working unguarded.
+ */
+export function run_registry_mint_id_tests(): void {
+    // No collision: mint_* returns the plain seeded id.
+    const empty = Registry.empty();
+    assert.strictEqual(mint_client_id(empty, "Acme"), compute_seeded_id("Acme"), "client: no collision → plain seeded id");
+    assert.strictEqual(mint_project_id(empty, "c1", "Website"), compute_seeded_id("c1::Website"), "project: no collision → plain seeded id");
+    assert.strictEqual(mint_task_type_id(empty, "Development"), compute_seeded_id("Development"), "task_type: no collision → plain seeded id");
+
+    // Force a collision: manufacture a registry where a DIFFERENT client already
+    // owns the id that "Acme" would naturally hash to.
+    const colliding_id = compute_seeded_id("Acme");
+    const with_collision = empty.upsert_client({ id: colliding_id, name: "Totally Different Co" });
+    const minted = mint_client_id(with_collision, "Acme");
+    assert.notStrictEqual(minted, colliding_id, "client mint disambiguates away from a colliding different-named entity");
+    assert.strictEqual(mint_client_id(with_collision, "Acme"), minted, "client mint disambiguation is deterministic");
+
+    // Same guard for projects (keyed by client_id::name in this test's seed convention).
+    const proj_id = compute_seeded_id("c1::Website");
+    const proj_collision = empty.upsert_project({ id: proj_id, name: "Unrelated Project", client_id: "c9" });
+    const mintedProj = mint_project_id(proj_collision, "c1", "Website");
+    assert.notStrictEqual(mintedProj, proj_id, "project mint disambiguates away from a colliding different entity");
+
+    // Same guard for task-types.
+    const tt_id = compute_seeded_id("Development");
+    const tt_collision = empty.upsert_task_type({ id: tt_id, name: "Totally Unrelated" });
+    const mintedTt = mint_task_type_id(tt_collision, "Development");
+    assert.notStrictEqual(mintedTt, tt_id, "task_type mint disambiguates away from a colliding different entity");
+
+    // A repeat mint for the SAME name still resolves to the SAME already-disambiguated
+    // id (idempotent — a caller re-minting "Acme" a second time, e.g. after the first
+    // disambiguated id is now itself in the registry, must not chase it further).
+    const with_disambiguated = with_collision.upsert_client({ id: minted, name: "Acme" });
+    assert.strictEqual(mint_client_id(with_disambiguated, "Acme"), minted, "re-minting the same seed lands back on its own disambiguated id");
 }
 
 /**
