@@ -151,6 +151,12 @@ function load_payload(payload) {
 // - Client + Project + Task-type all resolved → "Client › Project › Task-type"
 // - Task-type resolved but the source repo is unbound → "Task-type" alone
 // - Nothing resolvable (legacy/unassigned) → the flat `job` title, unchanged
+//
+// hierarchy_label is the GROUPING key (session.job — legend/pie/stacked-bar
+// still key and label off this joined string). The sessions table instead
+// renders it as two cells (see client_project_label/task_type_label below,
+// F5 feedback: don't cram the hierarchy into one cell) — same identity, split
+// display.
 function hierarchy_label(e) {
     if (e && e.task_type) {
         if (e.client && e.project) {
@@ -158,6 +164,18 @@ function hierarchy_label(e) {
         }
         return e.task_type.name;
     }
+    return e.job;
+}
+
+/** "Client / Project" for the sessions table's dedicated column, or "" when unbound. */
+function client_project_label(e) {
+    if (e && e.client && e.project) return `${e.client.name} / ${e.project.name}`;
+    return "";
+}
+
+/** The task-type name alone for the sessions table, falling back to the flat job title (Unassigned). */
+function task_type_label(e) {
+    if (e && e.task_type) return e.task_type.name;
     return e.job;
 }
 
@@ -212,6 +230,11 @@ function build_sessions_from_events(events) {
 
         sessions.push({
             job,
+            // #15 table columns (Client/Project + Task-type, split from the
+            // joined `job` grouping key) — captured once from the start event,
+            // consistent for every event sharing this group (same hierarchy_label).
+            client_project: state.currentSession.client_project,
+            task_type_name: state.currentSession.task_type_name,
             start: state.currentSession.start,
             stop: stopTs,
             duration_ms,
@@ -251,7 +274,9 @@ function build_sessions_from_events(events) {
                 state.currentSession = {
                     job,
                     start: ts,
-                    task: e.task || ""
+                    task: e.task || "",
+                    client_project: client_project_label(e),
+                    task_type_name: task_type_label(e)
                 };
                 state.lastActiveStart = ts;
                 state.accumulatedMs = 0;
@@ -1073,9 +1098,15 @@ function render_session_table(sessions) {
         tr.dataset.job = s.job;
         tr.dataset.day = day;
 
+        // #15 F5 feedback: don't cram the hierarchy into one cell — a dedicated
+        // "Client / Project" column ("—" when unbound) sits immediately to the
+        // left of the Task column, which shows the task-type name alone (or the
+        // flat job title when nothing resolves — Unassigned). Grouping/legend
+        // still key off the joined `s.job` (unchanged, see hierarchy_label).
         tr.innerHTML =
             `<td>${day}</td>` +
-            `<td>${escape_html(s.job)}</td>` +
+            `<td>${escape_html(s.client_project || "—")}</td>` +
+            `<td>${escape_html(s.task_type_name)}</td>` +
             `<td>${(s.duration_ms / 3600000).toFixed(2)}h</td>` +
             `<td>${escape_html(s.task || "")}</td>` +
             `<td>${escape_html(start_local)}</td>` +

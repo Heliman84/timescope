@@ -71,14 +71,15 @@ test("loads, requests data, and renders charts, filters, and table", async ({ pa
 
 test("computes durations and pause/resume pairs per session", async ({ page }) => {
     // Alpha 09:00–10:30 minus 15 min pause = 1.25h, one pause/resume pair
+    // (td 0=Date, 1=Client/Project, 2=Task, 3=Duration, ..., 7=P/R)
     const alpha_row = page.locator("#session_table_body tr", { hasText: "morning work" });
-    await expect(alpha_row.locator("td").nth(2)).toHaveText("1.25h");
-    await expect(alpha_row.locator("td").nth(6)).toHaveText("1");
+    await expect(alpha_row.locator("td").nth(3)).toHaveText("1.25h");
+    await expect(alpha_row.locator("td").nth(7)).toHaveText("1");
 
     // Beta 13:00–14:00, no pauses
     const beta_row = page.locator("#session_table_body tr", { hasText: "Beta" });
-    await expect(beta_row.locator("td").nth(2)).toHaveText("1.00h");
-    await expect(beta_row.locator("td").nth(6)).toHaveText("0");
+    await expect(beta_row.locator("td").nth(3)).toHaveText("1.00h");
+    await expect(beta_row.locator("td").nth(7)).toHaveText("0");
 });
 
 test("date preset filters sessions", async ({ page }) => {
@@ -178,7 +179,7 @@ test("edit_result errors keep the modal open; success closes it", async ({ page 
     });
     await expect(page.locator("#session_edit_modal")).toBeHidden();
     const alpha_row = page.locator("#session_table_body tr", { hasText: "morning work" });
-    await expect(alpha_row.locator("td").nth(2)).toHaveText("2.25h");
+    await expect(alpha_row.locator("td").nth(3)).toHaveText("2.25h");
 });
 
 test("active filters and sort survive an edit_result data reload", async ({ page }) => {
@@ -204,7 +205,7 @@ test("active filters and sort survive an edit_result data reload", async ({ page
     await expect(rows).toHaveCount(2);
     for (const row of await rows.all()) await expect(row).toContainText("Alpha");
     // Duration desc: the edited (now 2.25h) session leads
-    await expect(rows.nth(0).locator("td").nth(2)).toHaveText("2.25h");
+    await expect(rows.nth(0).locator("td").nth(3)).toHaveText("2.25h");
 });
 
 test("clicking a bar segment highlights matching rows; clicking again clears (toggle)", async ({ page }) => {

@@ -227,12 +227,23 @@ function shift_day(now: Date, delta_days: number): string {
 
 export interface HierarchyFixtureData {
     payload: FixtureEvent[];
-    /** "Client › Project › Task-type" for the bound-repo session. */
+    /**
+     * "Client › Project › Task-type" — the joined grouping key/legend label
+     * (session.job, unchanged by the table's two-column split).
+     */
     bound_label: string;
     /** "Task-type" alone for the unbound-repo session. */
     unbound_label: string;
     /** Flat job title for the session with no resolvable task-type. */
     unassigned_label: string;
+    /** "Client / Project" — the sessions table's dedicated column for the bound session. */
+    bound_client_project: string;
+    /** Task column value (task-type alone) for the bound session. */
+    bound_task_type: string;
+    /** Task column value (task-type alone) for the unbound session; its Client/Project cell is empty. */
+    unbound_task_type: string;
+    /** Task column value (flat title) for the unassigned session; its Client/Project cell is empty. */
+    unassigned_task_type: string;
 }
 
 /**
@@ -303,6 +314,10 @@ export function build_hierarchy_fixture(now: Date = FIXED_NOW): HierarchyFixture
         bound_label: "Acme Corp › Website Revamp › Development",
         unbound_label: "Design",
         unassigned_label: "Personal Errand",
+        bound_client_project: "Acme Corp / Website Revamp",
+        bound_task_type: "Development",
+        unbound_task_type: "Design",
+        unassigned_task_type: "Personal Errand",
     };
 }
 

@@ -13,9 +13,14 @@ test.beforeEach(async ({ page }) => {
     await open_dashboard(page, ff.payload);
 });
 
-/** Job names currently rendered in the sessions table, in row order. */
+/**
+ * Job names currently rendered in the sessions table, in row order.
+ * td:nth-child is 1-indexed: 1=Date, 2=Client/Project (new #15 column), 3=Task
+ * (task-type alone, or the flat job title fallback these unattributed fixtures
+ * always hit).
+ */
 async function table_jobs(page: Page): Promise<string[]> {
-    return page.locator("#session_table_body tr td:nth-child(2)").allTextContents();
+    return page.locator("#session_table_body tr td:nth-child(3)").allTextContents();
 }
 
 /** The pie chart's current job → hours map, read from the live Chart.js instance. */
@@ -426,9 +431,12 @@ test("job and task names with HTML metacharacters render as text and stay filter
     await expect(page.locator("#session_table_body img, #job_legend img")).toHaveCount(0);
 
     // The names render as literal text in legend and table
+    // (td 0=Date, 1=Client/Project — empty/"—" for this unattributed fixture,
+    // 2=Task/task-type fallback = the flat job title, 4=Notes/free-text task)
     await expect(page.locator("#job_legend .legend-row").nth(1)).toContainText(hostile_job);
-    await expect(page.locator("#session_table_body tr td").nth(1)).toHaveText(hostile_job);
-    await expect(page.locator("#session_table_body tr td").nth(3)).toHaveText(`<b>"task"</b>`);
+    await expect(page.locator("#session_table_body tr td").nth(1)).toHaveText("—");
+    await expect(page.locator("#session_table_body tr td").nth(2)).toHaveText(hostile_job);
+    await expect(page.locator("#session_table_body tr td").nth(4)).toHaveText(`<b>"task"</b>`);
 
     // The checkbox round-trips the exact name: unchecking hides the session
     const box = page.locator("#job_legend .legend-job-box");

@@ -10,6 +10,12 @@ import { open_dashboard, posted_messages, reply, to_datetime_input_value } from 
 //   under the same hierarchy label (11:00-11:30)
 // - Unbound: repoB, task_type resolves but no client/project (13:00-14:00)
 // - Unassigned: no resolvable task_type at all — flat job title (15:00-15:30)
+//
+// F5 feedback: the sessions table splits the hierarchy into two columns —
+// "Client / Project" (td index 1, "—" when unbound) immediately to the left
+// of "Task" (td index 2, task-type name alone, or the flat title fallback).
+// The legend/pie/stacked-bar still key and label off the joined hierarchy
+// label (session.job, unchanged) — only the table's display is split.
 
 let fx: HierarchyFixtureData;
 
@@ -18,29 +24,34 @@ test.beforeEach(async ({ page }) => {
     await open_dashboard(page, fx.payload);
 });
 
-test("bound-repo session renders as Client › Project › Task-type", async ({ page }) => {
+test("bound-repo session renders Client/Project and Task-type in separate columns", async ({ page }) => {
     const row = page.locator("#session_table_body tr", { hasText: "canonical-task work" });
-    await expect(row.locator("td").nth(1)).toHaveText(fx.bound_label);
+    await expect(row.locator("td").nth(1)).toHaveText(fx.bound_client_project);
+    await expect(row.locator("td").nth(2)).toHaveText(fx.bound_task_type);
 });
 
 test("a legacy-aliased job sharing the task-type groups with the canonical session under one label", async ({ page }) => {
     const legacy_row = page.locator("#session_table_body tr", { hasText: "legacy-alias work" });
-    await expect(legacy_row.locator("td").nth(1)).toHaveText(fx.bound_label);
+    await expect(legacy_row.locator("td").nth(1)).toHaveText(fx.bound_client_project);
+    await expect(legacy_row.locator("td").nth(2)).toHaveText(fx.bound_task_type);
 
     // Legend shows one grouped entry for the shared task-type, not two —
-    // proves the two differently-titled flat jobs collapsed into one group.
+    // proves the two differently-titled flat jobs collapsed into one group
+    // (grouping still keys on the joined hierarchy label, unchanged).
     const legend_rows = await page.locator("#job_legend .legend-text").allTextContents();
     expect(legend_rows.filter(t => t === fx.bound_label)).toHaveLength(1);
 });
 
-test("unbound-repo session renders as the task-type alone (no client/project)", async ({ page }) => {
+test("unbound-repo session renders the task-type alone with an empty Client/Project cell", async ({ page }) => {
     const row = page.locator("#session_table_body tr", { hasText: "no-binding work" });
-    await expect(row.locator("td").nth(1)).toHaveText(fx.unbound_label);
+    await expect(row.locator("td").nth(1)).toHaveText("—");
+    await expect(row.locator("td").nth(2)).toHaveText(fx.unbound_task_type);
 });
 
-test("a session with no resolvable task-type falls back to its flat job title (Unassigned)", async ({ page }) => {
+test("a session with no resolvable task-type falls back to its flat job title with an empty Client/Project cell", async ({ page }) => {
     const row = page.locator("#session_table_body tr", { hasText: "unassigned-errand work" });
-    await expect(row.locator("td").nth(1)).toHaveText(fx.unassigned_label);
+    await expect(row.locator("td").nth(1)).toHaveText("—");
+    await expect(row.locator("td").nth(2)).toHaveText(fx.unassigned_task_type);
 });
 
 test("the job legend lists the three distinct hierarchy labels", async ({ page }) => {
@@ -72,9 +83,9 @@ test("the edit modal still opens and matches events for a grouped (hierarchy-lab
  *
  * This test performs a real Save (posts edit_log_entries) and then injects the
  * edit_result the *fixed* controller sends — an attributed payload — proving
- * the webview keeps the hierarchy grouping/labels after that reload.
+ * the webview keeps the hierarchy grouping/columns after that reload.
  */
-test("hierarchy grouping and labels survive a save (edit_result carries the attributed payload)", async ({ page }) => {
+test("hierarchy grouping and columns survive a save (edit_result carries the attributed payload)", async ({ page }) => {
     await page
         .locator("#session_table_body tr", { hasText: "canonical-task work" })
         .locator("button.session-edit-btn")
@@ -100,9 +111,11 @@ test("hierarchy grouping and labels survive a save (edit_result carries the attr
 
     await expect(page.locator("#session_edit_modal")).toBeHidden();
 
-    // Hierarchy label still renders on the edited row (not the flat "Development" title).
+    // Client/Project and Task-type columns still render on the edited row
+    // (not collapsed back to the flat "Development" job title).
     const row = page.locator("#session_table_body tr", { hasText: "canonical-task work" });
-    await expect(row.locator("td").nth(1)).toHaveText(fx.bound_label);
+    await expect(row.locator("td").nth(1)).toHaveText(fx.bound_client_project);
+    await expect(row.locator("td").nth(2)).toHaveText(fx.bound_task_type);
 
     // Legacy-alias session still groups under the same label — proves grouping
     // (not just labelling) survived the reload, not two separate legend rows.
