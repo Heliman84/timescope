@@ -41,6 +41,49 @@ const STATE_KEY_LAST_SHUTDOWN = "timescope.lastShutdown";
 let _optInPromptedThisSession = false;
 
 /**
+ * Acquire this repo's instance lock (#47). Sets `_instanceId` (minting one if this
+ * window doesn't have one yet — the mid-session opt-in path activates without ever
+ * having acquired a lock before), `_lockTargetRepoId` (so the heartbeat's lockless
+ * retry, #47 N3, knows what to keep trying for), and on success `_lockRepoId`.
+ *
+ * On a live foreign lock, always warns (a second window either at activation or via a
+ * mid-session opt-in both need the user to know the repo is already tracked elsewhere).
+ * Returns whether crash-recovery should be suppressed — only true when the caller opts
+ * in via `allow_suppress_recovery` (activation, where recovery hasn't run yet; NOT the
+ * mid-session opt-in path, where recovery already ran before the workspace was tracked).
+ */
+function acquire_instance_lock(
+    runtime: Runtime,
+    repo_id: string,
+    options: { allow_suppress_recovery: boolean }
+): boolean {
+    if (!runtime.paths.locks_dir) return false;
+    try {
+        if (!_instanceId) _instanceId = crypto.randomUUID();
+        _lockTargetRepoId = repo_id;
+        const lock_result = acquire_lock(
+            runtime.paths.locks_dir,
+            repo_id,
+            { pid: process.pid, instance_id: _instanceId, now: Date.now() },
+            LOCK_STALE_MS
+        );
+        if (lock_result.acquired) {
+            _lockRepoId = repo_id;
+        } else {
+            vscode.window.showWarningMessage(
+                `TimeScope: this workspace is already being tracked in another VS Code window (pid ${lock_result.holder.pid}). Timer actions here may conflict with it.`
+            );
+            if (options.allow_suppress_recovery && should_suppress_recovery(lock_result)) {
+                return true;
+            }
+        }
+    } catch (ex) {
+        console.error("TimeScope: instance lock acquisition failed", ex);
+    }
+    return false;
+}
+
+/**
  * Offer to log the open workspace's time into a committed `.timescope/` folder.
  * Nothing is created unless the user says yes (#2). Asked at most once per
  * session, and never again for a folder the user declined permanently.
@@ -61,8 +104,16 @@ async function maybe_prompt_local_opt_in(runtime: Runtime): Promise<void> {
     );
     if (choice === "Track here") {
         try {
-            enable_local_logging(runtime.paths, folder.uri.fsPath, folder.name, runtime.registryRepo, Date.now());
+            const repo_id = enable_local_logging(runtime.paths, folder.uri.fsPath, folder.name, runtime.registryRepo, Date.now());
             vscode.window.showInformationMessage("TimeScope: now logging this workspace in .timescope/.");
+            // Opting in mid-session (#47): this window never went through activation's
+            // lock acquisition (it wasn't opted-in yet then), so it would otherwise stay
+            // permanently lockless/invisible to a later window opened on this same repo.
+            // Recovery already ran at activation — before this repo was even tracked — so
+            // suppression is moot here; this just makes the window advertise its lock.
+            if (!_lockRepoId) {
+                acquire_instance_lock(runtime, repo_id, { allow_suppress_recovery: false });
+            }
         } catch (ex) {
             vscode.window.showErrorMessage(`TimeScope: could not enable local logging: ${String(ex)}`);
         }
@@ -103,29 +154,9 @@ export async function activate(context: vscode.ExtensionContext) {
     // Per-repo instance lock (#47): detect another VS Code window already tracking this
     // opted-in repo, so we can warn instead of silently racing timer actions with it, and
     // suppress our own crash-recovery prompt (which would otherwise fight the live window).
-    let suppress_recovery = false;
-    if (activation_repo_id && runtime.paths.locks_dir) {
-        try {
-            _instanceId = crypto.randomUUID();
-            _lockTargetRepoId = activation_repo_id;
-            const lock_result = acquire_lock(
-                runtime.paths.locks_dir,
-                activation_repo_id,
-                { pid: process.pid, instance_id: _instanceId, now: Date.now() },
-                LOCK_STALE_MS
-            );
-            if (lock_result.acquired) {
-                _lockRepoId = activation_repo_id;
-            } else if (should_suppress_recovery(lock_result)) {
-                suppress_recovery = true;
-                vscode.window.showWarningMessage(
-                    `TimeScope: this workspace is already being tracked in another VS Code window (pid ${lock_result.holder.pid}). Timer actions here may conflict with it.`
-                );
-            }
-        } catch (ex) {
-            console.error("TimeScope: instance lock acquisition failed", ex);
-        }
-    }
+    const suppress_recovery = activation_repo_id
+        ? acquire_instance_lock(runtime, activation_repo_id, { allow_suppress_recovery: true })
+        : false;
 
     // #48 48c: one-time migration of the legacy global `logs.jsonl` into the owned
     // `scratch.jsonl`, then (re)build the derived index so the dashboard sees every
