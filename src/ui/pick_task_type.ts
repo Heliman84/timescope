@@ -7,10 +7,26 @@ const NEW_TASK_TYPE_SENTINEL = "__new_task_type__";
 const OTHER_SENTINEL = "__other__";
 
 /**
- * Pick an existing task-type from `candidates`, or create a new one (persisted to the
- * registry immediately). `suggested_name` prefills the "new" input box (used when
- * converting a legacy job — the legacy title is a natural default). Returns null on
- * cancel at any step.
+ * Prompt for a new task-type name and persist it to the registry immediately.
+ * `suggested_name` prefills the input box (used when converting a legacy job — the
+ * legacy title is a natural default). Reuses an existing task-type of the same name
+ * rather than minting a duplicate. Returns null on cancel/empty.
+ */
+async function create_task_type(runtime: Runtime, suggested_name?: string): Promise<TaskTypeEntity | null> {
+    const name = await vscode.window.showInputBox({ prompt: "Enter Task-type name", value: suggested_name });
+    if (!name || !name.trim()) return null;
+    const trimmed = name.trim();
+    const registry = runtime.registryRepo.load();
+    const existing = registry.task_types.find(t => t.name === trimmed);
+    if (existing) return existing;
+    const created: TaskTypeEntity = { id: mint_task_type_id(registry, trimmed), name: trimmed };
+    runtime.registryRepo.save(registry.upsert_task_type(created));
+    return created;
+}
+
+/**
+ * Pick an existing task-type from `candidates`, or create a new one. `suggested_name`
+ * prefills the "new" input box. Returns null on cancel at any step.
  */
 async function pick_or_create_task_type(
     runtime: Runtime,
@@ -26,15 +42,7 @@ async function pick_or_create_task_type(
     if (!picked) return null;
 
     if (picked.description === NEW_TASK_TYPE_SENTINEL) {
-        const name = await vscode.window.showInputBox({ prompt: "Enter Task-type name", value: opts.suggested_name });
-        if (!name || !name.trim()) return null;
-        const trimmed = name.trim();
-        const registry = runtime.registryRepo.load();
-        const existing = registry.task_types.find(t => t.name === trimmed);
-        if (existing) return existing;
-        const created: TaskTypeEntity = { id: mint_task_type_id(registry, trimmed), name: trimmed };
-        runtime.registryRepo.save(registry.upsert_task_type(created));
-        return created;
+        return create_task_type(runtime, opts.suggested_name);
     }
 
     return candidates.find(t => t.id === picked.description) ?? null;
@@ -72,7 +80,7 @@ export async function pick_task_type(runtime: Runtime): Promise<TaskTypeEntity |
     if (!picked) return null;
 
     if (picked.description === NEW_TASK_TYPE_SENTINEL) {
-        const created = await pick_or_create_task_type(runtime, [], { placeHolder: "Name the new Task-type" });
+        const created = await create_task_type(runtime);
         if (!created) return null;
         if (runtime.repoConfig) {
             const pinned = runtime.repoConfig.pinned_task_types ?? [];

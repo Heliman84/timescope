@@ -3,7 +3,7 @@ import * as path from "path";
 import * as assert from "assert";
 import { Job } from "../core/job";
 import { Event } from "../core/event";
-import { read_repo_config } from "../core/repo_config";
+import { read_repo_config, write_repo_config } from "../core/repo_config";
 import { derive_repo_jobs, ensure_repo_jobs_cache } from "../core/repo_jobs";
 
 function mkdir_tmp(suffix: string): string {
@@ -87,4 +87,37 @@ export function run_ensure_repo_jobs_cache_tests(): void {
     const cfg2 = read_repo_config(config_path)!;
     assert.strictEqual(cfg2.repo_id, cfg.repo_id, "repo_id preserved across cache update");
     assert.strictEqual(cfg2.jobs!.length, 2, "config.json now caches both jobs");
+}
+
+/**
+ * Regression (#15): the US-06 job-cache rewrite must preserve the repo's Client/Project
+ * binding and pinned task-types. Before the fix, `ensure_repo_jobs_cache` wrote a fresh
+ * `{repo_id, format_version, jobs}` object, clobbering the binding a run after a new
+ * session changed the derived job set — so Start re-prompted for the binding every time.
+ */
+export function run_repo_jobs_cache_preserves_binding_tests(): void {
+    const root = mkdir_tmp("preserve");
+    const jobA = Job.create({ title: "Lantern - EE CAD" });
+    const log = write_log(root, [Event.create(jobA, "start", 100), Event.create(jobA, "stop", 200)]);
+    const config_path = path.join(root, "config.json");
+
+    // Opt-in + bind, as the Start flow does: config carries a binding + pinned task-types.
+    ensure_repo_jobs_cache(config_path, log);
+    const bound = read_repo_config(config_path)!;
+    write_repo_config(config_path, {
+        ...bound,
+        binding: { client_id: "cli1", project_id: "prj1" },
+        pinned_task_types: ["tt1", "tt2"],
+    });
+
+    // A later session adds a job → cache rewrites. Binding + pins must survive.
+    const jobB = Job.create({ title: "Admin - Invoicing" });
+    fs.appendFileSync(log, Event.create(jobB, "start", 300).toJSONL() + "\n", "utf8");
+    ensure_repo_jobs_cache(config_path, log);
+
+    const after = read_repo_config(config_path)!;
+    assert.deepStrictEqual(after.binding, { client_id: "cli1", project_id: "prj1" }, "binding survives cache rewrite");
+    assert.deepStrictEqual(after.pinned_task_types, ["tt1", "tt2"], "pinned task-types survive cache rewrite");
+    assert.strictEqual(after.jobs!.length, 2, "cache still updated to both jobs");
+    assert.strictEqual(after.repo_id, bound.repo_id, "repo_id preserved");
 }
