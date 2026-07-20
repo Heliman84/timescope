@@ -128,6 +128,25 @@ the bold mission header. Scribe drafts dev-log/CHANGELOG/PR bodies for orchestra
 curates the wiki at PR time (what did this branch learn? prune to budget, lint the index).
 
 
+## Guardrails (enforced, not advisory)
+
+The process above used to rely on a cold chat voluntarily following the skills. It didn't —
+a satellite once ran its whole feature loop inline on Fable at high effort, skipped scope
+agreement, and handed off an unstaged test environment. So the load-bearing rules are now
+mechanical, via `.claude/settings.json` (a project `model: opus` default) and three hooks in
+`.claude/hooks/` (portable Node, fail-open):
+
+| Guardrail | Mechanism | Catches |
+| :--- | :--- | :--- |
+| **Model tier** | `model: opus` default + `SessionStart` hook that flags a Fable/non-opus main window and casts the chat's role | Orchestration burning top-tier budget; forgetting `/model opus` |
+| **No feature work on develop/main** | `PreToolUse` hook denies Edit/Write to `src/`, `tests/`, `package.json` on `develop`/`main` (docs + `.claude/` stay writable for the spine) | Editing source on the wrong branch |
+| **F5 env actually staged** | `Stop` hook blocks any F5 handoff without a fresh `.claude/.f5-ready.json` receipt (written by `f5_receipt.js` after the verifier stages fixtures) | Handing off a broken/empty test environment |
+
+The model pin is read at session start, so it only applies to **newly opened / restarted**
+windows — an already-running window must switch with `/model opus`. Hooks fail open: a bug in
+one never bricks a session, it just stops enforcing.
+
+
 ## Never delegated
 
 Scope agreement · F5 verification · PR merges · `package.json` changes · version bumps.

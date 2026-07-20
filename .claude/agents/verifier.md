@@ -23,11 +23,29 @@ gate fails, report it for the owning builder.
 - [ ] `docs/processes.md` updated if architecture/state machine/data format changed
 
 
-## F5 readiness (the user should be able to press F5 immediately)
-- Fixtures staged: `test-workspace/` (and `test-workspace-empty/` when the slice needs it)
-  in the state the F5 steps assume — reseed via `npm run seed-testdata` variants as needed
-- `test-workspace/.vscode/settings.json` still pins storage to `test-workspace/global-storage/`
-- Report exactly what state the workspaces are in
+## F5 readiness (MANDATORY — the user must be able to press F5 and see the feature immediately)
+
+This is the step that has repeatedly been skipped, shipping broken test environments. It is
+**not optional** and a Stop hook (`f5_staging_gate.js`) will **block the handoff** until you
+complete it. A fresh worktree's `global-storage/` is empty (gitignored), so you MUST stage:
+
+1. **Pick the fixture workspace** the F5 steps use: `test-workspace/` (default),
+   `test-workspace-empty/` (opt-in flow — intentionally NO `.timescope`),
+   `test-workspace-multi/` (multi-instance: `repoA`/`repoB`/`shared-global`),
+   `test-workspace-legacy/` (v0.2.0 log-only repo).
+2. **Populate its fixtures** to the state the steps assume — `npm run seed-testdata` variants,
+   or hand-place the `registry.json`/`index.jsonl`/`config.json`/`logs.jsonl` the feature needs.
+3. **Confirm the storage pin**: that workspace's `.vscode/settings.json` still sets
+   `timescope.global_storage_dir` to `global-storage`.
+4. **Open the built extension yourself and eyeball it** (or drive it) — do not attest to a
+   state you have not seen.
+5. **Stamp the receipt** (this is the gate key — the handoff is blocked without it):
+   ```
+   node .claude/hooks/f5_receipt.js --workspace <name> --steps "<one line: what you staged / what to click>"
+   ```
+   Re-stamp if any new commit lands after staging (the receipt is pinned to HEAD).
+
+Report exactly what state each workspace is in and the receipt line you wrote.
 
 
 ## Output
