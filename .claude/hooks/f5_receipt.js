@@ -32,6 +32,16 @@ function arg(flag) {
   return i !== -1 && i + 1 < process.argv.length ? process.argv[i + 1] : "";
 }
 
+// The four fixture workspaces have fixed identities (see .claude/wiki/testing.md). A receipt
+// must name one of them — a typo must fail loudly, not earn a passing gate against a
+// non-existent fixture.
+const VALID_WORKSPACES = [
+  "test-workspace",
+  "test-workspace-empty",
+  "test-workspace-multi",
+  "test-workspace-legacy",
+];
+
 function main() {
   const workspace = arg("--workspace");
   const steps = arg("--steps");
@@ -41,8 +51,21 @@ function main() {
     );
     process.exit(1);
   }
+  if (!VALID_WORKSPACES.includes(workspace)) {
+    process.stderr.write(
+      `f5_receipt: unknown --workspace "${workspace}". Must be one of: ${VALID_WORKSPACES.join(", ")}.\n` +
+        "Pick the workspace whose fixed identity matches the test — never repurpose one (see .claude/wiki/testing.md).\n",
+    );
+    process.exit(1);
+  }
 
   const repo_root = git("rev-parse --show-toplevel") || process.cwd();
+  if (!fs.existsSync(path.join(repo_root, workspace))) {
+    process.stderr.write(
+      `f5_receipt: workspace directory "${workspace}/" does not exist in the repo — stage it before stamping the receipt.\n`,
+    );
+    process.exit(1);
+  }
   const receipt = {
     head: git("rev-parse HEAD"),
     branch: git("rev-parse --abbrev-ref HEAD"),

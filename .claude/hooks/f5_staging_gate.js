@@ -53,7 +53,10 @@ function git(cmd, cwd) {
 
 // Returns null when a fresh receipt is present, or a reason string when it is missing/stale.
 function receipt_problem(cwd) {
-  const receipt_path = path.join(cwd, ".claude", ".f5-ready.json");
+  // Resolve the repo root so the reader matches the writer (f5_receipt.js writes under
+  // `git rev-parse --show-toplevel`); reading relative to a subdirectory cwd would miss it.
+  const repo_root = git("rev-parse --show-toplevel", cwd) || cwd;
+  const receipt_path = path.join(repo_root, ".claude", ".f5-ready.json");
   if (!fs.existsSync(receipt_path)) {
     return "no F5 staging receipt (.claude/.f5-ready.json) — nobody staged the test environment";
   }
@@ -63,8 +66,8 @@ function receipt_problem(cwd) {
   } catch {
     return "F5 staging receipt is unreadable — re-stage the environment";
   }
-  const head = git("rev-parse HEAD", cwd);
-  const branch = git("rev-parse --abbrev-ref HEAD", cwd);
+  const head = git("rev-parse HEAD", repo_root);
+  const branch = git("rev-parse --abbrev-ref HEAD", repo_root);
   if (head && receipt.head && receipt.head !== head) {
     return `F5 staging receipt is stale (staged for ${String(receipt.head).slice(0, 8)}, HEAD is ${head.slice(0, 8)}) — re-stage after the latest commit`;
   }

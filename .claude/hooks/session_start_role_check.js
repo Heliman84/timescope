@@ -78,7 +78,8 @@ function main() {
     lines.push(
       `ROLE — branch \`${branch}\`. You are the **orchestrator** for this issue, not a coder. ` +
         "Before creating branches, spawning a builder, or editing source: **agree scope with " +
-        "the user in their own words** (feature loop §1 — a hard gate, do not skip it). Delegate " +
+        "the user in their own words** — feature loop §1 (discuss), then the branch step §2 is a " +
+        "hard STOP; do not skip it. Delegate " +
         "verbose/mechanical work to the project agents (`.claude/agents/`); they self-select " +
         "sonnet/opus. Run the **verifier** and stage the F5 environment before any F5 handoff " +
         "(a Stop hook enforces this).",
