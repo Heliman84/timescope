@@ -78,6 +78,27 @@ allowlists which DTO fields survive into its in-memory event objects — new att
 silently disappear before `hierarchy_label` ever saw them. Worth checking this allowlist whenever
 a future payload field is added.
 
+**F5 round 1 findings, all fixed on-branch:**
+- **Binding not persisted (re-prompted every Start).** `ensure_repo_jobs_cache` (US-06) rewrote
+  `config.json` as a fresh `{repo_id, format_version, jobs}`, clobbering `binding` +
+  `pinned_task_types` one run after a new session changed the derived job set. Now preserves all
+  existing config fields. This was also why the dashboard showed no Client/Project — the binding
+  was erased before `attribution.ts` could read it. Regression test in `test_repo_jobs.ts`.
+- **"New Task-type…" keyboard dead-end.** The sentinel branch delegated to
+  `pick_or_create_task_type` with empty candidates, showing a redundant second picker (had to be
+  mouse-clicked twice; Enter did nothing). Extracted `create_task_type` so "New…" goes straight
+  to the input box.
+- **Dashboard hierarchy display → dedicated column.** Per user preference, replaced the single
+  "Client › Project › Task-type" joined cell with a dedicated **Client / Project** column left of
+  the **Task** column (task-type alone); unbound/unassigned rows show "—". The old free-text
+  "Task" column became "Notes". Grouping/merge, legend, and edit-modal behavior unchanged.
+
+**Deferred to follow-up issues (on the Local-First Rework milestone):**
+- [#62](https://github.com/Heliman84/timescope/issues/62) — dashboard filtering by the new
+  Client/Project column (a new filter dimension; not an easy add during #15).
+- [#63](https://github.com/Heliman84/timescope/issues/63) — improve the legacy-job → Task-type
+  conversion UX (works, but clunky mid-Start; likely pairs with #6).
+
 **Spec follow-up still owed:** the additive registry/repo-config fields (`clients[]`,
 `projects[]`, `task_types[]`, `binding`, `pinned_task_types[]`) need documenting in
 `docs/record_format_spec.md` once the storage track releases that file this wave — flagged to
