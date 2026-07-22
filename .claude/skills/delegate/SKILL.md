@@ -97,7 +97,19 @@ bold mission header (feature skill §6). Orchestrator-voiced, verifier-verified.
 ## Arc mode (the issue belongs to a multi-issue arc)
 
 When `docs/arc-log/` lists the issue, the arc log is the north star — read it before the
-issue and keep the user oriented in the forest, not just the trees:
+issue and keep the user oriented in the forest, not just the trees.
+
+**Branch nesting.** A running arc has its own long-lived integration branch, `arc/<slug>`,
+off `develop`. Every issue's feature branch nests under the arc and PRs *into it*, not
+develop — the arc only merges to develop once the whole effort is complete. Wave sub-branches
+nest one level deeper, unchanged:
+
+```
+develop → arc/<slug> → feature/issue-<N>-<slug> → feature/issue-<N><letter>--<slug> (wave)
+```
+
+PR routing follows the nesting: `gh pr create --base arc/<slug>` when the arc exists, else
+`--base develop` (feature skill §7) — a documented convention, not auto-detected.
 
 - **Breadcrumb every user-facing status and F5 handoff:** open with
   `Arc <slug> — wave X/Y — issue #N (<track>)` before anything else.
@@ -148,6 +160,27 @@ Return path: the user tells the spine "done" → the spine re-reads the arc log 
 state and kicks the next wave. **Durable records are the only interface between chats** —
 never rely on another session's memory. Breadcrumbs are two-sided: spine at wave level
 (`Arc <slug> — wave X/Y — dispatching #A, #B`), satellites at issue level.
+
+
+## Session hygiene (from the wave-3 retro — the dominant cost/quality lever)
+
+Wave 3's pain was not the model; it was **session shape**. Two ~19-hour satellite sessions ran
+~125 turns with no compaction, context pinned near 200K, and response quality visibly collapsed
+(avg output 2,045 → 290 tokens as context saturated). The rules that prevent a repeat:
+
+- **Bounded sessions — "disposable-but-durable" applies to satellites too.** Work a coherent
+  unit, **checkpoint state to the dev-log, and continue in a fresh session** rather than letting
+  one chat accumulate 200K of context. A fresh chat rehydrates from the issue + dev-log + arc log
+  in one read. A `Stop` hook nudges at ~40/70/100 turns; heed it at a slice boundary.
+- **Delegation must actually offload.** In wave 3 the orchestrators spawned agents but still did
+  every source edit and all the prose on the main thread (0 sidechain) — so context inflated
+  anyway. If you are editing source across many turns, that work belonged in a **builder**. The
+  orchestrator hand-edits source only for a Tier 0 trivial change.
+- **Act more, narrate less.** ~1,300 tokens per text-only message in wave 3. Keep status notes
+  short; put the reasoning in the dev-log at the checkpoint, not in every turn.
+- **Dev-log at two checkpoints, not continuously** — plan-time (decisions) and PR-time
+  (retrospective). Continuous dev-log churn (11 edits in one wave-3 session) is narration by
+  another name.
 
 
 ## Never delegated

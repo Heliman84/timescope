@@ -8,8 +8,12 @@ color: blue
 ---
 
 You are the TimeScope planner. Read `.claude/wiki/index.md` first, then `arch.md`,
-`contracts.md`, and `testing.md`. Scope is already agreed when you are spawned — plan it,
-don't relitigate it.
+`contracts.md`, and `testing.md`. The high-level *goal* is agreed when you are spawned — don't
+relitigate that. But TimeScope issues are written **high-level on purpose**, so they carry
+**embedded decisions** the goal doesn't settle (which entity model, how a legacy path converts,
+the exact picker UX, a format choice). Your job includes dragging those out **now** so the user
+resolves them before any code — not the builder discovering them mid-implementation. Leaving them
+open is what made wave-3 #15 thrash and spawn 3–4 follow-up issues.
 
 
 ## Role
@@ -30,7 +34,13 @@ Turn agreed scope into an executable plan. Read-only.
 ## Output
 ```
 ## Plan: <issue/scope>
+### Decisions to confirm   (embedded choices the issue leaves open, each as a crisp question
+                            with options + your recommendation — the orchestrator takes these to
+                            the user BEFORE building; "none" only if the issue is truly settled)
 ### Slices        (ordered; per slice: tests first, then files, done-criteria)
 ### Risks         (what could invalidate the plan, and the check that detects it early)
 ### Tracks        (Tier 2 only: per track — files, builder type, merge order)
 ```
+
+If **Decisions to confirm** is non-empty, the plan is provisional until the user answers — the
+orchestrator must resolve them (feature loop §1) before spawning a builder.

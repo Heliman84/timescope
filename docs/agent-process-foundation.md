@@ -67,7 +67,17 @@ compounds *down* across sessions. Six pages: `index.md` (router + team table), `
 
 ### 7. Arcs — multi-issue campaigns need a spine and a breadcrumb
 When an effort spans multiple issues, per-issue records aren't enough — the human loses the
-forest in the trees. Two mechanisms fix that:
+forest in the trees. Four mechanisms fix that:
+- **An integration branch above the feature branch**: a multi-issue arc gets its own
+  long-lived `arc/<slug>`, branched off the mainline integration branch. Per-issue feature
+  branches nest under it and PR *into the arc*, not the mainline — the arc merges to the
+  mainline only when the whole effort is complete, so the mainline stays clean of half-done
+  arc work:
+  ```text
+  develop → arc/<slug> → feature/issue-<N>-<slug> → feature/issue-<N><letter> (waves)
+  ```
+  The arc spine window (below) is coordination-only on `arc/<slug>`, same as on the mainline
+  branches — no source edits there.
 - **A spine document** (an "arc log"): the north-star architecture (decided in the main
   thread from an architect study), the wave-by-wave build order naming the highest-collision
   files and their owning track, and a live status table (issue → decision log → PR). The
@@ -76,7 +86,8 @@ forest in the trees. Two mechanisms fix that:
   opens with `Arc <slug> — wave X/Y — issue #N (<track>)`. Recovery from "where were we?"
   is reading the spine's status table, never re-reading PRs.
 - **Spine & satellite sessions (window scale)**: host the spine chat in the primary IDE
-  window on the integration branch — coordination only, it never edits source; its state is
+  window on the integration branch (the arc branch during an arc, else the mainline) —
+  coordination only, it never edits source; its state is
   the spine document, so any fresh session rehydrates in one read (disposable-but-durable).
   Per issue the spine dispatches either an **in-spine agent wave** (well-specified work) or a
   **satellite window** on its own worktree + session (human-heavy work — it gets the human

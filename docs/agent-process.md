@@ -84,6 +84,22 @@ each PR updates the arc status table via scribe → the next wave starts only wh
 PRs are merged. Getting lost mid-arc should never require re-reading PRs — the arc log's
 status table plus the breadcrumb is the recovery path.
 
+**Branch nesting.** A multi-issue arc gets its own long-lived integration branch,
+`arc/<slug>`, off `develop`. Each issue's feature branch nests under it and PRs *into the
+arc*, not develop — the arc itself only merges to `develop` once the whole effort is
+complete, so develop never carries half-done arc work. Wave sub-branches are unchanged,
+nesting one level deeper under the feature branch:
+
+```text
+develop
+└── arc/<slug>                     (the arc — merges to develop only when complete)
+    └── feature/issue-<N>-<slug>   (PRs into the arc)
+        └── feature/issue-<N><letter>--<slug>   (wave track, PRs into the feature branch)
+```
+
+PR routing is a convention, not automated: if an arc branch exists for the current effort,
+target it (`gh pr create --base arc/<slug>`); otherwise target `develop`.
+
 
 ### Spine & satellite windows
 
@@ -142,6 +158,7 @@ mechanical, via `.claude/settings.json` (a project `model: opus` default) and th
 | **No feature work on develop/main** | `PreToolUse` hook denies Edit/Write to `src/`, `tests/`, `package.json` on `develop`/`main` (docs + `.claude/` stay writable for the spine) | Editing source on the wrong branch |
 | **F5 env actually staged** | `Stop` hook blocks any F5 handoff without a fresh `.claude/.f5-ready.json` receipt (written by `f5_receipt.js` after the verifier stages fixtures) | Handing off a broken/empty test environment |
 | **Dev-log PR link filled** | `Stop` hook blocks a turn that announces a `/pull/<n>` URL while the branch's dev-log still shows `PR: TBD` | Leaving the dev-log's PR link unfilled after opening the PR |
+| **Bounded sessions** | `Stop` hook nudges (non-blocking) at ~40/70/100 turns to checkpoint to the dev-log and continue fresh | Marathon sessions that saturate context and collapse response quality (the wave-3 cost driver) |
 
 The model pin is read at session start, so it only applies to **newly opened / restarted**
 windows — an already-running window must switch with `/model opus`. Hooks fail open: a bug in

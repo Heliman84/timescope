@@ -16,13 +16,18 @@ VS Code extension for tracking consulting hours: start/pause/resume/stop work se
 
 - `develop` — integration branch, default PR target
 - `main` — releases only (reached via release PRs from develop)
-- Feature branches: `feature/issue-<N>-<slug>` off develop
+- `arc/<slug>` — long-lived integration branch for a multi-issue arc, off `develop`; merges to
+  `develop` only when the whole arc is complete
+- Feature branches: `feature/issue-<N>-<slug>` — off `develop` normally, or off `arc/<slug>`
+  (PR into the arc, not develop) when the issue belongs to a running arc
+- Wave sub-branches: `feature/issue-<N><letter>--<slug>` nest under a feature branch (unchanged)
+- Nesting, deepest to shallowest: `develop → arc/<slug> → feature/issue-<N> → feature/issue-<N><letter>`
 - Hotfixes: branch off `main`, PR to main, then merge main back into develop
 
 
 ## Agent process controls
 
-- Before the first file edit in any work session, confirm `git branch --show-current` is not `develop` or `main`. Re-check if the branch may have changed since the last check (e.g. after a checkout, merge, or a gap in the conversation). This is now also **hook-enforced** — a `PreToolUse` guard denies source edits on `develop`/`main`. Together with the model-tier and F5-staging hooks, the enforced guardrails are documented in [docs/agent-process.md](docs/agent-process.md#guardrails-enforced-not-advisory); the scripts live in [.claude/hooks/](.claude/hooks/).
+- Before the first file edit in any work session, confirm `git branch --show-current` is not `develop`, `main`, or an arc branch (`arc/<slug>`). Re-check if the branch may have changed since the last check (e.g. after a checkout, merge, or a gap in the conversation). This is now also **hook-enforced** — a `PreToolUse` guard denies source edits on `develop`/`main`/`arc/*`. Together with the model-tier and F5-staging hooks, the enforced guardrails are documented in [docs/agent-process.md](docs/agent-process.md#guardrails-enforced-not-advisory); the scripts live in [.claude/hooks/](.claude/hooks/).
 - When a clarifying question offers specific options and the user answers with free text that doesn't match one of them ("Other"), that is **not** consent to any of the listed options — it means none of them fit. Treat the question as still open: restate what changed based on their input and ask again explicitly before taking the action the question was gating.
 
 
