@@ -2,7 +2,7 @@
 
 > Decision log, not a spec. Written at two checkpoints — plan-time and PR-time.
 
-**Issue:** [#66](https://github.com/Heliman84/timescope/issues/66)  ·  **PR:** TBD  ·  **Follows:** [#58](https://github.com/Heliman84/timescope/issues/58), [#61](https://github.com/Heliman84/timescope/pull/61)
+**Issue:** [#66](https://github.com/Heliman84/timescope/issues/66)  ·  **PR:** [#67](https://github.com/Heliman84/timescope/pull/67)  ·  **Follows:** [#58](https://github.com/Heliman84/timescope/issues/58), [#61](https://github.com/Heliman84/timescope/pull/61)
 
 ## Problem
 
@@ -58,4 +58,21 @@ long a session runs / how large context grows** — the dominant variable.
 
 ## Retrospective
 
-_To be filled at PR time._
+Shipped in two parts. **Part 1 (planned):** the session-shape fixes — a `Stop` session-budget
+nudge (turn-count proxy at ~40/70/100), the bounded-session/real-delegation/trim-narration prose
+in the `delegate` skill, the planner "Decisions to confirm" step, and the dev-log two-checkpoint
+rule. **Part 2 (folded in mid-cycle):** the **arc-branch tier** — a request that surfaced while
+designing a cross-repo requirements workflow (the Lodestar three-role/arc-spine model). A
+multi-issue arc now gets its own `arc/<slug>` integration branch; feature branches nest under it
+and PR into the arc, so develop stays clean until the effort completes.
+
+Notably, the arc-branch work **dogfooded Part 1's own lessons**: scope was gated and agreed in the
+user's words before any edit (three embedded decisions surfaced as explicit questions), the two
+guardrail hooks were changed by the orchestrator directly (surgical, safety-critical) and
+behaviorally verified on a throwaway `arc/` worktree, and only the verbose doc/skill prose was
+delegated to the scribe — a deliberately small agent footprint, not a wave.
+
+Deferred by design: the first real arc (remainder of Milestone 1, "Local-First Rework") stands up
+only **after this PR merges**, because the `arc/*` hook support must be on develop before an arc
+branch is recognized. The broader Star/three-role automation stays a Lodestar-side design thread,
+not TimeScope scope.
