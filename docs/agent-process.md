@@ -84,6 +84,22 @@ each PR updates the arc status table via scribe → the next wave starts only wh
 PRs are merged. Getting lost mid-arc should never require re-reading PRs — the arc log's
 status table plus the breadcrumb is the recovery path.
 
+**Branch nesting.** A multi-issue arc gets its own long-lived integration branch,
+`arc/<slug>`, off `develop`. Each issue's feature branch nests under it and PRs *into the
+arc*, not develop — the arc itself only merges to `develop` once the whole effort is
+complete, so develop never carries half-done arc work. Wave sub-branches are unchanged,
+nesting one level deeper under the feature branch:
+
+```text
+develop
+└── arc/<slug>                     (the arc — merges to develop only when complete)
+    └── feature/issue-<N>-<slug>   (PRs into the arc)
+        └── feature/issue-<N><letter>--<slug>   (wave track, PRs into the feature branch)
+```
+
+PR routing is a convention, not automated: if an arc branch exists for the current effort,
+target it (`gh pr create --base arc/<slug>`); otherwise target `develop`.
+
 
 ### Spine & satellite windows
 

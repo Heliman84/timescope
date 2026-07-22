@@ -62,8 +62,11 @@ recovery-suppression) so same-repo double-open can be staged without fighting VS
 
 ## Branch & version discipline
 
-- `develop` = integration (default PR base); `main` = releases; `feature/issue-<N>-<slug>`;
-  wave sub-branches `feature/issue-<N><letter>--<slug>`, letter = merge order (delegate skill).
+- `develop` = integration (default PR base); `main` = releases; `arc/<slug>` = long-lived
+  integration branch for a multi-issue arc, off develop (features nest under it, PR into it,
+  merges to develop only at arc close); `feature/issue-<N>-<slug>` (off develop, or off the
+  arc when one exists); wave sub-branches `feature/issue-<N><letter>--<slug>`, letter = merge
+  order (delegate skill).
 - Versioning (`coding_standards.md:56-61`): pre-1.0, major pinned at 0; **every PR bumps
   `package.json` version in its own commit — with explicit user confirmation, never silently.**
 

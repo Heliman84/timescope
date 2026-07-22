@@ -44,7 +44,8 @@ function main() {
   const cwd = input.cwd || process.cwd();
   const model = String(input.model || "").toLowerCase();
   const branch = current_branch(cwd);
-  const on_protected = branch === "develop" || branch === "main";
+  const on_arc = branch.startsWith("arc/");
+  const on_protected = branch === "develop" || branch === "main" || on_arc;
   const on_fable = model.includes("fable");
   const on_opus = model.includes("opus");
 
@@ -67,7 +68,16 @@ function main() {
   }
 
   // Role — who is this window in the arc/agent process?
-  if (on_protected) {
+  if (on_arc) {
+    lines.push(
+      `ROLE — branch \`${branch}\`. You are the **arc spine** for this arc: hold the north star, ` +
+        "sequence the issues, and delegate. Coordinate and decide only — do **not** edit source " +
+        "here (a PreToolUse hook enforces this; only `docs/` and `.claude/` are writable, so the " +
+        "arc log stays maintainable). Each issue runs on a `feature/issue-<N>-<slug>` branch " +
+        "**nested under this arc** and PRs back into it; the arc merges to develop only when the " +
+        "whole arc is complete.",
+    );
+  } else if (on_protected) {
     lines.push(
       `ROLE — branch \`${branch}\`. This is the **arc spine / main coordination window**: ` +
         "coordinate and decide only. Do **not** edit source here (a PreToolUse hook enforces " +

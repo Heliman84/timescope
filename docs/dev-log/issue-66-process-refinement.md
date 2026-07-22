@@ -36,6 +36,16 @@ long a session runs / how large context grows** — the dominant variable.
 - **Delegation must actually offload**, and **narration is a real cost** (~1,300 tok/text-only
   msg; continuous dev-log churn is narration too) — encoded as prose rules in the `delegate` skill
   rather than hooks (blocking source edits on feature branches would break legitimate Tier 0 work).
+- **Arc-branch tier** (folded in mid-#66). A multi-issue arc now gets its own long-lived
+  integration branch `arc/<slug>` off develop: per-issue `feature/*` branches nest under it and PR
+  *into the arc*; the arc merges to develop only when the whole effort is complete, so develop
+  stays clean of half-done arc work. Wave sub-branches are unchanged (still nested under a feature
+  branch). The two guardrails learn the tier: `block_source_edits` treats `arc/*` as protected
+  (source denied, `docs/`+`.claude/` writable so the spine edits the arc-log directly on the arc
+  branch), and `session_start_role_check` casts an `arc/*` window as the **arc spine**. PR routing
+  is a documented convention (target the arc branch when one exists, else develop) — no
+  auto-detection (YAGNI). First real arc on merge: the remainder of **Milestone 1 "Local-First
+  Rework"**; its planning is deferred to that point.
 
 ## Rejected approaches
 

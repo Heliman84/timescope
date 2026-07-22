@@ -36,9 +36,18 @@ git checkout develop && git pull
 git checkout -b feature/issue-<N>-<short-slug>
 ```
 
-A PreToolUse hook blocks source edits on `develop`/`main`, so being on the feature branch is
-also mechanically required before implementation — but the branch is downstream of the gate,
-not a substitute for it.
+**If this issue belongs to a running arc** (an `arc/<slug>` branch exists for the effort —
+check the arc log), branch off the arc instead of develop, and the PR base later is the arc,
+not develop:
+
+```
+git checkout arc/<slug> && git pull
+git checkout -b feature/issue-<N>-<short-slug>
+```
+
+A PreToolUse hook blocks source edits on `develop`/`main`/`arc/*`, so being on the feature
+branch is also mechanically required before implementation — but the branch is downstream of
+the gate, not a substitute for it.
 
 ## 3. Plan
 
@@ -115,8 +124,11 @@ Do NOT create the PR until they ask.
 
 ```
 git push -u origin <branch>
-gh pr create --base develop --title "<concise title>" --body "<description>"
+gh pr create --base <develop-or-arc/slug> --title "<concise title>" --body "<description>"
 ```
+
+Base is `arc/<slug>` if this feature branch nests under a running arc (§2), else `develop`.
+This routing is a convention, not automated — there's no marker to auto-detect it.
 
 Description: summary, user-facing behavior, technical changes, `Closes #<N>`, and a link to the `docs/dev-log/` entry. Include a small mermaid diagram when structure changed. Keep it short and readable — no boilerplate sections that don't apply.
 

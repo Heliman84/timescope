@@ -97,7 +97,19 @@ bold mission header (feature skill §6). Orchestrator-voiced, verifier-verified.
 ## Arc mode (the issue belongs to a multi-issue arc)
 
 When `docs/arc-log/` lists the issue, the arc log is the north star — read it before the
-issue and keep the user oriented in the forest, not just the trees:
+issue and keep the user oriented in the forest, not just the trees.
+
+**Branch nesting.** A running arc has its own long-lived integration branch, `arc/<slug>`,
+off `develop`. Every issue's feature branch nests under the arc and PRs *into it*, not
+develop — the arc only merges to develop once the whole effort is complete. Wave sub-branches
+nest one level deeper, unchanged:
+
+```
+develop → arc/<slug> → feature/issue-<N>-<slug> → feature/issue-<N><letter>--<slug> (wave)
+```
+
+PR routing follows the nesting: `gh pr create --base arc/<slug>` when the arc exists, else
+`--base develop` (feature skill §7) — a documented convention, not auto-detected.
 
 - **Breadcrumb every user-facing status and F5 handoff:** open with
   `Arc <slug> — wave X/Y — issue #N (<track>)` before anything else.
